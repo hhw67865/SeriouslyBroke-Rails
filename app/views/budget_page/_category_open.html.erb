@@ -30,11 +30,18 @@
               </div>
 
               <%# `over?` is the pre-clamp reader, and the only one that can tell "spent it exactly"
-                  from "spent more than there was". %>
-              <p class="text-sm tabular-nums sm:w-40 sm:text-right <%= line.over? ? "text-status-danger font-medium" : "text-gray-700" %>"
-                 data-rule-figure>
-                <%= figure_words(line) %>
-              </p>
+                  from "spent more than there was". The figure opens onto the entries behind it; the
+                  frame loads once the details is visible, not before. %>
+              <details class="sm:w-40" data-rule-spending>
+                <summary class="cursor-pointer list-none text-sm tabular-nums sm:text-right <%= line.over? ? "text-status-danger font-medium" : "text-gray-700" %>"
+                         data-rule-figure>
+                  <%= figure_words(line) %> <span class="text-gray-400" aria-hidden="true">&#9662;</span>
+                </summary>
+
+                <%= turbo_frame_tag dom_id(line.rule, :spending), src: spending_rule_path(line.rule), loading: :lazy, class: "block mt-1" do %>
+                  <p class="text-xs text-gray-500">Loading…</p>
+                <% end %>
+              </details>
 
               <%# The percent rides on the TRACK: a 0% fill has no width, so a hook there would be
                   unassertable on exactly the row a bar most needs pinning. %>
@@ -72,8 +79,7 @@
                 <%= button_to "Delete",
                               rule_path(line.rule),
                               method: :delete,
-                              form: { draggable: "false",
-                                      data: { turbo_confirm: "Delete this rule? Its adjustments go with it." } },
+                              form: { data: { turbo_confirm: "Delete this rule? Its adjustments go with it." } },
                               class: rule_action_classes("mt-1 sm:mt-0 sm:text-right sm:underline text-status-danger") %>
               </div>
             </div>
@@ -95,7 +101,6 @@
                     <%= button_to "Remove",
                                   adjustment_path(change, open: row.category.id),
                                   method: :delete,
-                                  form: { draggable: "false" },
                                   class: "text-brand-dark hover:text-brand underline" %>
                   </li>
                 <% end %>
@@ -113,7 +118,6 @@
     <%= link_to "+ New rule for #{row.name}",
                 new_rule_path(category_id: row.category.id),
                 class: "btn btn-secondary w-full sm:w-auto",
-                draggable: "false",
                 data: { new_rule_for: row.category.id } %>
   </div>
 </div>

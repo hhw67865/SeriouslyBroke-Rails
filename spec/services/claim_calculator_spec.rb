@@ -185,4 +185,28 @@ RSpec.describe ClaimCalculator do
       expect(handed.claim).to eq(350)
     end
   end
+
+  describe "#counted_entries" do
+    it "sums to spent_this_period for a rate rule, off entries in its lane, its period and since it started", :aggregate_failures do
+      rule = create(:rule, :rate, amount: 400, category: groceries, item: bread, starts_on: Date.new(2026, 9, 5))
+      create(:entry, item: bread, amount: 20, date: Date.new(2026, 9, 4)) # before starts_on
+      spend(310, on: Date.new(2026, 9, 6)) # in the lane, in the period, since it started
+      other_item = create(:item, category: groceries, name: "Milk")
+      create(:entry, item: other_item, amount: 50, date: Date.new(2026, 9, 6)) # another item
+
+      expect(calculator(rule).counted_entries.sum(:amount)).to eq(310)
+      expect(calculator(rule).counted_entries.sum(:amount)).to eq(calculator(rule).spent_this_period)
+    end
+
+    it "excludes an item's own entries from a whole-category rule's lane", :aggregate_failures do
+      whole = create(:rule, :rate, amount: 300, category: groceries, starts_on: Date.new(2026, 1, 1))
+      create(:rule, :rate, amount: 100, category: groceries, item: bread, starts_on: Date.new(2026, 1, 1))
+      milk = create(:item, category: groceries, name: "Milk")
+      create(:entry, item: milk, amount: 40, date: Date.new(2026, 9, 5))
+      create(:entry, item: bread, amount: 60, date: Date.new(2026, 9, 5))
+
+      expect(calculator(whole).counted_entries.pluck(:item_id)).to eq([milk.id])
+      expect(calculator(whole).counted_entries.sum(:amount)).to eq(calculator(whole).spent_this_period)
+    end
+  end
 end

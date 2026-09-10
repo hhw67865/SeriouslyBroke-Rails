@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class RulesController < ApplicationController
-  before_action :set_rule, only: [:edit, :update, :destroy]
+  before_action :set_rule, only: [:edit, :update, :destroy, :spending]
   before_action :set_previewed_rule, only: [:preview]
 
   NEW_NEEDS_A_CATEGORY = "Open a category on the Budget page to write a rule for it."
@@ -36,6 +36,14 @@ class RulesController < ApplicationController
 
     prepare_page
     render @rule ? :edit : :new
+  end
+
+  # The entries behind one rule's figure — a lazy frame under the row, or its own page.
+  def spending
+    @spending = RuleSpendingPresenter.new(@rule, today: current_user.today)
+    return render partial: "rules/spending", locals: { spending: @spending }, layout: false if turbo_frame_request?
+
+    render :spending
   end
 
   # The category is read before the destroy, so the page it returns to still opens on the panel the

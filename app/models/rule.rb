@@ -50,6 +50,9 @@ class Rule < ApplicationRecord
     ClaimCalculator.new(self, today: today, spending: spending, adjustments: adjustments)
   end
 
+  # The one door onto the entries behind this rule's figure.
+  def counted_entries(today: user.today) = claim_calculator(today: today).counted_entries
+
   def shape
     return :dated if anchor_date.present?
 

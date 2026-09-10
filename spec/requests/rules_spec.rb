@@ -92,4 +92,20 @@ RSpec.describe "Rules" do
 
     expect(response).to have_http_status(:not_found)
   end
+
+  it "renders the spending frame with the rule's rows", :aggregate_failures do
+    rule = create(:rule, :rate, amount: 400, category: groceries, starts_on: Date.new(2026, 1, 1))
+    create(:entry, item: create(:item, category: groceries, name: "Bread"), amount: 30, date: Date.current)
+
+    get spending_rule_path(rule), headers: { "Turbo-Frame" => ActionView::RecordIdentifier.dom_id(rule, :spending) }
+
+    expect(response.body).to include("Bread")
+    expect(response.body).to include("$30.00")
+  end
+
+  it "never shows another user's rule spending" do
+    get spending_rule_path(create(:rule))
+
+    expect(response).to have_http_status(:not_found)
+  end
 end

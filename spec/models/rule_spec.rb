@@ -74,6 +74,17 @@ RSpec.describe Rule do
     end
   end
 
+  describe "#counted_entries" do
+    it "is the calculator's own counted entries, and sums to its spent" do
+      rule = create(:rule, :rate, amount: 400, category: groceries, item: bread, starts_on: Date.new(2026, 1, 1))
+      today = Date.new(2026, 9, 9)
+      create(:entry, item: bread, amount: 120, date: today)
+
+      expect(rule.counted_entries(today: today).sum(:amount))
+        .to eq(rule.claim_calculator(today: today).spent_this_period)
+    end
+  end
+
   describe ".sort_key" do
     it "puts dated rules first, soonest first, then the largest amount" do
       keys = [

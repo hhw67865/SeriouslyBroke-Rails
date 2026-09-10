@@ -1,0 +1,35 @@
+<%# What counts toward one rule's figure, opened out into rows. Local: `spending`
+    (RuleSpendingPresenter) — the entries `counted_entries` sums, and nothing recomputed. %>
+<%= turbo_frame_tag dom_id(spending.rule, :spending) do %>
+  <div class="mt-2 bg-gray-50 border border-gray-200 rounded px-3 py-2 space-y-2" data-rule-spending-body>
+    <% if spending.rows.empty? %>
+      <p class="text-xs text-gray-500">Nothing has been spent on this yet.</p>
+    <% else %>
+      <div class="flex items-baseline justify-between gap-3 text-xs text-gray-500">
+        <span>What counts · <%= spending.range.first.strftime("%b %-d") %> – <%= spending.range.last.strftime("%b %-d") %></span>
+        <span><%= pluralize(spending.rows.sum(&:count), "entry") %></span>
+      </div>
+
+      <ul class="space-y-1 text-[13px]" data-rule-spending-rows>
+        <% spending.rows.each do |row| %>
+          <li class="flex items-baseline gap-2">
+            <% if spending.grouped? %>
+              <span class="flex-1 min-w-0 truncate text-gray-700"><%= row.name %> · <%= pluralize(row.count, "entry") %></span>
+            <% else %>
+              <span class="w-14 shrink-0 text-gray-500"><%= row.date.strftime("%b %-d") %></span>
+              <span class="flex-1 min-w-0 truncate text-gray-700"><%= row.name %></span>
+            <% end %>
+            <span class="tabular-nums text-gray-900"><%= number_to_currency(row.amount) %></span>
+          </li>
+        <% end %>
+      </ul>
+
+      <div class="flex items-baseline justify-between gap-3 border-t border-gray-200 pt-2 text-xs font-medium">
+        <span class="text-gray-700">Total</span>
+        <span class="tabular-nums <%= spending.over? ? "text-status-danger" : "text-gray-900" %>">
+          <%= number_to_currency(spending.total) %>
+        </span>
+      </div>
+    <% end %>
+  </div>
+<% end %>

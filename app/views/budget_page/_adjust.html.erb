@@ -1,6 +1,6 @@
 <%# One rule's period, changed. Local: `line` (ClaimLine). The direction rides on the button that
     was pressed, and `open` on both actions so a refusal returns with this panel still open. %>
-<details class="mt-2" draggable="false" data-adjust="<%= rule_name(line.rule) %>">
+<details class="mt-2" data-adjust="<%= rule_name(line.rule) %>">
   <summary class="<%= rule_action_classes("cursor-pointer text-sm sm:text-left") %>">Adjust</summary>
 
   <div class="mt-2 max-w-xl rounded border border-gray-200 bg-gray-50 px-3 py-3 space-y-3">

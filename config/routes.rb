@@ -39,6 +39,9 @@ Rails.application.routes.draw do
     collection do
       match :preview, via: [:post, :patch]
     end
+    member do
+      get :spending
+    end
   end
 
   get "budget" => "budget_page#show", as: :budget_page

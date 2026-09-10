@@ -86,6 +86,18 @@ class ClaimCalculator
 
   def counts_spending_on?(day) = day >= rule.starts_on && periods.any? { |period| period.cover?(day) }
 
+  # Every entry `spent` sums, as a relation rather than a second copy of the lane logic: the
+  # periods this calculator walks are contiguous, so their span is one date range.
+  def counted_entries
+    return Entry.none if periods.empty?
+
+    Entry.in_lane_of(rule)
+      .since([window_start, rule.starts_on].max)
+      .where(date: ..periods.last.last)
+      .includes(:item)
+      .order(date: :desc, created_at: :desc)
+  end
+
   # The dates an adjustment may carry: from the rule's start (or the first counted period) to today.
   def countable_span
     return (today...today) if periods.empty?
