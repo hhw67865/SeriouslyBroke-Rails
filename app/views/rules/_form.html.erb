@@ -58,7 +58,7 @@
 
           <div class="divide-y divide-gray-100">
             <% picker_rows.each do |row| %>
-              <label class="flex items-center gap-3 px-3 py-2.5 <%= row.disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer hover:bg-gray-50" %>">
+              <label class="flex items-center gap-3 px-3 py-2.5 <%= row.disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer hover:bg-gray-50" %><%= " bg-gray-50 border-t-2 border-gray-200" if row.kind == :new %>">
                 <%= f.radio_button :item_id,
                     row.value,
                     id: row.dom_id,
@@ -69,10 +69,13 @@
 
                 <span class="flex-1 min-w-0">
                   <% if row.kind == :new %>
-                    <%= f.text_field :new_item_name,
-                        placeholder: "name the item",
-                        class: "form-input h-8 max-w-xs",
-                        data: { "app--budget--rule-form-target": "newItemName" } %>
+                    <span class="flex flex-wrap items-center gap-2">
+                      <span class="text-sm font-medium text-gray-900">Something not listed?</span>
+                      <%= f.text_field :new_item_name,
+                          placeholder: "name the new item",
+                          class: "form-input h-8 max-w-xs",
+                          data: { "app--budget--rule-form-target": "newItemName" } %>
+                    </span>
                   <% else %>
                     <span class="block text-sm text-gray-900 truncate"><%= row.name %></span>
                     <% if row.caption.present? %>
