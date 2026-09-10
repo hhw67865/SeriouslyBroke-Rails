@@ -44,55 +44,63 @@
         <% picker_rows = history.picker_rows(rule_form.item_id) %>
         <% selected_name = history.selected_name(rule_form.item_id) %>
 
-        <%# Rows of flex divs, not <table>: a <label> can then wrap each one whole. Each row is a name
-            with its facts beneath, and what it comes to a period on the right. %>
-        <div class="border border-gray-200 rounded overflow-hidden divide-y divide-gray-100">
-          <% picker_rows.each do |row| %>
-            <label class="flex items-start gap-3 px-3 py-3 <%= row.disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer hover:bg-gray-50" %><%= " bg-gray-50 border-t-2 border-gray-200" if row.kind == :new %>">
-              <%= f.radio_button :item_id,
-                  row.value,
-                  id: row.dom_id,
-                  class: "form-radio mt-0.5",
-                  disabled: row.disabled,
-                  checked: row.checked,
-                  data: { "app--budget--rule-form-target": "subject", subject_name: row.name } %>
+        <%# A grid, not a <table>, so a <label> can wrap each row whole: five columns from `sm`, and
+            on a phone the two middle facts fold into one line under the name. %>
+        <div class="border border-gray-200 rounded overflow-hidden">
+          <div class="hidden sm:grid grid-cols-[28px_1fr_auto] sm:grid-cols-[28px_1.4fr_1fr_1.1fr_7rem] gap-3 px-3 py-2 bg-gray-50 border-b border-gray-200 text-[11px] font-medium uppercase tracking-wide text-gray-500">
+            <span></span>
+            <span>Pays for</span>
+            <span>Last paid</span>
+            <span>Usually</span>
+            <span class="text-right">A period</span>
+          </div>
 
-              <span class="flex-1 min-w-0">
+          <div class="divide-y divide-gray-100">
+            <% picker_rows.each do |row| %>
+              <label class="grid grid-cols-[28px_1fr_auto] sm:grid-cols-[28px_1.4fr_1fr_1.1fr_7rem] gap-3 items-start sm:items-center px-3 py-2.5 <%= row.disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer hover:bg-gray-50 has-[:checked]:bg-[#F1F0DF]" %><%= " bg-gray-50 border-t-2 border-gray-200" if row.kind == :new %>">
+                <span class="flex justify-center pt-0.5 sm:pt-0">
+                  <%= f.radio_button :item_id,
+                      row.value,
+                      id: row.dom_id,
+                      class: "form-radio",
+                      disabled: row.disabled,
+                      checked: row.checked,
+                      data: { "app--budget--rule-form-target": "subject", subject_name: row.name } %>
+                </span>
+
                 <% if row.kind == :new %>
-                  <span class="flex flex-wrap items-center gap-2">
+                  <span class="min-w-0 sm:col-span-3 flex flex-wrap items-center gap-2">
                     <span class="text-sm font-medium text-gray-900">Something not listed?</span>
                     <%= f.text_field :new_item_name,
                         placeholder: "name the new item",
                         class: "form-input h-8 max-w-xs",
                         data: { "app--budget--rule-form-target": "newItemName" } %>
                   </span>
+                  <span class="text-right text-sm text-gray-500 whitespace-nowrap">no history</span>
                 <% else %>
-                  <span class="block text-sm font-medium text-gray-900 truncate"><%= row.name %></span>
-                  <% if row.caption.present? %>
-                    <span class="block text-xs <%= row.disabled ? "text-gray-400" : "text-gray-500" %>"><%= row.caption %></span>
-                  <% end %>
-                  <span class="block text-xs text-gray-500 mt-0.5" data-item-facts>
-                    <% if row.last_paid_words == "—" %>
-                      no payments yet
+                  <span class="min-w-0">
+                    <span class="block text-sm font-medium text-gray-900 sm:truncate"><%= row.name %></span>
+                    <% if row.caption.present? %>
+                      <span class="block text-xs <%= row.disabled ? "text-gray-400" : "text-gray-500" %>"><%= row.caption %></span>
+                    <% end %>
+                    <span class="block sm:hidden text-xs text-gray-500 mt-0.5" data-item-facts>
+                      <% if row.last_paid_words == "—" %>no payments yet<% else %><%= row.usually_words %> · last <%= row.last_paid_words %><% end %>
+                    </span>
+                  </span>
+                  <span class="hidden sm:block text-sm text-gray-600 tabular-nums"><%= row.last_paid_words %></span>
+                  <span class="hidden sm:block text-sm text-gray-600 tabular-nums"><%= row.usually_words %></span>
+                  <span class="text-right text-sm whitespace-nowrap">
+                    <% if row.per_period.present? %>
+                      <span class="font-medium text-gray-900 tabular-nums"><%= number_to_currency(row.per_period) %></span>
+                      <span class="text-gray-500">a period</span>
                     <% else %>
-                      last paid <%= row.last_paid_words %> · <%= row.usually_words %>
+                      <span class="text-gray-400">—</span>
                     <% end %>
                   </span>
                 <% end %>
-              </span>
-
-              <span class="shrink-0 text-right text-sm pt-0.5">
-                <% if row.per_period.present? %>
-                  <span class="font-medium text-gray-900 tabular-nums"><%= number_to_currency(row.per_period) %></span>
-                  <span class="text-gray-500">a period</span>
-                <% elsif row.kind == :new %>
-                  <span class="text-gray-500">no history</span>
-                <% else %>
-                  <span class="text-gray-400">—</span>
-                <% end %>
-              </span>
-            </label>
-          <% end %>
+              </label>
+            <% end %>
+          </div>
         </div>
 
         <div class="flex flex-wrap items-center gap-2 text-sm text-gray-700">
