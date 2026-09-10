@@ -11,6 +11,13 @@ export default class extends Controller {
     this.recompute()
   }
 
+  // Typing a figure is the intent, so it ticks the row; the box stays yours to untick.
+  dial(event) {
+    const row = event.target.closest(`[data-${this.identifier}-target="row"]`)
+    if (row) this.fieldFor(row, "toggle").checked = true
+    this.recompute()
+  }
+
   // Read out of the DOM every time: a cache would be one more description of "what is on screen",
   // free to disagree with the screen itself.
   recompute() {

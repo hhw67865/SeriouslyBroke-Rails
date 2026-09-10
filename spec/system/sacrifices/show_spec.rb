@@ -152,15 +152,16 @@ RSpec.describe "Sacrifice view", type: :system do
     end
 
     # Each row says what its own cut frees, because the footer's total cannot say which of several
-    # ticked rows produced it — and an unticked row frees nothing whatever is typed in it.
-    it "says what each row frees, and frees nothing from a row that is not ticked", :aggregate_failures do
+    # ticked rows produced it. Typing ticks the row; unticking it afterwards frees nothing again.
+    it "says what each row frees, ticks a row as it is typed in, and frees nothing once unticked", :aggregate_failures do
       within(row(rules.fetch(:groceries))) { fill_in "Cut Groceries to", with: "700" }
 
-      expect(row(rules.fetch(:groceries))).to have_css("[data-role='row-frees']", text: "frees $0.00")
-
-      cut(rules.fetch(:groceries), "Groceries", to: "700")
-
+      expect(row(rules.fetch(:groceries))).to have_checked_field("Cut Groceries")
       expect(row(rules.fetch(:groceries))).to have_css("[data-role='row-frees']", text: "frees $100.00")
+
+      within(row(rules.fetch(:groceries))) { uncheck "Cut Groceries" }
+
+      expect(row(rules.fetch(:groceries))).to have_css("[data-role='row-frees']", text: "frees $0.00")
     end
   end
 

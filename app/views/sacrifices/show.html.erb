@@ -103,7 +103,7 @@
                  data-app--sacrifice--dial-target="amount"
                  <%# `change` as well as `input`, for a value set without keystrokes. #recompute
                      re-reads the whole DOM, so firing twice can never double-count. %>
-                 data-action="input->app--sacrifice--dial#recompute change->app--sacrifice--dial#recompute">
+                 data-action="input->app--sacrifice--dial#dial change->app--sacrifice--dial#dial">
         </div>
 
         <%# The word is what makes the figure readable, and it is outside the target span because
