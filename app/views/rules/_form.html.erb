@@ -48,7 +48,7 @@
              kind: :everything, dom_id: "rule_item_everything", value: "", name: "Everything else in #{category.name}",
              caption: everything.ruled_by ? "already has a rule" : "the items below that have no rule of their own",
              disabled: everything.ruled_by.present?, amounts: everything.amounts, average: everything.average,
-             checked: rule_form.item_id.blank?
+             checked: rule_form.item_id.blank? && everything.ruled_by.nil?
            }] %>
         <% history.rows.each do |row| %>
           <% picker_rows << {
@@ -62,7 +62,7 @@
              kind: :new, dom_id: "rule_item_new", value: "new", name: "the new item", caption: nil,
              disabled: false, amounts: [], average: nil, checked: rule_form.item_id == "new"
            } %>
-        <% selected_name = picker_rows.find { |row| row[:checked] }&.fetch(:name) || category.name %>
+        <% selected_name = picker_rows.find { |row| row[:checked] }&.fetch(:name) || "what you pick above" %>
 
         <%# Rows of flex divs, not <table>: a <label> can then wrap each one whole. %>
         <div class="border border-gray-200 rounded overflow-hidden">

@@ -130,6 +130,9 @@ RSpec.describe "Home money row", type: :system do
       )
     end
 
+    # The override outlives this example: one browser serves the whole process.
+    after { page.driver.browser.execute_cdp("Emulation.clearDeviceMetricsOverride") }
+
     # Three tiles stacked is most of a phone screen spent on three figures, with the runway starting
     # below the fold. The geometry is the whole ruling: free is above both of the others and as wide
     # as the row, and the two below share a top edge and split it.
