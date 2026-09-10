@@ -3,7 +3,7 @@ import { Controller } from "@hotwired/stimulus"
 // The what-if dial: arithmetic over figures the server already printed, in per-period units
 // throughout (`Rule#steady_ask`, never `rule.amount`) and in integer cents, never float dollars.
 export default class extends Controller {
-  static targets = ["row", "toggle", "amount", "rowFrees", "freed", "verdict"]
+  static targets = ["row", "toggle", "amount", "rowFrees", "freed", "verdict", "save"]
   // Dollars on the attribute (that is what the server prints), cents inside — see #cents.
   static values = { gap: Number }
 
@@ -15,15 +15,18 @@ export default class extends Controller {
   // free to disagree with the screen itself.
   recompute() {
     let freed = 0
+    let ticked = 0
 
     this.rowTargets.forEach((row) => {
       const rowFreed = this.freedBy(row)
       freed += rowFreed
+      if (this.fieldFor(row, "toggle").checked) ticked += 1
       this.freesFieldFor(row).textContent = this.money(rowFreed)
     })
 
     this.freedTarget.textContent = this.money(freed)
     this.writeVerdict(this.cents(this.gapValue) - freed)
+    this.saveTarget.disabled = ticked === 0
   }
 
   // Cutting TO a figure, so `claim - typed` clamped into [0, claim]. An unchecked row frees nothing

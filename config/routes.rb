@@ -50,7 +50,7 @@ Rails.application.routes.draw do
   patch "budget/income" => "budget_income#update"
   post "budget/income/preview" => "budget_income#preview", as: :preview_budget_income
   resources :adjustments, only: [:create, :destroy]
-  get "sacrifice" => "sacrifices#show"
+  resource :sacrifice, only: [:show, :update]
 
   resource :settings, only: [:show] do
     patch :toggle_theme

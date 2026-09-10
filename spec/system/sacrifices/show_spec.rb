@@ -53,6 +53,13 @@ RSpec.describe "Sacrifice view", type: :system do
   def figure(name) = find("[data-figure='#{name}']")
   def row(rule) = find("[data-sacrifice-row='#{rule.id}']")
 
+  def cut(rule, label, to:)
+    within(row(rule)) do
+      check "Cut #{label}"
+      fill_in "Cut #{label} to", with: to
+    end
+  end
+
   # $800 of groceries, $300 of fun and a $600-every-6-months insurance that claims $46.15 of a
   # biweekly period: $1,146.15 of rules against $1,000 of income, a gap of $146.15 that the $1,100 of
   # rate rules can close several times over.
@@ -106,6 +113,20 @@ RSpec.describe "Sacrifice view", type: :system do
       expect(figure("frees")).to have_content("$0.00 a period")
       expect(figure("verdict")).to have_content("Still underwater $146.15 a period")
     end
+
+    # The input IS the edit on a cuttable row, so the link that used to send it elsewhere is gone;
+    # a rolling bill still needs its own form, so its row keeps the link.
+    it "keeps the edit link only on the row it cannot dial", :aggregate_failures do
+      expect(row(rules.fetch(:groceries))).to have_no_link("Edit the rule")
+      expect(row(rules.fetch(:fun))).to have_no_link("Edit the rule")
+      expect(find("[data-fixed-row='#{rules.fetch(:insurance).id}']")).to have_link("Edit the rule")
+    end
+
+    it "says saving writes the cuts to the rules", :aggregate_failures do
+      order = find("[data-cut-list-order]")
+      expect(order).to have_content("Save writes those amounts to the rules")
+      expect(order).to have_content("delete it on the Budget page")
+    end
   end
 
   # The dial through the browser: two cuts, and the totals read at each step. $800 cut to $700 frees
@@ -116,13 +137,6 @@ RSpec.describe "Sacrifice view", type: :system do
     before do
       rules
       visit sacrifice_path
-    end
-
-    def cut(rule, label, to:)
-      within(row(rule)) do
-        check "Cut #{label}"
-        fill_in "Cut #{label} to", with: to
-      end
     end
 
     it "recomputes the totals as cuts are dialled in", :aggregate_failures do
@@ -147,6 +161,33 @@ RSpec.describe "Sacrifice view", type: :system do
       cut(rules.fetch(:groceries), "Groceries", to: "700")
 
       expect(row(rules.fetch(:groceries))).to have_css("[data-role='row-frees']", text: "frees $100.00")
+    end
+  end
+
+  # The cut you dial is the edit: saving writes it to the rule and lands wherever the fresh gap
+  # sends the page.
+  describe "saving the cuts" do
+    let(:rules) { winnable }
+
+    before do
+      rules
+      visit sacrifice_path
+    end
+
+    it "writes the ticked cut and lands on Budget once it closes the gap", :aggregate_failures do
+      cut(rules.fetch(:groceries), "Groceries", to: "500")
+      click_button "Save these cuts"
+
+      expect(page).to have_content("Saved — 1 rules cut. Your rules now need $846.15 a period.")
+      expect(rules.fetch(:groceries).reload.amount).to eq(500)
+    end
+
+    it "disables the save button until a row is ticked", :aggregate_failures, :js do
+      expect(page).to have_button("Save these cuts", disabled: true)
+
+      cut(rules.fetch(:groceries), "Groceries", to: "700")
+
+      expect(page).to have_button("Save these cuts", disabled: false)
     end
   end
 
