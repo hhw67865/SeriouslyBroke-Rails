@@ -1,0 +1,18 @@
+<%# Local: `rows` — UsualItems::Row structs, most-used first. Tapping a chip revisits New with
+    that item's id; the controller does the actual prefilling. %>
+<% if rows.present? %>
+  <div class="mb-6">
+    <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Usual</h2>
+    <p class="form-hint mt-0">tap one to fill the form</p>
+    <div class="mt-2 flex gap-2 overflow-x-auto">
+      <% rows.each do |row| %>
+        <%= link_to new_entry_path(item_id: row.item.id),
+            class: "inline-flex items-center gap-2 h-8 px-3 rounded border border-gray-200 bg-white text-sm hover:bg-gray-50 whitespace-nowrap",
+            data: { "usual-item" => row.item.name } do %>
+          <span class="font-medium"><%= row.item.name %></span>
+          <span class="text-gray-500 tabular-nums">· <%= number_to_currency(row.last.amount) %></span>
+        <% end %>
+      <% end %>
+    </div>
+  </div>
+<% end %>

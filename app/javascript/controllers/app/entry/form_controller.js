@@ -1,10 +1,13 @@
 import { Controller } from "@hotwired/stimulus"
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
 export default class extends Controller {
-  static targets = ["itemSelect", "itemNameField", "categorySelect", "account"]
+  static targets = ["itemSelect", "itemNameField", "categorySelect", "account", "amount", "amountHint"]
   static values = { incomeIds: Array }
 
   connect() {
+    this.itemsById = new Map()
     this.initializeItemSelect()
     this.initializeCategorySelect()
   }
@@ -21,8 +24,29 @@ export default class extends Controller {
         } else {
           this.itemNameFieldTarget.value = ""
         }
+        this.fillAmountFromHistory(value)
       }
     })
+  }
+
+  // An empty field only: a value already on the page is the user's, not the item's history's.
+  fillAmountFromHistory(itemId) {
+    const item = this.itemsById.get(itemId)
+    if (!this.hasAmountTarget || !item || !item.last_amount || this.amountTarget.value !== "") return
+
+    this.amountTarget.value = item.last_amount
+    this.amountHintTarget.textContent = `Filled from the last time: $${item.last_amount} on ${this.formatDate(item.last_date)}.`
+    this.amountHintTarget.hidden = false
+  }
+
+  hideAmountHint() {
+    if (this.hasAmountHintTarget) this.amountHintTarget.hidden = true
+  }
+
+  // Read as plain digits, never through Date parsing, so a viewer's timezone can't shift the day.
+  formatDate(iso) {
+    const [, month, day] = iso.split("-").map(Number)
+    return `${MONTHS[month - 1]} ${day}`
   }
 
   initializeCategorySelect() {
@@ -55,6 +79,8 @@ export default class extends Controller {
     if (this.itemSelect) {
       this.itemSelect.destroy()
     }
+
+    this.itemsById = new Map((items || []).map(item => [String(item.id), item]))
 
     if (items === null) {
       this.itemSelectTarget.innerHTML = '<option value="">Create an item</option>'

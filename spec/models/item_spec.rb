@@ -19,6 +19,20 @@ RSpec.describe Item do
     expect { item.destroy! }.to change(Rule, :count).by(-1)
   end
 
+  describe "#last_entry" do
+    it "is the newest entry by date, then by created_at" do
+      item = create(:item, category: category)
+      create(:entry, item: item, date: Date.new(2026, 6, 1))
+      newest = create(:entry, item: item, date: Date.new(2026, 6, 10))
+
+      expect(item.last_entry).to eq(newest)
+    end
+
+    it "is nil for an item with no entries" do
+      expect(create(:item, category: category).last_entry).to be_nil
+    end
+  end
+
   describe ".merge" do
     it "moves every entry onto the target and deletes the sources", :aggregate_failures do
       target = create(:item, category: category)

@@ -56,4 +56,23 @@ RSpec.describe "Entries" do
 
     expect(response.body).to include("$350.00")
   end
+
+  it "carries each item's last amount and date in the category's JSON items", :aggregate_failures do
+    bread = create(:item, category: groceries, name: "Bread")
+    create(:entry, item: bread, amount: 12.5, date: "2026-07-01")
+
+    get category_items_path(groceries, format: :json)
+
+    body = response.parsed_body
+    expect(body.find { |item| item["name"] == "Bread" }).to include("last_amount" => "12.50", "last_date" => "2026-07-01")
+  end
+
+  it "carries a null last amount and date for an item with no entries" do
+    create(:item, category: groceries, name: "Butter")
+
+    get category_items_path(groceries, format: :json)
+
+    body = response.parsed_body
+    expect(body.find { |item| item["name"] == "Butter" }).to include("last_amount" => nil, "last_date" => nil)
+  end
 end

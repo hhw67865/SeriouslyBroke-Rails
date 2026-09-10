@@ -46,7 +46,7 @@
           </label>
           <%= f.select :item_id,
               options_from_collection_for_select(
-                entry.persisted? ? entry.item.category.items : [],
+                entry.item.present? ? entry.item.category.items : [],
                 :id,
                 :name,
                 entry.item_id
@@ -73,11 +73,15 @@
                     data: {
                       shared__calculator_pad_target: "input",
                       app__entry__impact_target: "amount",
-                      action: "input->app--entry--impact#recompute change->app--entry--impact#recompute"
+                      app__entry__form_target: "amount",
+                      action: "input->app--entry--impact#recompute change->app--entry--impact#recompute input->app--entry--form#hideAmountHint"
                     } %>
                 <%= render "shared/calculator_pad_toggle" %>
               </div>
             <% end %>
+
+            <%# Server-filled by a usual chip's tap, JS-filled by picking an item with history. %>
+            <p class="form-hint" data-amount-hint data-app--entry--form-target="amountHint" <%= "hidden" if @prefilled_from.blank? %>><% if @prefilled_from %>Filled from the last time: <%= number_to_currency(@prefilled_from.amount) %> on <%= @prefilled_from.date.strftime("%b %-d") %>. Change it if this one differs.<% end %></p>
 
             <%= render "shared/calculator_pad" %>
           </div>

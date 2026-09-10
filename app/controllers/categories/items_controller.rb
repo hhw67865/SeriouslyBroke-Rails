@@ -12,7 +12,7 @@ module Categories
     def index
       respond_to do |format|
         format.html
-        format.json { render json: @category.items.order(:name) }
+        format.json { render json: @category.items.order(:name).map { |item| item_json(item) } }
       end
     end
 
@@ -64,6 +64,18 @@ module Categories
     end
 
     private
+
+    # What the item select's own option carries: its history, so picking one can offer to fill
+    # the amount from the last time without a second round trip.
+    def item_json(item)
+      last = item.last_entry
+      {
+        id: item.id,
+        name: item.name,
+        last_amount: last && format("%.2f", last.amount),
+        last_date: last&.date&.iso8601
+      }
+    end
 
     # Either every item moves or none does, so a refusal takes the whole batch back with it.
     def move_all(items, target)

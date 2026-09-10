@@ -18,7 +18,10 @@ class EntriesController < ApplicationController
   end
 
   def new
-    @entry = Entry.new(item: current_user.items.find_by(id: params[:item_id]))
+    item = current_user.items.find_by(id: params[:item_id])
+    @entry = Entry.new(item: item)
+    prefill_from(item)
+    @usual = UsualItems.new(current_user, today: current_user.today).rows
   end
 
   def edit; end
@@ -92,6 +95,15 @@ class EntriesController < ApplicationController
   end
 
   def set_entry = @entry = current_user.entries.find(params[:id])
+
+  # Fills the new entry from the item's last entry, so tapping a usual chip changes nothing on
+  # screen until Create Entry. The date stays today's — the form already defaults that itself.
+  def prefill_from(item)
+    @prefilled_from = item&.last_entry
+    return unless @prefilled_from
+
+    @entry.assign_attributes(amount: @prefilled_from.amount, description: @prefilled_from.description, account: @prefilled_from.account)
+  end
 
   def load_options
     @categories = current_user.categories.order(:category_type, :name)

@@ -19,6 +19,9 @@ class Item < ApplicationRecord
 
   searchable :name, label: "Name"
 
+  # The one door for "the last time this item was entered".
+  def last_entry = entries.order(date: :desc, created_at: :desc).first
+
   scope :expenses, -> { joins(:category).where(categories: { category_type: :expense }) }
   scope :incomes, -> { joins(:category).where(categories: { category_type: :income }) }
 

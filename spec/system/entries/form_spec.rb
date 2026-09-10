@@ -124,6 +124,20 @@ RSpec.describe "Entries Forms", type: :system do
       end
     end
 
+    describe "filling the amount from an item's history", :aggregate_failures, :js do
+      it "fills the amount and hint on pick, and hides the hint once typed over" do
+        create(:entry, item: groceries_item, date: Date.current - 1, amount: 18.99)
+        select_category("Food")
+
+        select_item("Groceries")
+        expect(page).to have_field("Amount", with: "18.99")
+        expect(page).to have_css("[data-amount-hint]", text: "Filled from the last time")
+
+        fill_in "Amount", with: "5"
+        expect(page).to have_no_css("[data-amount-hint]", text: "Filled from the last time")
+      end
+    end
+
     describe "successful submission with existing item", :aggregate_failures, :js do
       it "creates entry and redirects to entries index" do
         select_category("Food")
