@@ -131,4 +131,32 @@ RSpec.describe "Home this period", type: :system do
 
     expect(page).to have_content("Nothing is budgeted yet, and nothing has been spent this period.")
   end
+
+  # THE FIGURE OPENS ONTO THE ENTRIES BEHIND IT, same as on the Budget page. The click is a second
+  # request, so the whole example travels rather than just the visit.
+  it "opens the entries behind a rule's figure", :aggregate_failures, :js do
+    rule = rule_for("Groceries", rate: 400)
+    spend(rule.category, 300)
+
+    travel_to(today) do
+      visit root_path
+      within(block("Groceries")) { find("[data-rule-figure]").click }
+      # A leaked narrow viewport from an earlier `:js` example can leave the frame below the fold,
+      # where the lazy load never fires — scroll it into view rather than assume a tall window.
+      page.scroll_to(find("turbo-frame", visible: :all))
+
+      expect(page).to have_content("Total")
+      expect(page).to have_content("$300.00")
+    end
+  end
+
+  it "renders the frame's src for a ruled block" do
+    rule = rule_for("Groceries", rate: 400)
+
+    read_home
+
+    within(block("Groceries")) do
+      expect(find("turbo-frame", visible: :all)[:src]).to eq(spending_rule_path(rule))
+    end
+  end
 end

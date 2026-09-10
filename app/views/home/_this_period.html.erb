@@ -38,52 +38,59 @@
         <% block.rows.each do |row| %>
           <%# `data-rule-row` is named by the LANE, not by the category: a block may carry two rules
               and both would answer to the category's name. %>
-          <div class="flex gap-3 px-4 py-3 border-b border-gray-100 last:border-b-0"
-               data-rule-row="<%= row.name %>">
-            <%# The stripe is the RULE's type, which is a fact about the rule and not its category.
-                `aria-hidden`, because the same fact is the first word of the shape clause below. %>
-            <span class="w-1 shrink-0 rounded <%= stripe_fill(row) %>" aria-hidden="true"></span>
+          <details class="border-b border-gray-100 last:border-b-0" data-rule-spending>
+            <summary class="list-none cursor-pointer">
+              <div class="flex gap-3 px-4 py-3" data-rule-row="<%= row.name %>">
+                <%# The stripe is the RULE's type, which is a fact about the rule and not its category.
+                    `aria-hidden`, because the same fact is the first word of the shape clause below. %>
+                <span class="w-1 shrink-0 rounded <%= stripe_fill(row) %>" aria-hidden="true"></span>
 
-            <div class="min-w-0 flex-1">
-              <div class="flex flex-wrap items-baseline justify-between gap-x-3">
-                <p class="text-sm font-medium text-gray-900 truncate"><%= row.name %></p>
-                <%# `over?` is the pre-clamp reader and the only one that can tell "spent it exactly"
-                    from "spent more than there was". %>
-                <p class="text-sm tabular-nums <%= row.over? ? "text-status-danger font-medium" : "text-gray-700" %>"
-                   data-rule-figure>
-                  <%= figure_words(row) %>
-                </p>
-              </div>
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-baseline justify-between gap-x-3">
+                    <p class="text-sm font-medium text-gray-900 truncate"><%= row.name %></p>
+                    <%# `over?` is the pre-clamp reader and the only one that can tell "spent it exactly"
+                        from "spent more than there was". %>
+                    <p class="text-sm tabular-nums <%= row.over? ? "text-status-danger font-medium" : "text-gray-700" %>"
+                       data-rule-figure>
+                      <%= figure_words(row) %> <span class="text-gray-400" aria-hidden="true">&#9662;</span>
+                    </p>
+                  </div>
 
-              <p class="mt-0.5 text-xs <%= type_text_class(row) %>" data-rule-shape><%= shape_words(row) %></p>
+                  <p class="mt-0.5 text-xs <%= type_text_class(row) %>" data-rule-shape><%= shape_words(row) %></p>
 
-              <%# The percent rides on the TRACK: a 0% fill has no width, so a hook there would be
-                  unassertable on exactly the row a bar most needs pinning. %>
-              <% if row.bar? %>
-                <div class="mt-1.5 hidden sm:block h-1.5 bg-gray-200 rounded-full overflow-hidden"
-                     role="progressbar"
-                     aria-valuenow="<%= row.percent %>"
-                     aria-valuemin="0"
-                     aria-valuemax="100"
-                     aria-label="<%= block.name %> · <%= row.name %>"
-                     data-rule-bar="<%= row.percent %>"
-                     data-rule-bar-state="<%= row.bar_state %>">
-                  <div class="h-1.5 rounded-full <%= bar_fill(row) %>"
-                       style="width: <%= row.percent %>%;"
-                       data-rule-fill></div>
+                  <%# The percent rides on the TRACK: a 0% fill has no width, so a hook there would be
+                      unassertable on exactly the row a bar most needs pinning. %>
+                  <% if row.bar? %>
+                    <div class="mt-1.5 hidden sm:block h-1.5 bg-gray-200 rounded-full overflow-hidden"
+                         role="progressbar"
+                         aria-valuenow="<%= row.percent %>"
+                         aria-valuemin="0"
+                         aria-valuemax="100"
+                         aria-label="<%= block.name %> · <%= row.name %>"
+                         data-rule-bar="<%= row.percent %>"
+                         data-rule-bar-state="<%= row.bar_state %>">
+                      <div class="h-1.5 rounded-full <%= bar_fill(row) %>"
+                           style="width: <%= row.percent %>%;"
+                           data-rule-fill></div>
+                    </div>
+                  <% end %>
+
+                  <%# A rate rule in a period with no boundary declared has nothing to say and renders no
+                      element at all. %>
+                  <% if when_clause = when_words(row) %>
+                    <p class="mt-1 text-xs <%= row.trouble? || row.short? ? "text-status-danger font-medium" : "text-gray-500" %>"
+                       data-rule-when>
+                      <%= when_clause %>
+                    </p>
+                  <% end %>
                 </div>
-              <% end %>
+              </div>
+            </summary>
 
-              <%# A rate rule in a period with no boundary declared has nothing to say and renders no
-                  element at all. %>
-              <% if when_clause = when_words(row) %>
-                <p class="mt-1 text-xs <%= row.trouble? || row.short? ? "text-status-danger font-medium" : "text-gray-500" %>"
-                   data-rule-when>
-                  <%= when_clause %>
-                </p>
-              <% end %>
-            </div>
-          </div>
+            <%= turbo_frame_tag dom_id(row.rule, :spending), src: spending_rule_path(row.rule), loading: :lazy, class: "block mt-2" do %>
+              <p class="text-xs text-gray-500">Loading…</p>
+            <% end %>
+          </details>
         <% end %>
       </div>
     <% end %>
