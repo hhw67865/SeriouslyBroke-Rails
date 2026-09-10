@@ -1,4 +1,4 @@
-<%# ONE ACCOUNT. Locals: `presenter` (HomePresenter), `account`. Rename and delete live here,
+<%# ONE ACCOUNT. Locals: `presenter` (HomePresenter), `account`. Edit and delete live here,
     because Home is the accounts index. %>
 <% balance = presenter.balance_of(account) %>
 <section class="bg-white border border-gray-200 rounded" data-account-group="<%= account.name %>">
@@ -27,7 +27,7 @@
         balance now <strong><%= number_to_currency(balance) %></strong>
       </span>
 
-      <%= link_to "Rename",
+      <%= link_to "Edit",
                   edit_account_path(account),
                   class: "text-xs font-medium text-brand hover:text-brand-dark",
                   data: { account_edit: account.name } %>

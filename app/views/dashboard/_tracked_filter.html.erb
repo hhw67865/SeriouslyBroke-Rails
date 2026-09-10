@@ -16,7 +16,7 @@
     <%= form_with url: update_tracked_categories_path, method: :patch, data: { turbo: false } do |f| %>
       <div class="flex items-center justify-between mb-4">
         <p class="text-xs text-gray-500">Untracked categories are excluded from calculations and charts.</p>
-        <%= f.submit "Apply", class: "ml-3 px-3 py-1 text-xs font-medium text-white bg-brand-dark rounded shadow-sm hover:bg-brand-darker cursor-pointer transition" %>
+        <%= f.submit "Apply", class: "ml-3 px-3 py-1 text-xs font-medium text-white bg-brand rounded shadow-sm hover:bg-brand-dark cursor-pointer transition" %>
       </div>
       <div class="<%= categories.size > 8 ? "sm:columns-2 gap-x-6" : "" %> space-y-1">
         <% categories.each do |category| %>

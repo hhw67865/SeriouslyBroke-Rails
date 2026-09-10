@@ -33,7 +33,7 @@
                                       } %>
                     <div class="w-full border-2 rounded p-4 transition-all flex flex-col items-center category-type-option
                               <%= if f.object.category_type == type
-                                    "border-brand-dark bg-brand-light"
+                                    "border-brand bg-brand-light"
                                   elsif type_invalid
                                     "border-status-danger hover:border-gray-300"
                                   else
@@ -42,7 +42,7 @@
                         data-type="<%= type %>"
                         data-app--category--form-target="categoryTypeOption">
                       <div class="category-type-icon w-10 h-10 rounded flex items-center justify-center mb-2
-                                <%= f.object.category_type == type ? "bg-brand-dark" : "bg-gray-200" %>"
+                                <%= f.object.category_type == type ? "bg-brand" : "bg-gray-200" %>"
                            data-app--category--form-target="categoryTypeIcon">
                         <% case type %>
                         <% when "expense" %>

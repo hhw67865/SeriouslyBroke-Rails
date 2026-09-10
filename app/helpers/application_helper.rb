@@ -96,7 +96,7 @@ module ApplicationHelper
   private
 
   def primary_button_classes
-    "inline-flex items-center gap-2 px-4 py-2 rounded bg-brand-dark text-white text-sm font-medium hover:bg-brand-darker shadow-sm transition"
+    "inline-flex items-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition"
   end
 
   def secondary_button_classes

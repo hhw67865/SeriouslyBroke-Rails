@@ -12,7 +12,7 @@ module HomeHelper
 
   # A stripe fill and a text colour per rule type. `fetch`, so a fourth type added to the enum with
   # no colour fails here rather than rendering a blank column.
-  STRIPE_FILLS = { bill: "bg-brand-darker", usage: "bg-dusty-teal", choice: "bg-terracotta" }.freeze
+  STRIPE_FILLS = { bill: "bg-brand-dark", usage: "bg-dusty-teal", choice: "bg-terracotta" }.freeze
 
   TYPE_TEXT = {
     bill: "text-brand-dark", usage: "text-dusty-teal-dark", choice: "text-terracotta-dark"
@@ -27,7 +27,7 @@ module HomeHelper
 
   # What the bar says in colour. The state is ClaimLine#bar_state; this is only its palette.
   BAR_FILLS = {
-    full: "bg-status-success", over: "bg-status-danger", short: "bg-status-danger", normal: "bg-brand-dark"
+    full: "bg-status-success", over: "bg-status-danger", short: "bg-status-danger", normal: "bg-brand"
   }.freeze
 
   def bar_fill(line) = BAR_FILLS.fetch(line.bar_state)

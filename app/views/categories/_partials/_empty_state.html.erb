@@ -21,7 +21,7 @@
         Get started by creating a new category.
       <% end %>
     </p>
-    <%= link_to new_category_path(type: @type), class: "mt-6 inline-flex items-center gap-2 px-4 py-2 rounded bg-brand-dark text-white text-sm font-medium hover:bg-brand-darker shadow-sm transition" do %>
+    <%= link_to new_category_path(type: @type), class: "mt-6 inline-flex items-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition" do %>
       <%= heroicon "plus", options: { class: "h-4 w-4" } %>
       <span>New <%= @type.singularize.titleize %> Category</span>
     <% end %>

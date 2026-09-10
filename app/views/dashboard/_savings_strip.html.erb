@@ -31,17 +31,17 @@
           <% badge_text = "low" %>
         <% elsif progress >= 100 %>
           <% card_class = "border border-gray-100 bg-gray-50" %>
-          <% bar_class = "bg-brand-dark" %>
+          <% bar_class = "bg-brand" %>
           <% badge_class = "text-brand-dark bg-brand/20" %>
           <% badge_text = "ready" %>
         <% elsif progress >= 50 %>
           <% card_class = "border border-gray-100 bg-gray-50" %>
-          <% bar_class = "bg-brand-dark" %>
+          <% bar_class = "bg-brand" %>
           <% badge_class = "text-brand-dark bg-brand/20" %>
           <% badge_text = "#{progress}%" %>
         <% else %>
           <% card_class = "border border-gray-100 bg-gray-50" %>
-          <% bar_class = "bg-brand-dark" %>
+          <% bar_class = "bg-brand" %>
           <% badge_class = "text-gray-500 bg-gray-200" %>
           <% badge_text = "#{progress}%" %>
         <% end %>

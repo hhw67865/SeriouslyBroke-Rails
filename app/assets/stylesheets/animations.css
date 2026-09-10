@@ -169,18 +169,8 @@
   100% { opacity: 0; transform: translate(14px, -34px) scale(1.1); }
 }
 
-/* --- the rule form's preview card, refreshed ------------------------
- *
- * ** THE CARD SAYS IT HAS JUST BEEN RE-READ (two-shapes spec §12). ** The preview refreshes from
- * the server as the form is typed into, and a figure that changes with no other signal is a change
- * a user has no reason to look for — the card sits in the second column, several inches from the
- * box they are typing in. A brief ring is the smallest thing that can say "this is about what you
- * just typed"; `rule_form_controller.js` adds the class on `turbo:frame-load` and takes it off
- * again after 600ms, so nothing is left on the element to reason about.
- *
- * NO MOTION AT ALL UNDER `prefers-reduced-motion`: the animation is a fade of a shadow rather than
- * a transform (the sage `--color-sage-600`, #8F8C5A), but the reduction is honoured on the
- * app's own rule and the card simply changes without announcing itself. */
+/* The rule form's preview card flashes a brief ring after each refresh, so a changed figure is noticed;
+   rule_form_controller.js adds the class on turbo:frame-load and removes it after 600ms. */
 .preview-refreshed {
   animation: preview-refreshed 600ms ease-out;
 }

@@ -20,7 +20,7 @@
            aria-valuemax="100"
            aria-label="<%= number_to_currency(presenter.total_claims) %> of checking claimed by your rules"
            data-claimed-bar="<%= claimed %>">
-        <div class="h-2 <%= presenter.short? ? "bg-status-danger" : "bg-brand-darker" %>"
+        <div class="h-2 <%= presenter.short? ? "bg-status-danger" : "bg-brand-dark" %>"
              style="width: <%= claimed %>%;"
              data-claimed-fill></div>
       </div>

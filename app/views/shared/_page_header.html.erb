@@ -42,7 +42,7 @@
       <%# Action Buttons %>
       <% if local_assigns[:actions].present? %>
         <% actions.each do |action| %>
-          <% default_class = "inline-flex items-center gap-2 px-4 py-2 rounded bg-brand-dark text-white text-sm font-medium hover:bg-brand-darker shadow-sm transition" %>
+          <% default_class = "inline-flex items-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition" %>
           <% if action[:method] == :delete %>
             <%# Delete action with button_to for proper method handling %>
             <%= button_to action[:url],

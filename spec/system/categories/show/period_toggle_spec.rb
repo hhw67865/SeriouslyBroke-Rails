@@ -47,8 +47,8 @@ RSpec.describe "Categories Show - Period Toggle", type: :system do
 
       # Wait for page to load and verify styling
       expect(page).to have_current_path(category_path(category, period: "ytd"))
-      expect(page).to have_css("a.bg-brand-dark", text: "Year to Date")
-      expect(page).not_to have_css("a.bg-brand-dark", text: "Monthly")
+      expect(page).to have_css("a.bg-brand", text: "Year to Date")
+      expect(page).not_to have_css("a.bg-brand", text: "Monthly")
     end
   end
 end

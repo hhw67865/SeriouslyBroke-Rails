@@ -78,11 +78,11 @@ RSpec.describe "Home accounts", type: :system do
     line.click
 
     expect(account_card("Ally")).to have_content("balance now $400.00")
-    expect(account_card("Ally")).to have_link("Rename", href: edit_account_path(ally))
+    expect(account_card("Ally")).to have_link("Edit", href: edit_account_path(ally))
     expect(account_card("Ally")).to have_button("Delete")
   end
 
-  # Main is in the expansion even though it is not in the line's figure, and it keeps its Rename and
+  # Main is in the expansion even though it is not in the line's figure, and it keeps its Edit and
   # loses only the door the model refuses — so the absence reads as a rule about main rather than as
   # a missing feature.
   it "keeps the main account reachable and undeletable", :aggregate_failures do
@@ -92,7 +92,7 @@ RSpec.describe "Home accounts", type: :system do
     line.click
 
     expect(account_card("Checking")).to have_content("Main account — everything flows through it")
-    expect(account_card("Checking")).to have_link("Rename", href: edit_account_path(checking))
+    expect(account_card("Checking")).to have_link("Edit", href: edit_account_path(checking))
     expect(account_card("Checking")).to have_no_button("Delete")
     expect(account_card("Ally")).to have_no_content("Main account")
   end
@@ -155,7 +155,7 @@ RSpec.describe "Home accounts", type: :system do
 
     read_home
     line.click
-    within(account_card("Ally")) { click_link "Rename" }
+    within(account_card("Ally")) { click_link "Edit" }
 
     fill_in "Account name", with: "Ally Savings"
     fill_in "Balance today", with: "525.25"
@@ -173,7 +173,7 @@ RSpec.describe "Home accounts", type: :system do
 
     read_home
     line.click
-    within(account_card("Ally")) { click_link "Rename" }
+    within(account_card("Ally")) { click_link "Edit" }
 
     fill_in "Balance today", with: "quite a lot"
     click_button "Save account"

@@ -40,7 +40,7 @@ RSpec.describe "Categories Show - Details Card", type: :system do
       visit category_path(category)
 
       expect(page).to have_content("Tracked")
-      expect(page).to have_css("button.bg-brand-dark")
+      expect(page).to have_css("button.bg-brand")
 
       find("dt", text: "Tracked").ancestor(".py-3").find("button").click
 
@@ -57,7 +57,7 @@ RSpec.describe "Categories Show - Details Card", type: :system do
       find("dt", text: "Tracked").ancestor(".py-3").find("button").click
 
       expect(page).to have_content("Tracked")
-      expect(page).to have_css("button.bg-brand-dark")
+      expect(page).to have_css("button.bg-brand")
       expect(category.reload.tracked).to be true
     end
   end
