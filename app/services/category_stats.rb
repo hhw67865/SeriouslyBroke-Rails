@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
-class CategoryCalculator
-  include CategoriesHelper
-
+# What a category spent over a month or a year to date, and what it spent it on. How much it MAY
+# spend is a rule question, and ClaimCalculator answers that one.
+class CategoryStats
   attr_reader :category, :date, :date_range, :period
 
-  def initialize(category, date = Date.current, period: :monthly)
+  def initialize(category, date = category.user.today, period: :monthly)
     @category = category
     @date = date
     @period = period
@@ -14,38 +14,6 @@ class CategoryCalculator
 
   def total_amount
     category.entries.where(date: date_range).sum(:amount)
-  end
-
-  def budget_percentage
-    return 0 unless category.expense? && effective_budget.to_f.positive?
-    (total_amount / effective_budget * 100).round
-  end
-
-  def budget_pace_percentage
-    return 0 unless category.expense? && budget_pace.to_f.positive?
-    (total_amount / budget_pace * 100).round
-  end
-
-  def monthly_budget_rate
-    return nil unless category.expense?
-    category.budget&.amount
-  end
-
-  def effective_budget
-    return nil unless monthly_budget_rate
-
-    period == :ytd ? monthly_budget_rate * months_in_range(date_range) : monthly_budget_rate
-  end
-
-  def budget_pace(today: Date.current)
-    return nil unless monthly_budget_rate
-    return effective_budget unless prorated_active?
-    ramp_value(pace_day(today), @date.end_of_month.day)
-  end
-
-  def budget_curve
-    return {} unless monthly_budget_rate
-    period == :ytd ? ytd_budget_curve : monthly_budget_curve
   end
 
   def previous_month_change_percentage
@@ -57,11 +25,6 @@ class CategoryCalculator
   def previous_month_trend
     percentage = previous_month_change_percentage
     percentage >= 0 ? :up : :down
-  end
-
-  def monthly_contribution
-    return 0 unless category.savings?
-    total_amount
   end
 
   def top_items(limit = 3)
@@ -127,39 +90,5 @@ class CategoryCalculator
 
   def calculate_percentage_change(current, previous)
     ((current - previous) / previous.to_f * 100).round
-  end
-
-  def prorated_active?
-    period == :monthly && category.budget&.prorated?
-  end
-
-  def pace_day(today)
-    return 0 if today < @date.beginning_of_month
-    return @date.end_of_month.day if today > @date.end_of_month
-    today.day
-  end
-
-  def ramp_value(day, days_in_month)
-    (monthly_budget_rate * day / days_in_month.to_f).round(2)
-  end
-
-  def monthly_budget_curve
-    days = @date.end_of_month.day
-    return @date.all_month.index_with { effective_budget } unless prorated_active?
-    @date.all_month.each_with_index.with_object({}) do |(d, i), h|
-      h[d] = ramp_value(i + 1, days)
-    end
-  end
-
-  def ytd_budget_curve
-    current = date_range.begin.beginning_of_month
-    acc = 0
-    {}.tap do |h|
-      while current <= date_range.end
-        acc += monthly_budget_rate
-        h[current] = acc
-        current = current.next_month
-      end
-    end
   end
 end

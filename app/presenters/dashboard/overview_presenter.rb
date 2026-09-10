@@ -1,33 +1,15 @@
 # frozen_string_literal: true
 
 module Dashboard
+  # The All tab: the cash-flow figures, the two lanes' breakdowns and the savings strip.
   class OverviewPresenter
-    include CategoriesHelper
-
     def initialize(parent)
       @parent = parent
       @user = parent.user
     end
 
-    # === Chart: Income vs Expenses with Savings net delta ===
-
-    def overview_chart_data
-      @overview_chart_data ||= compute_overview_chart_data
-    end
-
-    def overview_chart_colors
-      [
-        DashboardPresenter::COLORS[:brand_dark],
-        DashboardPresenter::COLORS[:terracotta],
-        DashboardPresenter::COLORS[:dusty_teal]
-      ]
-    end
-
     # === Cash-flow stats ===
 
-    # Pure cash flow: what came in vs what actually left.
-    # Savings contributions are tracked separately via net_savings — they are
-    # an allocation of money you still hold, not money spent.
     def net_amount
       @net_amount ||= @parent.total_tracked_income - @parent.total_tracked_expenses
     end
@@ -39,128 +21,74 @@ module Dashboard
       (@parent.total_tracked_expenses / income.to_f * 100).round(1)
     end
 
-    # === Savings flow (separate from net) ===
-
-    def savings_contributions_total
-      @savings_contributions_total ||= @user.entries.savings.tracked.where(date: period_range).sum(:amount)
-    end
-
-    def savings_withdrawals_total
-      @savings_withdrawals_total ||= @user.entries.pool_covered_expenses.tracked.where(date: period_range).sum(:amount)
-    end
-
-    def net_savings
-      savings_contributions_total - savings_withdrawals_total
-    end
-
-    # Income remaining after budgetable expenses and savings contributions.
-    # Can be negative when budgetable + contributions > income.
-    def income_remaining
-      @parent.total_tracked_income -
-        @parent.total_tracked_budgetable_expenses -
-        savings_contributions_total
-    end
-
-    # === Month-over-month comparison (monthly mode only) ===
-
-    def income_change
-      return nil if @parent.ytd?
-
-      @income_change ||= percentage_change(
-        @user.entries.incomes.tracked.where(date: previous_range).sum(:amount),
-        @parent.total_tracked_income
-      )
-    end
-
-    def expenses_change
-      return nil if @parent.ytd?
-
-      @expenses_change ||= percentage_change(
-        @user.entries.expenses.tracked.where(date: previous_range).sum(:amount),
-        @parent.total_tracked_expenses
-      )
-    end
-
-    # === Budget health (budgetable expenses only) ===
-
-    def budgeted_total
-      @budgeted_total ||= all_budgeted_breakdown.sum { |c| c[:amount] }
-    end
-
-    def budget_used_percentage
-      budget = @parent.total_budget
-      return 0 if budget.zero?
-
-      (budgeted_total / budget.to_f * 100).round
-    end
-
     # === Top spending (all expense categories combined — cash flow view) ===
 
     def top_expense_categories
       @top_expense_categories ||= @parent.expense_categories_breakdown.first(5)
     end
 
-    # === Expense split ===
+    # === Expense split, by the lane the money came out of ===
 
-    def all_budgeted_categories_breakdown
-      all_budgeted_breakdown
+    def buffer_categories_breakdown
+      @buffer_categories_breakdown ||= @parent.build_category_breakdown(@parent.tracked_unruled_categories)
     end
 
-    def pool_covered_total
-      @pool_covered_total ||= pool_covered_categories_breakdown.sum { |c| c[:amount] }
+    def envelope_categories_breakdown
+      @envelope_categories_breakdown ||= @parent.build_category_breakdown(@parent.tracked_ruled_categories)
     end
 
-    def pool_covered_categories_breakdown
-      @pool_covered_categories_breakdown ||= @parent.build_category_breakdown(@parent.tracked_pool_covered_expense_categories)
+    # The savings strip. Money being saved toward a day is a shape rather than a kind of category,
+    # and a rule that REPEATS is a recurring bill: `Rule.saving_toward_a_date` draws both clauses.
+    def savings_summary
+      @savings_summary ||= savings_categories.map { |category| savings_line(category) }
     end
+
+    # `#sole` is deliberate: the scope's `item_id IS NULL` clause is single-valued per category, and
+    # a `#first` would silently name one of two where a raise says so.
+    def savings_line(category)
+      rule = category.rules.select(&:saving_toward_a_date?).sole
+
+      ClaimRows.line_for(rule, claim_ledger.calculator_for(rule))
+    end
+
+    # The target is a ceiling on the FUND's own money, so beside a figure that also holds a sibling
+    # bill's accrual it would be a fraction of the wrong number.
+    def whole_category_fund?(line) = sole_rule_category_ids.include?(line.rule.category_id)
+
+    def savings_target(line) = whole_category_fund?(line) ? line.target : nil
+
+    def savings_progress(line) = progress_percentage(line.built_up, savings_target(line))
+
+    def total_savings_balance = savings_summary.sum(0.to_d, &:built_up)
 
     private
 
-    delegate :period_range, :six_month_range, to: :@parent
+    # A claim is a walk over periods, so the only bound is which period it stops in: the selected
+    # range's last day, capped at today so no card counts a period nobody has lived through.
+    def as_of = @as_of ||= [@parent.period_range.end, @user.today].min
 
-    def previous_range
-      @previous_range ||= @parent.previous_month_range
+    def claim_ledger = @claim_ledger ||= ClaimLedger.new(@user, today: as_of)
+
+    # How full, as a whole percent. The floor survives though a clamped claim cannot reach it: a
+    # bar of negative width is what it is there to refuse.
+    def progress_percentage(claim, target)
+      return 0 unless target.to_f.positive?
+
+      (claim / target * 100).round.clamp(0, 100)
     end
 
-    def all_budgeted_breakdown
-      # Sort by most over-budget first, then by highest spend for non-budgeted
-      @all_budgeted_breakdown ||= @parent.build_category_breakdown(@parent.tracked_budgetable_expense_categories)
-        .sort_by { |c| [c[:budget] ? -(c[:amount] - c[:budget]) : 1, -c[:amount]] }
+    # The categories whose only rule is the fund, counted once for the whole strip rather than per
+    # card.
+    def sole_rule_category_ids
+      @sole_rule_category_ids ||= savings_categories.select { |category| category.rules.size == 1 }.to_set(&:id)
     end
 
-    def percentage_change(previous, current)
-      return 0 if previous.zero?
-
-      ((current - previous) / previous.to_f * 100).round
-    end
-
-    def compute_overview_chart_data
-      range = @parent.ytd? ? period_range : six_month_range
-      series = build_chart_series(range)
-      series.all? { |s| s[:data].values.all?(&:zero?) } ? [] : series
-    end
-
-    def build_chart_series(range)
-      [
-        { name: "Income", data: monthly_totals(@user.entries.incomes.tracked, range) },
-        { name: "Expenses", data: monthly_totals(@user.entries.expenses.tracked, range) },
-        { name: "Net Savings", data: monthly_savings_delta(range) }
-      ]
-    end
-
-    def monthly_totals(scope, range)
-      scope
-        .group_by_month(:date, range: range, default_value: 0)
-        .sum(:amount)
-        .transform_keys { |d| d.strftime("%b %Y") }
-    end
-
-    def monthly_savings_delta(range)
-      contributions = monthly_totals(@user.entries.savings.tracked, range)
-      withdrawals = monthly_totals(@user.entries.pool_covered_expenses.tracked, range)
-      contributions.each_with_object({}) do |(month, amount), result|
-        result[month] = amount - withdrawals.fetch(month, 0)
-      end
+    def savings_categories
+      @savings_categories ||= @user.categories
+        .expenses
+        .where(id: Rule.saving_toward_a_date.select(:category_id))
+        .includes(:rules)
+        .order(:name)
     end
   end
 end

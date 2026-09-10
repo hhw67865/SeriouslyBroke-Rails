@@ -2,8 +2,10 @@
 
 require "rails_helper"
 
+# The sidebar: six sections, the user's own profile block and the way out. Everything is scoped to
+# the sidebar panel, because the mobile header carries a second copy of the date selector.
 RSpec.describe "Navbar", type: :system do
-  let!(:user) { create(:user) }
+  let!(:user) { create(:user, name: "Ada Lovelace") }
 
   before do
     sign_in user, scope: :user
@@ -11,91 +13,112 @@ RSpec.describe "Navbar", type: :system do
   end
 
   describe "main navigation", :aggregate_failures do
-    it "shows all main navigation links" do
-      # Check for navigation links anywhere on the page (sidebar or mobile nav)
-      expect(page).to have_link("Dashboard")
-      expect(page).to have_link("Categories")
-      expect(page).to have_link("Entries")
-      expect(page).to have_link("Savings Pools").or have_link("Savings")
-      expect(page).to have_link("Statistics")
-      expect(page).to have_link("Calendar")
+    it "links to every section of the app" do
+      within_sidebar do
+        expect(page).to have_link("Home", href: root_path)
+        expect(page).to have_link("Budget", href: budget_page_path)
+        expect(page).to have_link("Entries", href: entries_path)
+        expect(page).to have_link("Categories", href: categories_path)
+        expect(page).to have_link("Calendar", href: calendar_path)
+        expect(page).to have_link("Reports", href: reports_path)
+      end
     end
 
-    it "navigates to main sections correctly", :aggregate_failures do
-      click_link "Categories"
+    # The other direction: the screens this app used to have are gone from the sidebar, not merely
+    # renamed somewhere off it.
+    it "names no screen this app no longer has" do
+      within_sidebar do
+        expect(page).to have_no_link("Dashboard")
+        expect(page).to have_no_link("Savings")
+        expect(page).to have_no_link("Statistics")
+      end
+    end
+
+    it "navigates to a section and back", :aggregate_failures do
+      within_sidebar { click_link "Categories" }
       expect(page).to have_current_path(categories_path)
 
-      click_link "Dashboard"
-      expect(page).to have_current_path(authenticated_root_path)
+      within_sidebar { click_link "Home" }
+      expect(page).to have_current_path(root_path)
     end
   end
 
-  describe "active navigation state" do
-    it "highlights current section", :aggregate_failures do
-      visit categories_path
+  describe "the active section", :aggregate_failures do
+    before { visit categories_path }
 
-      # Check for active navigation link with the specific styling classes
-      expect(page).to have_css("a.bg-white").or have_css("a[class*='bg-white']")
+    it "marks the section the page belongs to, and only that one" do
+      within_sidebar do
+        expect(page).to have_css("a.bg-white", text: "Categories")
+        expect(page).to have_no_css("a.bg-white", text: "Entries")
+      end
+    end
+  end
+
+  describe "the user profile", :aggregate_failures do
+    it "names the user and opens Settings" do
+      within_sidebar { expect(page).to have_link(user.name, href: settings_path) }
+
+      within_sidebar { click_link user.name }
+
+      expect(page).to have_current_path(settings_path)
+    end
+  end
+
+  describe "signing out", :aggregate_failures do
+    it "returns to the landing page with the app closed behind it" do
+      within_sidebar { click_button "Sign out" }
+
+      expect(page).to have_current_path(root_path)
+      expect(page).to have_link("Log In")
+      expect(page).to have_no_link("Budget")
     end
   end
 
   describe "month selector", :aggregate_failures do
     let(:current_date) { Date.current }
     let(:next_month_date) { current_date.next_month }
-    let(:prev_month_date) { current_date.prev_month }
 
-    it "displays current month and year by default" do
-      # Check for month display in sidebar (desktop) and mobile header
-      expect(page).to have_content(current_date.strftime("%B %Y")).or have_content(current_date.strftime("%b %Y"))
+    it "displays the current month and year by default" do
+      within_sidebar { expect(page).to have_content(current_date.strftime("%B %Y")) }
     end
 
-    it "has functional previous and next month buttons" do
-      # Test next month navigation
-      expect(page).to have_css("button[title='Next month']")
-      expect(page).to have_css("button[title='Previous month']")
+    it "steps forward and back a month" do
+      next_month
+      within_sidebar { expect(page).to have_content(next_month_date.strftime("%B %Y")) }
 
-      find("button[title='Next month']").click
-      expect(page).to have_content(next_month_date.strftime("%B %Y")).or have_content(next_month_date.strftime("%b %Y"))
-
-      # Test previous month navigation
-      find("button[title='Previous month']").click
-      expect(page).to have_content(current_date.strftime("%B %Y")).or have_content(current_date.strftime("%b %Y"))
+      within_sidebar { find("button[title='Previous month']").click }
+      within_sidebar { expect(page).to have_content(current_date.strftime("%B %Y")) }
     end
 
-    it "persists selected month when navigating between pages" do
-      # Navigate to next month
-      find("button[title='Next month']").click
-      expect(page).to have_content(next_month_date.strftime("%B %Y")).or have_content(next_month_date.strftime("%b %Y"))
+    it "keeps the selected month while moving between pages" do
+      next_month
 
-      # Navigate to different page
-      click_link "Categories"
+      within_sidebar { click_link "Categories" }
       expect(page).to have_current_path(categories_path)
+      within_sidebar { expect(page).to have_content(next_month_date.strftime("%B %Y")) }
 
-      # Month selection should persist
-      expect(page).to have_content(next_month_date.strftime("%B %Y")).or have_content(next_month_date.strftime("%b %Y"))
-
-      # Navigate to another page
-      click_link "Dashboard"
-      expect(page).to have_current_path(authenticated_root_path)
-
-      # Month selection should still persist
-      expect(page).to have_content(next_month_date.strftime("%B %Y")).or have_content(next_month_date.strftime("%b %Y"))
+      within_sidebar { click_link "Home" }
+      expect(page).to have_current_path(root_path)
+      within_sidebar { expect(page).to have_content(next_month_date.strftime("%B %Y")) }
     end
 
-    it "resets to current month for new user sessions" do
-      # Navigate to a different month
-      find("button[title='Next month']").click
-      expect(page).to have_content(next_month_date.strftime("%B %Y")).or have_content(next_month_date.strftime("%b %Y"))
-
-      # Sign out and back in (simulating new session)
-      click_button "Sign out"
-      expect(page).to have_button("Sign in")
+    it "opens on the current month again in a new session" do
+      next_month
+      within_sidebar { click_button "Sign out" }
+      expect(page).to have_link("Log In")
 
       sign_in user, scope: :user
       visit authenticated_root_path
 
-      # Should show current month again for new session
-      expect(page).to have_content(current_date.strftime("%B %Y")).or have_content(current_date.strftime("%b %Y"))
+      within_sidebar { expect(page).to have_content(current_date.strftime("%B %Y")) }
     end
+  end
+
+  private
+
+  def within_sidebar(&) = within("[data-shared--sidebar-target='panel']", &)
+
+  def next_month
+    within_sidebar { find("button[title='Next month']").click }
   end
 end

@@ -47,6 +47,20 @@ RSpec.describe "Rules" do
     expect(response.body).not_to include("data-preview")
   end
 
+  # The edit branch goes through `#scoped` too: an existing rule's preview must not price a foreign
+  # item any more than a new one's may name a foreign category.
+  it "never previews another user's item on an existing rule", :aggregate_failures do
+    rule = create(:rule, category: groceries, amount: 400)
+    stranger_item = create(:item, category: create(:category, user: create(:user)))
+
+    patch preview_rules_path,
+          params: { id: rule.id, rule: { item_id: stranger_item.id, rule_type: "usage", amount: "400", schedule: "per_period" } },
+          headers: { "Turbo-Frame" => "rule_preview" }
+
+    expect(response).to have_http_status(:not_found)
+    expect(response.body).not_to include("data-preview")
+  end
+
   it "sends new without a category back to the Budget page" do
     get new_rule_path
 

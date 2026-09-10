@@ -19,7 +19,9 @@ RSpec.describe "Authentication", type: :system do
       let(:valid_email) { "test@example.com" }
       let(:valid_password) { "password123" }
 
-      it "allows form submission with valid email" do
+      # `:js`: `:invalid` is the browser's own validity state, which no static parse of the page
+      # can answer.
+      it "allows form submission with valid email", :js do
         fill_sign_up_form
         expect(page).not_to have_css("input:invalid")
       end
@@ -32,7 +34,8 @@ RSpec.describe "Authentication", type: :system do
         expect(page).to have_current_path(authenticated_root_path)
       end
 
-      it "auto-detects the new user's timezone from the browser", :aggregate_failures do
+      # `:js`: the field is filled by the form's own script from the browser's clock.
+      it "auto-detects the new user's timezone from the browser", :aggregate_failures, :js do
         fill_sign_up_form
         within("form") { click_button "Sign up" }
 
@@ -52,7 +55,8 @@ RSpec.describe "Authentication", type: :system do
     end
 
     context "with invalid information" do
-      it "prevents submission with invalid email format" do
+      # `:js`: the browser is what marks a malformed email invalid.
+      it "prevents submission with invalid email format", :js do
         fill_in "Email", with: "invalid-email"
         fill_in "Password", with: "password123"
         fill_in "Password confirmation", with: "password123"

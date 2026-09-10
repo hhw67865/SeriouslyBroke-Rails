@@ -59,8 +59,8 @@ class Category < ApplicationRecord
 
   def ruled? = rules.load.any?
 
-  def calculator(date = user.today, period: :monthly)
-    CategoryCalculator.new(self, date, period: period)
+  def stats(date = user.today, period: :monthly)
+    CategoryStats.new(self, date, period: period)
   end
 
   private

@@ -3,16 +3,8 @@
     <p class="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">Untracked</p>
     <% categories.each do |cat| %>
       <div class="flex items-center justify-between py-2 border-b border-gray-100">
-        <% if local_assigns[:show_total_contributed] %>
-          <div>
-            <%= link_to cat[:name], category_path(cat[:id]), class: "text-gray-400 hover:text-brand-dark" %>
-            <span class="text-sm text-gray-400 ml-2">(Total Contributed: <%= number_to_currency(cat[:total_contributed]) %>)</span>
-          </div>
-          <span class="font-medium text-gray-400">+<%= number_to_currency(cat[:amount]) %></span>
-        <% else %>
-          <%= link_to cat[:name], category_path(cat[:id]), class: "text-gray-400 hover:text-brand-dark" %>
-          <span class="font-medium text-gray-400"><%= number_to_currency(cat[:amount]) %></span>
-        <% end %>
+        <%= link_to cat[:name], category_path(cat[:id]), class: "text-gray-400 hover:text-brand-dark" %>
+        <span class="font-medium text-gray-400"><%= number_to_currency(cat[:amount]) %></span>
       </div>
     <% end %>
   </div>

@@ -29,7 +29,7 @@ class RulesController < ApplicationController
   end
 
   def preview
-    words = @rule ? RuleForm.from(@rule).merge(payload.except(:category_id)) : scoped(payload)
+    words = @rule ? RuleForm.from(@rule).merge(scoped(payload.except(:category_id))) : scoped(payload)
     @rule_form = RuleForm.new(current_user, words, rule: @rule)
     @preview = RulePreview.new(@rule_form, user: current_user)
     return render partial: "rules/preview", locals: { preview: @preview } if turbo_frame_request?

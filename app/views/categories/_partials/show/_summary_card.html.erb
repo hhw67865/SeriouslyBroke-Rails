@@ -4,7 +4,7 @@
 <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 p-6" data-summary-card>
   <h2 class="text-xl font-semibold mb-4">Summary</h2>
 
-  <% calc = category.calculator(selected_date, period: current_period) %>
+  <% calc = category.stats(selected_date, period: current_period) %>
   <% if category.expense? %>
     <!-- Expense Category Summary -->
     <div class="space-y-6">

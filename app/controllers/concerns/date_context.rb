@@ -80,8 +80,10 @@ module DateContext
   end
 
   def set_default_values
-    session[:selected_month] ||= Date.current.month
-    session[:selected_year] ||= Date.current.year
+    # The owner's today, and current_user is guaranteed here: #set_selected_month_year returns
+    # through #clear_date_session before this is reached when nobody is signed in.
+    session[:selected_month] ||= current_user.today.month
+    session[:selected_year] ||= current_user.today.year
     session[:date_session_time] = Time.current
 
     @selected_month = session[:selected_month]

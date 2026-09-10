@@ -1,8 +1,8 @@
-<% content_for :title, "Dashboard" %>
+<% content_for :title, "Reports" %>
 
 <div class="w-full">
   <%= page_header(
-      title: "Dashboard",
+      title: "Reports",
       subtitle: format_month_year
   ) %>
 
@@ -16,8 +16,8 @@
     <div class="p-6">
       <div class="flex items-start justify-between gap-3">
         <%= render "shared/period_toggle",
-            monthly_path: root_path(tab: @tab),
-            ytd_path: root_path(tab: @tab, period: "ytd") %>
+            monthly_path: reports_path(tab: @tab),
+            ytd_path: reports_path(tab: @tab, period: "ytd") %>
         <% unless @tab == :all %>
           <%= render "tracked_filter" %>
         <% end %>
@@ -30,8 +30,6 @@
         <%= render "expenses_tab" %>
       <% when :income %>
         <%= render "income_tab" %>
-      <% when :savings %>
-        <%= render "savings_tab" %>
       <% end %>
     </div>
   </div>

@@ -2,11 +2,15 @@
 
 require "rails_helper"
 
+# Two totals per day, not three: the grid's columns are `CategoryTypeHelper::CATEGORY_TYPES`, and a
+# transfer between the user's own accounts is money changing pockets rather than money entering or
+# leaving their life. Both directions are asserted below.
 RSpec.describe "Calendar Index - Grid", type: :system do
   let!(:user) { create(:user) }
+  let!(:checking) { create(:account, user: user, name: "Checking") }
+  let!(:savings_account) { create(:account, user: user, name: "Emergency Fund") }
   let!(:expense_category) { create(:category, :expense, user: user, name: "Groceries") }
   let!(:income_category) { create(:category, :income, user: user, name: "Salary") }
-  let!(:savings_category) { create(:category, :savings, user: user, name: "Emergency Fund") }
 
   before { sign_in user, scope: :user }
 
@@ -33,11 +37,10 @@ RSpec.describe "Calendar Index - Grid", type: :system do
     before do
       expense_item = create(:item, category: expense_category)
       income_item = create(:item, category: income_category)
-      savings_item = create(:item, category: savings_category)
 
       create(:entry, item: expense_item, amount: 50.00, date: Date.current)
       create(:entry, item: income_item, amount: 1000.00, date: Date.current)
-      create(:entry, item: savings_item, amount: 200.00, date: Date.current)
+      create(:transfer, from_account: checking, to_account: savings_account, amount: 200.00, date: Date.current)
 
       visit calendar_path
     end
@@ -50,8 +53,15 @@ RSpec.describe "Calendar Index - Grid", type: :system do
       expect(page).to have_css(".text-status-success", text: "$1k")
     end
 
-    it "shows savings total in brand color" do
-      expect(page).to have_css(".text-brand-dark", text: "$200")
+    # Scoped to the grid, because `.text-brand-dark` is the app's chrome colour too: a page-wide
+    # negative would be asserting something about the layout rather than about the calendar.
+    it "draws nothing at all for the transfer", :aggregate_failures do
+      within(".calendar-grid") do
+        expect(page).to have_no_css(".text-brand-dark")
+        expect(page).to have_no_content("$200")
+        expect(page).to have_content("$50")
+        expect(page).to have_content("$1k")
+      end
     end
   end
 
