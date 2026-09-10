@@ -8,16 +8,19 @@ RSpec.describe "Categories Show - Details Card", type: :system do
   before { sign_in user, scope: :user }
 
   describe "with explicit color" do
-    let!(:category) { create(:category, category_type: "expense", user: user, color: "#123456") }
+    let(:today) { Date.new(2026, 6, 15) }
+    let!(:category) do
+      travel_to(today) { create(:category, category_type: "expense", user: user, color: "#123456") }
+    end
 
     before do
-      base_date = Date.current.beginning_of_month
+      base_date = today.beginning_of_month
       groceries = create(:item, category: category, name: "Groceries")
       dining = create(:item, category: category, name: "Dining")
       create(:entry, item: groceries, amount: 10, date: base_date.prev_month + 3.days)
       create(:entry, item: dining, amount: 20, date: base_date + 5.days)
       create(:entry, item: groceries, amount: 30, date: base_date.next_month + 2.days)
-      visit category_path(category)
+      travel_to(today) { visit category_path(category) }
     end
 
     it "shows accurate type, overall counts, and created date", :aggregate_failures do
@@ -26,7 +29,7 @@ RSpec.describe "Categories Show - Details Card", type: :system do
       expect(page).to have_content("2")
       expect(page).to have_content("Total Entries")
       expect(page).to have_content("3")
-      expect(page).to have_content(category.created_at.strftime("%b %d, %Y"))
+      expect(page).to have_content(today.strftime("%b %d, %Y"))
     end
   end
 

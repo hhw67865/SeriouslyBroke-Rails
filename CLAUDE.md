@@ -10,9 +10,9 @@ bin/dev                      # Start Rails server with Tailwind watcher
 bin/setup                    # Full environment setup
 
 # Testing
-bundle exec rspec            # Run all tests
-bundle exec rspec spec/system/calendar/  # Run specific directory
-bundle exec rspec spec/system/calendar/index/grid_spec.rb:45  # Run single test
+bundle exec rspec spec/models                     # one directory
+bundle exec rspec spec/system/home/money_spec.rb  # one file
+bundle exec parallel_rspec spec                    # everything, across cores
 
 # Code Quality
 bundle exec rubocop -A       # Lint with auto-fix
@@ -124,15 +124,36 @@ The design-review agent reads the design standards and performs:
 
 ## Testing Workflow
 
-Use the `system-test-writer` skill to write system tests. This skill handles page-based test organization, DRY patterns, and all project testing conventions automatically.
+Use the `system-test-writer` skill to write system tests. Logic (figures, states, validations,
+formulas) is proven in model, service and presenter specs. A system spec proves a page renders
+its figures once, and every real interaction.
+
+### Drivers
+
+System specs run under Rack::Test. Tag an example `:js` only when it needs JavaScript (the
+calculator pad, TomSelect, the rule preview, drag reorder, charts, a 375px layout). `:js`
+examples share one headless Chrome per process; the browser is never restarted between examples.
 
 ### Running Tests
 
-Always run test files one at a time, never entire directories or the full suite:
+Run a directory, or the whole suite in parallel:
 
 ```bash
-bundle exec rspec spec/system/feature_name/page/section_spec.rb  # Run one file at a time
+bundle exec rspec spec/models                     # one directory
+bundle exec rspec spec/system/home/money_spec.rb  # one file
+bundle exec parallel_rspec spec                    # everything, across cores
 ```
+
+The test databases are `seriously_broke_test`, `seriously_broke_test2`, … (`TEST_ENV_NUMBER`);
+`bundle exec rake parallel:create parallel:prepare` makes them.
+
+### Rules
+
+- No `sleep`. Wait with a Capybara assertion (`have_content`, `have_css`, `have_current_path`).
+- After a `click_*`, assert on the page before asserting on the database.
+- Fixtures pass `today:` and explicit dates; nothing reads the wall clock inside `travel_to`.
+- A narrow-viewport example uses `Emulation.setDeviceMetricsOverride` (see `spec/system/home/money_spec.rb`).
+
 ---
 
 ## Summary: Implementation Checklist
@@ -146,5 +167,5 @@ When implementing any feature:
 5. **If front-end changes** - Perform Quick Visual Check
 6. **If significant UI** - Run design-review agent
 7. **Write tests** - Use the `system-test-writer` skill
-8. **Run tests** - Run each test file individually with `bundle exec rspec path/to/spec.rb`
+8. **Run tests** - Run the directory you touched with `bundle exec rspec spec/<dir>`, then `bundle exec parallel_rspec spec` before committing
 9. **Commit** - Only after all checks pass

@@ -4,33 +4,49 @@ This document defines the architecture, patterns, and coding conventions for the
 
 ## Core Domain Models
 
-- **User** → has_many Categories, SavingsPools
-- **Category** (expense/income/savings types) → has_many Items, has_one Budget
-- **Item** → has_many Entries
-- **Entry** → the actual transaction record
-- **SavingsPool** → goal tracking with target amounts
-- **Budget** → period-based spending limits (expense categories only)
+- **User** → has_many Categories, Accounts, Rules (through Categories); belongs_to a main Account
+- **Account** → where money sits; balance is a ledger read, never a stored column
+- **Category** (expense/income types) → has_many Items, has_many Rules
+- **Item** → has_many Entries, has_one Rule
+- **Entry** → the actual transaction record; only income may land in a non-main Account
+- **Rule** → a category or item's claim on main: a period allowance or a dated bill/goal
+- **Adjustment** → a one-off change to a rule's claim (a top-up or a skip)
+- **Transfer** → money moved between two of a user's Accounts
 
 ## Custom Patterns
 
 ### Presenter Pattern (`app/presenters/`)
 
-Uses Ruby `Data.define` for immutable value objects. Controllers instantiate presenters that pre-compute view data.
+Uses Ruby `Data.define` for immutable value objects. Controllers instantiate presenters that pre-compute view data, usually by reading from a ledger or calculator.
 
 ```ruby
 # Controller
-@presenter = WeeklyCalendarPresenter.new(user: current_user, date: params[:date])
+@presenter = HomePresenter.new(user: current_user)
 # View
-@presenter.entries_for_day(date)
+@presenter.troubles
 ```
 
 ### Calculator Pattern (`app/services/`)
 
-Memoized service objects for computing metrics. Accessed via model method:
+Plain service objects, fed a fixed number of queries up front, that compute a figure without touching the database again per call:
 
 ```ruby
-category.calculator(date).budget_percentage
-category.calculator(date).top_items
+AccountLedger.new(current_user).balance_of(account)
+ClaimCalculator.new(rule).claim
+ClaimLedger.new(current_user).total_claims
+```
+
+`AccountLedger` totals one user's account balances; `ClaimCalculator` computes a single rule's claim on main; `ClaimLedger` runs every rule's calculator for a user in a fixed number of queries.
+
+### Form Object Pattern (`app/services/`)
+
+Plain `ActiveModel::Model` (or plain Ruby) objects that turn form params into a valid record, keeping validation and coercion logic out of controllers:
+
+```ruby
+RuleForm.new(current_user, rule_params, rule: @rule).save
+AdjustmentForm.new(rule: @rule, params: adjustment_params, name: current_user.name).save
+EntryForm.new(current_user, @entry, entry_params)
+CadenceChange.new(user: current_user, declaration: declaration_params)
 ```
 
 ### Searchable System (Custom DSL)

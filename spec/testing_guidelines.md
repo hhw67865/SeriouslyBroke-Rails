@@ -2,6 +2,12 @@
 
 This document serves as a comprehensive reference for how tests should be written in this Rails application. Any LLM or developer working on this codebase should follow these established patterns to maintain consistency and code quality.
 
+## Drivers and speed
+
+- No `sleep`. Wait with a Capybara assertion (`have_content`, `have_css`, `have_current_path`).
+- After a `click_*`, assert on the page before asserting on the database.
+- Fixtures pass `today:` and explicit dates; nothing reads the wall clock inside `travel_to`.
+
 ## Philosophy
 
 - **Minimal code**: Write tests with as few lines as possible while maintaining clarity
@@ -18,7 +24,7 @@ This document serves as a comprehensive reference for how tests should be writte
 The system test structure mirrors your web application's pages. Each **web page** gets its own folder, then we divide tests by **page sections** to keep them focused and manageable.
 
 **Grouping Strategy:**
-- **By Model/Feature**: `categories/`, `items/`, `savings_pools/` 
+- **By Model/Feature**: `categories/`, `items/`, `rules/` 
 - **By App Section**: `dashboard/`, `reports/`, `admin/`
 - **Special Cases**: `authentication/` (can be single file if simple)
 
@@ -380,7 +386,7 @@ RSpec.describe "Categories Index - Navigation", type: :system do
       within ".sidebar" do # or main nav
         expect(page).to have_link("Items")
         expect(page).to have_link("Entries")
-        expect(page).to have_link("Savings Pools")
+        expect(page).to have_link("Budget")
       end
     end
   end
@@ -829,16 +835,17 @@ end
 #### ✅ Good: Specific Values in Tests When Needed
 ```ruby
 # When testing exact calculations, specify values in the test
-describe "savings pool card display" do
-  let!(:savings_item) { create(:item, category: savings_category) }
+describe "account balance display" do
+  let!(:user) { create(:user) }
+  let!(:account) { create(:account, user: user, opening_balance: 0) }
 
   before do
     # Specify exact amounts for calculation testing
-    create_list(:entry, 3, item: savings_item, amount: 200.0)
-    create_list(:entry, 2, item: expense_item, amount: 50.0)
+    create_list(:entry, 3, :income, user: user, account: account, amount: 200.0)
+    create_list(:entry, 2, :expense, user: user, amount: 50.0)
   end
 
-  # Current balance: (3 × $200) - (2 × $50) = $600 - $100 = $500
+  # Current balance: (3 × $200 income) - (2 × $50 expense) = $600 - $100 = $500
   it "shows correct current balance" do
     expect(current_amount.text).to eq("$500.00")
   end
@@ -1098,14 +1105,14 @@ To maintain code quality and prevent Rubocop violations, follow these specific g
 
 **✅ Good: Strategic Helper Usage**
 ```ruby
-describe "expense card shows correct monthly budget" do
+describe "expense card shows correct rule claim" do
   let!(:expense_category) { create(:category, category_type: "expense", user: user) }
   let!(:groceries_item) { create(:item, category: expense_category, name: "Groceries") }
   let!(:dining_item) { create(:item, category: expense_category, name: "Dining") }
   
   before do
-    # Create budget and entries in before block when they're only used for setup
-    create(:budget, category: expense_category, amount: 1000)
+    # Create the rule and entries in before block when they're only used for setup
+    create(:rule, category: expense_category, amount: 1000)
     create(:entry, item: groceries_item, amount: 100, date: base_date)
     create(:entry, item: dining_item, amount: 50, date: base_date)
     
@@ -1118,11 +1125,11 @@ end
 
 **❌ Avoid: Excessive let! Usage**
 ```ruby
-describe "expense card shows correct monthly budget" do
+describe "expense card shows correct rule claim" do
   let!(:expense_category) { create(:category, category_type: "expense", user: user) }
   let!(:groceries_item) { create(:item, category: expense_category, name: "Groceries") }
   let!(:dining_item) { create(:item, category: expense_category, name: "Dining") }
-  let!(:budget) { create(:budget, category: expense_category, amount: 1000) }
+  let!(:rule) { create(:rule, category: expense_category, amount: 1000) }
   let!(:entry1) { create(:entry, item: groceries_item, amount: 100, date: base_date) }
   let!(:entry2) { create(:entry, item: dining_item, amount: 50, date: base_date) }
   let!(:next_month_entry1) { create(:entry, item: groceries_item, amount: 200, date: next_date) }
@@ -1151,7 +1158,7 @@ describe "search with type filtering" do
   before do
     # Background data that won't be directly referenced
     create(:category, name: "Freelance Tools", category_type: "expense", user: user)
-    create(:category, name: "Freelance Savings", category_type: "savings", user: user)
+    create(:category, name: "Freelance Gear", category_type: "expense", user: user)
     
     visit categories_path(type: "income")
   end
@@ -1170,23 +1177,24 @@ end
 ```ruby
 describe "search by category" do
   # ✅ Main subjects are referenced by name
-  let!(:emergency_fund) { create(:savings_pool, user: user, name: "Emergency Fund") }
-  let!(:vacation_fund) { create(:savings_pool, user: user, name: "Vacation Fund") }
+  let!(:groceries) { create(:category, user: user, name: "Groceries") }
+  let!(:dining) { create(:category, user: user, name: "Dining Out") }
   
   before do
     # ✅ Background data not referenced by variable name
-    create(:category, user: user, name: "Home Savings", savings_pool: emergency_fund)
-    create(:category, user: user, name: "Travel Budget", savings_pool: vacation_fund)
-    visit savings_pools_path
+    create(:entry, item: create(:item, category: groceries), description: "Trader Joe's run")
+    create(:entry, item: create(:item, category: dining), description: "Dinner out")
+    visit entries_path
   end
   
-  it "finds savings pools by category name" do
-    fill_in "q", with: "Home"
-    find("input[name='q']").send_keys(:return)
+  it "finds entries by category name" do
+    select "Category", from: "field"
+    fill_in "q", with: "Groceries"
+    click_button "Search"
     
     # Using the let! objects, not the category variables
-    expect(page).to have_content(emergency_fund.name)
-    expect(page).not_to have_content(vacation_fund.name)
+    expect(page).to have_content(groceries.name)
+    expect(page).not_to have_content(dining.name)
   end
 end
 ```
@@ -1210,15 +1218,16 @@ end
 **❌ Avoid: Setup Data as let! When Not Referenced**
 ```ruby
 describe "search by category" do
-  let!(:emergency_fund) { create(:savings_pool, name: "Emergency Fund") }
-  let!(:home_category) { create(:category, name: "Home Savings", savings_pool: emergency_fund) }
-  let!(:travel_category) { create(:category, name: "Travel Budget", savings_pool: vacation_fund) }
+  let!(:groceries) { create(:category, name: "Groceries") }
+  let!(:groceries_entry) { create(:entry, item: create(:item, category: groceries), description: "Grocery run") }
+  let!(:dining_entry) { create(:entry, item: create(:item, category: create(:category, name: "Dining Out")), description: "Dinner out") }
   
-  # ❌ home_category and travel_category are never referenced by name
+  # ❌ groceries_entry and dining_entry are never referenced by name
   
-  it "finds savings pools by category name" do
-    fill_in "q", with: "Home"
-    expect(page).to have_content(emergency_fund.name)  # Only emergency_fund is referenced
+  it "finds entries by category name" do
+    select "Category", from: "field"
+    fill_in "q", with: "Groceries"
+    expect(page).to have_content(groceries.name)  # Only groceries is referenced
   end
 end
 ```
@@ -1308,14 +1317,14 @@ end
 **Strategies to Stay Within Limits:**
 ```ruby
 # Strategy 1: Group related objects in before blocks
-describe "monthly budget calculations" do
+describe "monthly rule calculations" do
   let!(:expense_category) { create(:category, category_type: "expense", user: user) }
   let!(:groceries_item) { create(:item, category: expense_category, name: "Groceries") }
   let!(:dining_item) { create(:item, category: expense_category, name: "Dining") }
   
   before do
-    # Group all entries and budget creation together
-    create(:budget, category: expense_category, amount: 1000)
+    # Group all entries and rule creation together
+    create(:rule, category: expense_category, amount: 1000)
     
     # Current month entries
     create(:entry, item: groceries_item, amount: 100, date: base_date)
@@ -1334,14 +1343,14 @@ describe "complex scenario testing" do
   let!(:expense_category) { create(:category, category_type: "expense", user: user) }
   
   before do
-    setup_monthly_budget_data(expense_category)
+    setup_monthly_rule_data(expense_category)
     visit categories_path(type: "expense")
   end
   
   private
   
-  def setup_monthly_budget_data(category)
-    create(:budget, category: category, amount: 1000)
+  def setup_monthly_rule_data(category)
+    create(:rule, category: category, amount: 1000)
     # Create all necessary test data
   end
 end
