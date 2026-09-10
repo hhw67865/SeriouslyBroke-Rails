@@ -18,71 +18,74 @@
           <%# The hook is `rule_name` and the visible name is `ClaimLine#name`: every item-less rule
               answers to "Whole category", so a selector needs the item's name or the category's. %>
           <li class="py-3" data-rule="<%= rule_name(line.rule) %>">
-            <div class="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-3">
-              <div class="flex items-baseline gap-2 min-w-0 flex-1">
-                <%# The rule's type, never the category's: one category may carry a bill beside a
-                    choice, and they give way at opposite ends of the walk. %>
-                <span class="w-1 self-stretch shrink-0 rounded <%= stripe_fill(line) %>" aria-hidden="true"></span>
-                <div class="min-w-0">
-                  <p class="text-sm font-medium text-gray-900 truncate"><%= line.name %></p>
-                  <p class="text-xs <%= type_text_class(line) %>" data-rule-shape><%= shape_words(line) %></p>
-                </div>
-              </div>
-
-              <%# `over?` is the pre-clamp reader, and the only one that can tell "spent it exactly"
-                  from "spent more than there was". The figure opens onto the entries behind it; the
-                  frame loads once the details is visible, not before. %>
-              <details class="sm:w-40" data-rule-spending>
-                <summary class="cursor-pointer list-none text-sm tabular-nums sm:text-right <%= line.over? ? "text-status-danger font-medium" : "text-gray-700" %>"
-                         data-rule-figure>
-                  <%= figure_words(line) %> <span class="text-gray-400" aria-hidden="true">&#9662;</span>
-                </summary>
-
-                <%= turbo_frame_tag dom_id(line.rule, :spending), src: spending_rule_path(line.rule), loading: :lazy, class: "block mt-1" do %>
-                  <p class="text-xs text-gray-500">Loading…</p>
-                <% end %>
-              </details>
-
-              <%# The percent rides on the TRACK: a 0% fill has no width, so a hook there would be
-                  unassertable on exactly the row a bar most needs pinning. %>
-              <div class="hidden sm:block sm:w-28">
-                <% if line.bar? %>
-                  <div class="h-1.5 bg-gray-200 rounded-full overflow-hidden"
-                       role="progressbar"
-                       aria-valuenow="<%= line.percent %>"
-                       aria-valuemin="0"
-                       aria-valuemax="100"
-                       aria-label="<%= row.name %> · <%= line.name %>"
-                       data-rule-bar="<%= line.percent %>"
-                       data-rule-bar-state="<%= line.bar_state %>">
-                    <div class="h-1.5 rounded-full <%= bar_fill(line) %>" style="width: <%= line.percent %>%;"></div>
+            <%# The whole line is the summary: clicking anywhere on it opens the entries below, full
+                width, and the frame loads once the details is visible, not before. %>
+            <details data-rule-spending>
+              <summary class="list-none cursor-pointer">
+                <div class="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-3">
+                  <div class="flex items-baseline gap-2 min-w-0 flex-1">
+                    <%# The rule's type, never the category's: one category may carry a bill beside a
+                        choice, and they give way at opposite ends of the walk. %>
+                    <span class="w-1 self-stretch shrink-0 rounded <%= stripe_fill(line) %>" aria-hidden="true"></span>
+                    <div class="min-w-0">
+                      <p class="text-sm font-medium text-gray-900 truncate"><%= line.name %></p>
+                      <p class="text-xs <%= type_text_class(line) %>" data-rule-shape><%= shape_words(line) %></p>
+                    </div>
                   </div>
-                <% end %>
-              </div>
 
-              <%# HomeHelper#when_words — the same string Home prints. A rate rule in a period with
-                  no boundary declared has nothing to say and renders no element. %>
-              <p class="text-xs sm:w-40 <%= line.trouble? || line.short? ? "text-status-danger font-medium" : "text-gray-500" %>"
-                 data-rule-when>
-                <%= when_words(line) %>
-              </p>
+                  <%# `over?` is the pre-clamp reader, and the only one that can tell "spent it exactly"
+                      from "spent more than there was". %>
+                  <p class="text-sm tabular-nums sm:w-40 sm:text-right <%= line.over? ? "text-status-danger font-medium" : "text-gray-700" %>"
+                     data-rule-figure>
+                    <%= figure_words(line) %> <span class="text-gray-400" aria-hidden="true">&#9662;</span>
+                  </p>
 
-              <%# A `div`, not a `p`: Delete is a `button_to`, and a form is not phrasing content. %>
-              <div class="flex items-baseline gap-3 shrink-0 sm:w-24 sm:justify-end text-sm">
-                <%# `_adjust` renders its own summary, so this column holds the rule's two doors.
-                    All three wear RuleActionsHelper::RULE_ACTION_CLASSES — one string, not three. %>
-                <%= link_to "Edit",
-                            edit_rule_path(line.rule),
-                            class: rule_action_classes("mt-1 sm:mt-0 sm:text-right sm:underline") %>
-                <%# `text-status-danger` is declared after `text-brand-dark` in custom.css, so it
-                    wins over the shared skin's colour without a second class list. %>
-                <%= button_to "Delete",
-                              rule_path(line.rule),
-                              method: :delete,
-                              form: { data: { turbo_confirm: "Delete this rule? Its adjustments go with it." } },
-                              class: rule_action_classes("mt-1 sm:mt-0 sm:text-right sm:underline text-status-danger") %>
-              </div>
-            </div>
+                  <%# The percent rides on the TRACK: a 0% fill has no width, so a hook there would be
+                      unassertable on exactly the row a bar most needs pinning. %>
+                  <div class="hidden sm:block sm:w-28">
+                    <% if line.bar? %>
+                      <div class="h-1.5 bg-gray-200 rounded-full overflow-hidden"
+                           role="progressbar"
+                           aria-valuenow="<%= line.percent %>"
+                           aria-valuemin="0"
+                           aria-valuemax="100"
+                           aria-label="<%= row.name %> · <%= line.name %>"
+                           data-rule-bar="<%= line.percent %>"
+                           data-rule-bar-state="<%= line.bar_state %>">
+                        <div class="h-1.5 rounded-full <%= bar_fill(line) %>" style="width: <%= line.percent %>%;"></div>
+                      </div>
+                    <% end %>
+                  </div>
+
+                  <%# HomeHelper#when_words — the same string Home prints. A rate rule in a period with
+                      no boundary declared has nothing to say and renders no element. %>
+                  <p class="text-xs sm:w-40 <%= line.trouble? || line.short? ? "text-status-danger font-medium" : "text-gray-500" %>"
+                     data-rule-when>
+                    <%= when_words(line) %>
+                  </p>
+
+                  <%# A `div`, not a `p`: Delete is a `button_to`, and a form is not phrasing content. %>
+                  <div class="flex items-baseline gap-3 shrink-0 sm:w-24 sm:justify-end text-sm">
+                    <%# `_adjust` renders its own summary, so this column holds the rule's two doors.
+                        All three wear RuleActionsHelper::RULE_ACTION_CLASSES — one string, not three. %>
+                    <%= link_to "Edit",
+                                edit_rule_path(line.rule),
+                                class: rule_action_classes("mt-1 sm:mt-0 sm:text-right sm:underline") %>
+                    <%# `text-status-danger` is declared after `text-brand-dark` in custom.css, so it
+                        wins over the shared skin's colour without a second class list. %>
+                    <%= button_to "Delete",
+                                  rule_path(line.rule),
+                                  method: :delete,
+                                  form: { data: { turbo_confirm: "Delete this rule? Its adjustments go with it." } },
+                                  class: rule_action_classes("mt-1 sm:mt-0 sm:text-right sm:underline text-status-danger") %>
+                  </div>
+                </div>
+              </summary>
+
+              <%= turbo_frame_tag dom_id(line.rule, :spending), src: spending_rule_path(line.rule), loading: :lazy, class: "block mt-2" do %>
+                <p class="text-xs text-gray-500">Loading…</p>
+              <% end %>
+            </details>
 
             <%= render "budget_page/adjust", line: line %>
 
