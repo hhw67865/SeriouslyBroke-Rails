@@ -82,7 +82,7 @@ This agent should be used proactively after completing significant code changes.
 IMMEDIATELY after implementing any front-end change:
 
 1. **Identify what changed** - Review the modified components/pages
-2. **Navigate to affected pages** - Use the `agent-browser` skill to visit each changed view
+2. **Navigate to affected pages** - Use Claude in Chrome (the browser extension; there is no `agent-browser` skill or CLI here) to visit each changed view
 3. **Verify design compliance** - Compare against `/docs/design-standards.md`
 4. **Validate feature implementation** - Ensure the change fulfills the user's specific request
 5. **Check acceptance criteria** - Review any provided context files or requirements
@@ -93,13 +93,13 @@ This verification ensures changes meet design standards and user requirements.
 
 ### Browser Login Credentials
 
-When accessing the website through agent-browser, use these credentials:
+When accessing the website through Claude in Chrome, use these credentials:
 - **Email**: `demo@example.com`
 - **Password**: `password123`
 
 ### Cleanup After Visual Verification
 
-After completing visual verification with agent-browser, clean up any saved screenshots:
+After completing visual verification with Claude in Chrome, clean up any saved screenshots:
 ```bash
 rm -f *.png
 ```
