@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
 class CalendarController < ApplicationController
-  include DateContext
-
   def index
     @presenter = MonthlyCalendarPresenter.new(
       user: current_user,

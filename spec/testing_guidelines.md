@@ -35,7 +35,7 @@ The system test structure mirrors your web application's pages. Each **web page*
   - `spec/system/categories/show/content_spec.rb` (categories feature, show page, content section)
   - `spec/system/dashboard/overview/summary_spec.rb` (dashboard section, overview page, summary section)
 - Model tests: `spec/models/model_name_spec.rb`
-- Controller tests: `spec/controllers/controller_name_spec.rb`
+- Request tests: `spec/requests/resource_name_spec.rb`
 - **Simple names preferred**: `header_spec.rb` not `header_functionality_spec.rb`
 - **Page-based organization**: Each web page gets its own folder, divided by page sections
 
@@ -73,7 +73,10 @@ spec/
 │   │   └── authentication_spec.rb      # Or break into sign_in/, sign_up/ if complex
 │   └── navbar_spec.rb  # Global navigation testing (not tied to specific features)
 ├── models/           # Unit tests for models
-├── controllers/      # Controller-specific tests
+├── services/         # Unit tests for service objects
+├── presenters/       # Unit tests for presenters
+├── requests/         # Controller behaviour through a real request
+├── migrations/       # Data migrations, run against a seeded schema
 ├── factories/        # FactoryBot definitions
 └── support/          # Helper files and configuration
 ```

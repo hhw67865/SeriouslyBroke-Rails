@@ -4,7 +4,7 @@ class DashboardController < ApplicationController
   include PeriodContext
 
   # `?tab=` is checked against this rather than trusted: index.html.erb renders in a `case` with no
-  # `else`, so an unrecognised tab used to print the tab strip over an empty panel.
+  # `else`, so an unrecognised tab would print the tab strip over an empty panel.
   TABS = [:all, :expenses, :income].freeze
 
   def index

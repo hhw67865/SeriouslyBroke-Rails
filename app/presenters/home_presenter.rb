@@ -36,7 +36,6 @@ class HomePresenter
   def accounts = @accounts ||= user.accounts.order(:name).to_a
   delegate :balance_of, to: :account_ledger
   def main?(account) = account.main?
-  def onboarding? = accounts.empty?
   def other_accounts = accounts.reject { |account| main?(account) }
   def other_accounts_total = other_accounts.sum(0.to_d) { |account| balance_of(account) }
   def overdrawn_other_accounts = other_accounts.select { |account| balance_of(account).negative? }

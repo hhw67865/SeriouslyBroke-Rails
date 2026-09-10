@@ -99,24 +99,34 @@ class AccountsAndRulesData < ActiveRecord::Migration[8.1]
     SQL
   end
 
-  # The pools keep the names their owner chose; "Checking" is this migration's own invention, so it
-  # is the name that yields when the two collide. Pool accounts are therefore minted first.
   def convert(user)
     refuse(user, "already migrated") if user.main_account_id.present?
 
     truth = bank_truth(user)
-    opened_on = opening_day(user)
     receipt = { accounts: 1, transfers: 0, entries: 0, reimbursements: 0 }
     expected = Hash.new(0.to_d)
-    pool_accounts = accounts_for_pools(user, opened_on, receipt)
-    main = mint_account(user, "Checking", opened_on: opened_on)
-    user.update_columns(main_account_id: main.id)
+    main, pool_accounts = open_accounts(user, receipt)
     convert_savings(user, main, pool_accounts, receipt, expected)
     reimburse_pool_spending(user, main, pool_accounts, receipt, expected)
-    MigrationCategory.where(user_id: user.id).update_all(savings_pool_id: nil, updated_at: now)
+    unlink_pools(user)
     receipt[:rules] = stamp_rules(user)
     verify!(user, truth, expected, main)
     announce_receipt(user, receipt)
+  end
+
+  # The pools keep the names their owner chose; "Checking" is this migration's own invention, so it
+  # is the name that yields when the two collide. Pool accounts are therefore minted first.
+  def open_accounts(user, receipt)
+    opened_on = opening_day(user)
+    pool_accounts = accounts_for_pools(user, opened_on, receipt)
+    main = mint_account(user, "Checking", opened_on: opened_on)
+    user.update_columns(main_account_id: main.id)
+    [main, pool_accounts]
+  end
+
+  # A category's pool link has said all it has to say once the transfers stand in its place.
+  def unlink_pools(user)
+    MigrationCategory.where(user_id: user.id).update_all(savings_pool_id: nil, updated_at: now)
   end
 
   def announce_receipt(user, receipt)
@@ -226,9 +236,14 @@ class AccountsAndRulesData < ActiveRecord::Migration[8.1]
       account = pool_accounts.fetch(category.savings_pool_id)
       rows = spending_since(category, starts[category.savings_pool_id])
       write_transfers(rows, from: account, to: main)
-      expected[account.id] -= rows.sum(0.to_d) { |amount, _day| amount.to_d }
-      receipt[:reimbursements] += rows.size
+      record_reimbursement(rows, account, receipt, expected)
     end
+  end
+
+  # The pool's account is expected to be lighter by what its categories spent.
+  def record_reimbursement(rows, account, receipt, expected)
+    expected[account.id] -= rows.sum(0.to_d) { |amount, _day| amount.to_d }
+    receipt[:reimbursements] += rows.size
   end
 
   def linked_spending(user)

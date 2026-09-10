@@ -103,4 +103,30 @@ RSpec.describe "Calendar Week - Entries", type: :system do
       expect(page).to have_content("Lunch")
     end
   end
+
+  # A day this wide of a claim (rent-sized) prints ten characters plus a sign — "-$1,690.00" —
+  # which does not fit beside the "Expense" label at the column's width. Wrapped onto its own line
+  # it stays inside the column; left on one line it used to run under the next day's white
+  # background, which is a clip, not a crop.
+  describe "a type total wide enough to fill the narrow day column", :js do
+    before do
+      rent_item = create(:item, category: expense_category, name: "Rent")
+      cafe_item = create(:item, category: expense_category, name: "Cafe")
+
+      create(:entry, item: rent_item, amount: 1_500.00, date: test_date)
+      create(:entry, item: cafe_item, amount: 190.00, date: test_date)
+
+      visit calendar_week_path(date: test_date.strftime("%Y-%m-%d"))
+    end
+
+    it "keeps the total inside its own day column instead of overflowing into the next one", :aggregate_failures do
+      expect(page).to have_css("[data-type-total='expense']", text: "$1,690.00")
+
+      column = page.find("[data-day-column='#{test_date.iso8601}']").native.rect
+      total = page.find("[data-type-total='expense']").native.rect
+
+      expect(total.x).to be >= column.x
+      expect(total.x + total.width).to be <= column.x + column.width
+    end
+  end
 end

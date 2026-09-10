@@ -115,8 +115,6 @@ module SearchHelper
       "item" => "e.g., Coffee, Rent, Salary",
       "description" => "e.g., Monthly payment, Grocery shopping",
       "category" => "e.g., Food, Housing, Income",
-      # "Emergency Fund" IS "Emergency" (fix wave — LOW-5): a fund was a kind of record and there is
-      # no such thing; what a user names a category is the thing itself.
       "name" => "e.g., Coffee, Food, Emergency",
       "category_type" => "e.g., expense, income"
     }

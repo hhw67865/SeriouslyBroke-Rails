@@ -151,7 +151,7 @@ The test databases are `seriously_broke_test`, `seriously_broke_test2`, … (`TE
 
 - No `sleep`. Wait with a Capybara assertion (`have_content`, `have_css`, `have_current_path`).
 - After a `click_*`, assert on the page before asserting on the database.
-- Fixtures pass `today:` and explicit dates; nothing reads the wall clock inside `travel_to`.
+- Never read the wall clock inside `travel_to`; a fixture that uses `Date.current` belongs to a user with no timezone, so the app's day and the spec's day agree.
 - A narrow-viewport example uses `Emulation.setDeviceMetricsOverride` (see `spec/system/home/money_spec.rb`).
 
 ---

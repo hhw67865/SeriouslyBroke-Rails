@@ -4,9 +4,10 @@
 class CategoryBudgetPresenter
   attr_reader :category, :today
 
+  # `claims` is the page's claim ledger; the card reads its money off `rows` instead, and takes the
+  # keyword only so the two call sites can keep handing both along together.
   def initialize(category:, claims:, rows:, today: category.user.today)
     @category = category
-    @claims = claims
     @claim_rows = rows
     @today = today
   end
@@ -15,7 +16,6 @@ class CategoryBudgetPresenter
   def lines = @claim_rows.lines_for(category)
   def rules = lines.map(&:rule)
   def claim = lines.sum(0.to_d, &:claim)
-  def needs_attention? = lines.any?(&:trouble?)
   def fund? = fund_line.present?
 
   # A goal: a ONE-OFF dated rule that is not a bill, item-backed or not. A rule that repeats is a

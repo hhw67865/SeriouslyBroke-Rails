@@ -135,7 +135,7 @@ RSpec.describe "Entries Forms", type: :system do
         expect(page).to have_current_path(entries_path)
         expect(page).to have_content("Entry was successfully created")
         expect(Entry.count).to eq(1)
-        expect(Entry.last.item).to eq(groceries_item)
+        expect(user.entries.sole.item).to eq(groceries_item)
       end
     end
 
@@ -149,8 +149,8 @@ RSpec.describe "Entries Forms", type: :system do
 
         expect(page).to have_current_path(entries_path)
         expect(page).to have_content("Entry was successfully created")
-        expect(Entry.last.item.name).to eq("Brand New Item 123")
-        expect(Entry.last.item.category).to eq(expense_category)
+        expect(user.entries.sole.item.name).to eq("Brand New Item 123")
+        expect(user.entries.sole.item.category).to eq(expense_category)
       end
     end
 
@@ -194,7 +194,7 @@ RSpec.describe "Entries Forms", type: :system do
 
         expect(page).to have_current_path(entries_path)
         expect(page).to have_content("Entry was successfully created")
-        expect(Entry.last.amount).to eq(50)
+        expect(user.entries.sole.amount).to eq(50)
       end
 
       it "evaluates a formula with parentheses" do
@@ -205,7 +205,7 @@ RSpec.describe "Entries Forms", type: :system do
 
         expect(page).to have_current_path(entries_path)
         expect(Entry.count).to eq(1)
-        expect(Entry.last.amount).to eq(70)
+        expect(user.entries.sole.amount).to eq(70)
       end
 
       it "evaluates decimal subtraction" do
@@ -216,7 +216,7 @@ RSpec.describe "Entries Forms", type: :system do
 
         expect(page).to have_current_path(entries_path)
         expect(Entry.count).to eq(1)
-        expect(Entry.last.amount).to eq(BigDecimal("107.9"))
+        expect(user.entries.sole.amount).to eq(BigDecimal("107.9"))
       end
 
       it "still accepts a plain number" do
@@ -227,7 +227,7 @@ RSpec.describe "Entries Forms", type: :system do
 
         expect(page).to have_current_path(entries_path)
         expect(Entry.count).to eq(1)
-        expect(Entry.last.amount).to eq(50)
+        expect(user.entries.sole.amount).to eq(50)
       end
 
       it "shows a validation error for an invalid formula" do
@@ -263,7 +263,7 @@ RSpec.describe "Entries Forms", type: :system do
         click_button "Create Entry"
 
         expect(page).to have_current_path(entries_path)
-        expect(Entry.last.amount).to eq(50)
+        expect(user.entries.sole.amount).to eq(50)
       end
 
       it "clears the amount with the C button" do

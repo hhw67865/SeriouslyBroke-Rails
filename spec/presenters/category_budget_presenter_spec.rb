@@ -30,6 +30,15 @@ RSpec.describe CategoryBudgetPresenter do
     expect(presenter.target).to be_nil
   end
 
+  # A rule that repeats is a recurring cost, not a figure being saved toward, so the card has no goal.
+  it "does not read a rolling rule as the category's goal", :aggregate_failures do
+    create(:rule, :rolling, :choice, amount: 600, anchor_date: Date.new(2026, 10, 15), category: groceries, starts_on: Date.new(2026, 8, 1))
+
+    expect(presenter).to be_ruled
+    expect(presenter).not_to be_fund
+    expect(presenter.fund_line).to be_nil
+  end
+
   it "shows a progress bar when the goal is the category's only rule", :aggregate_failures do
     create(:rule, :choice, amount: 600, anchor_date: Date.new(2026, 10, 15), category: groceries, starts_on: Date.new(2026, 8, 1))
 
