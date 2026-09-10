@@ -1,0 +1,48 @@
+<%# One PATCH, two fields. Local: `presenter`. `declaration` and not `user`, because on a refusal
+    those are two objects: the figures above are what IS, this form is what was typed. %>
+<% unless presenter.history? %>
+  <p class="text-sm text-gray-600 mb-4" data-income-note>
+    Typical income is measured from your regular income categories once a full period has passed.
+  </p>
+<% end %>
+
+<%= simple_form_for presenter.declaration,
+                    url: budget_page_user_path(declare: 1),
+                    method: :patch,
+                    html: { class: "border-t border-gray-100 pt-5 space-y-4" } do |f| %>
+  <%# simple_form prints the anchor's message under its own input, but a user who submitted a
+      cadence with no anchor needs the block itself to say something went wrong. %>
+  <% if presenter.declaration.errors.any? %>
+    <p class="rounded bg-status-danger-light border border-status-danger px-3 py-2 text-sm text-status-danger"
+       data-declaration-error>
+      <%= presenter.declaration.errors.full_messages.to_sentence %>
+    </p>
+  <% end %>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <%# The enum's own keys, so a cadence with no boundaries is unselectable. Blank is offered
+        because clearing the period back to undeclared is a legitimate move. %>
+    <%= f.input :period_cadence,
+                as: :select,
+                collection: User.period_cadences.keys.map { |key| [key.humanize, key] },
+                include_blank: "Not set",
+                label: "How long is a period?",
+                hint: "Weekly, every two weeks, twice a month, or monthly." %>
+
+    <%= f.input :period_anchor_date,
+                as: :date,
+                html5: true,
+                label: "A day a period starts",
+                hint: "Any one of them — the rest are counted from it. Required once you pick a period." %>
+  </div>
+
+  <%# A new cadence re-derives every figure and re-buckets history — a large consequence for one
+      select, which a user not told about will read as the app losing their data. %>
+  <p class="text-xs text-gray-500 max-w-2xl">
+    Changing your period re-derives every figure immediately — what each rule claims, what your
+    categories need next, and how your history buckets into periods. Nothing is rewritten; it is
+    all counted from these two facts.
+  </p>
+
+  <%= f.button :submit, "Save period", class: "btn btn-primary w-full sm:w-auto" %>
+<% end %>

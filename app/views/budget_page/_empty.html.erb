@@ -1,0 +1,12 @@
+<%# The one user this page has nothing to draw for: no expense category at all. A frame rather
+    than a blank page, because an empty screen reads as something that failed to load. %>
+<section class="bg-white border border-gray-200 rounded px-6 py-8 text-center" data-budget-empty>
+  <h3 class="text-sm font-semibold text-gray-900">No spending categories yet</h3>
+  <p class="mt-2 text-sm text-gray-500 max-w-xl mx-auto">
+    A rule claims part of every period's income for one category, so a category comes first — make
+    one and it appears here, in the order they give way.
+  </p>
+  <p class="mt-4">
+    <%= link_to "Add a category", new_category_path, class: "btn btn-primary" %>
+  </p>
+</section>

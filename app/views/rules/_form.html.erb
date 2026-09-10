@@ -1,0 +1,213 @@
+<%# One category, three steps, and no owner picker. The form submits WORDS, not columns: RuleForm
+    turns `schedule` and `repeats` into `anchor_date` and `interval_months`, and back again. %>
+<% rule_form = @rule_form %>
+<% rule = rule_form.rule %>
+<% category = @category %>
+
+<% last_crumb = rule_form.persisted? ? rule_name(rule) : "New rule" %>
+<% title = rule_form.persisted? ? "#{rule_name(rule)} — edit rule" : "New rule" %>
+<% title = "New rule for #{category.name}" if category.present? && !rule_form.persisted? %>
+<%= page_header(
+      title: title,
+      subtitle: "Change any blank. Nothing is saved until you press the button.",
+      breadcrumbs: breadcrumb_trail(["Budget", budget_page_path], *[category&.name].compact, last_crumb)
+    ) %>
+
+<div data-controller="app--budget--rule-form"
+     data-action="input->app--budget--rule-form#changed change->app--budget--rule-form#changed">
+  <%# The three panels are grid children of the FORM (steps · preview · buttons), so that stacked
+      on a phone the preview falls between the steps and the button that commits to them. %>
+  <%= simple_form_for rule_form,
+      as: :rule,
+      url: rule_form.persisted? ? rule_path(rule) : rules_path,
+      method: rule_form.persisted? ? :patch : :post,
+      html: {
+        class: "lg:grid lg:grid-cols-3 lg:gap-8 lg:items-start",
+        data: { "app--budget--rule-form-target": "form" }
+      } do |f| %>
+    <div class="space-y-6 lg:col-span-2">
+      <%# Errors with nowhere else to land: simple_form prints an error under its own input, so one
+          on a field this form does not render would leave a 422 with no visible reason. %>
+      <%= f.error_notification %>
+      <% lifted = rule_form.errors[:base] + rule_form.errors[:category_id] %>
+      <%= f.error_notification message: lifted.to_sentence if lifted.present? %>
+
+      <%# ── 1. WHAT IS THIS RULE FOR, AND HOW MUCH? ────────────────────────────────────────────
+          The blanks are inside the sentence, so a visible label above each would ask it twice. %>
+      <section class="bg-white shadow-sm rounded border border-gray-100 p-4 space-y-3 sm:p-6" data-step="1">
+        <h2 class="text-sm font-semibold text-gray-900">1. What is this rule for, and how much?</h2>
+
+        <%# `for` is bound to the select in one span, so the only break is between the clauses. %>
+        <div class="flex flex-wrap items-center gap-2 text-sm text-gray-700">
+          <span>Set aside</span>
+          <%= f.label :amount, "Amount", class: "sr-only" %>
+          <span class="flex items-center gap-1">
+            <span class="text-gray-500">$</span>
+            <%= f.number_field :amount,
+                class: "form-input w-32 tabular-nums",
+                placeholder: "0.00",
+                step: 0.01,
+                min: 0,
+                data: { "app--budget--rule-form-target": "amount" } %>
+          </span>
+          <span class="flex w-full items-center gap-2 sm:w-auto">
+            <span>for</span>
+            <%= f.label :item_id, "Pays", class: "sr-only" %>
+            <%= f.select :item_id,
+                options_from_collection_for_select(category ? category.items.order(:name) : [], :id, :name, rule_form.item_id),
+                { include_blank: "the whole category" },
+                class: "form-select w-full sm:w-auto",
+                data: { "app--budget--rule-form-target": "item" } %>
+          </span>
+        </div>
+
+        <p class="form-hint">
+          <%= rule_amount_hint(rule) %>
+          <% if category %>
+            "The whole category" means anything in <%= category.name %> no other rule pays.
+          <% end %>
+        </p>
+
+        <%# Where the rule's own history begins: counting the spending before it would open the
+            rule already overspent. %>
+        <%= f.input :starts_on,
+            as: :date,
+            html5: true,
+            label: "Counts from",
+            hint: "Spending before this day is not counted." %>
+
+        <% if rule_form.errors[:amount].any? %>
+          <p class="form-error">Amount <%= rule_form.errors[:amount].to_sentence %></p>
+        <% end %>
+        <% if rule_form.errors[:item_id].any? %>
+          <p class="form-error"><%= rule_form.errors[:item_id].to_sentence %></p>
+        <% end %>
+
+        <%# The owner, on the one path with no row to carry it: an edit submits no category. %>
+        <%= f.hidden_field :category_id unless rule_form.persisted? %>
+      </section>
+
+      <%# ── 2. WHEN IS IT NEEDED? ──────────────────────────────────────────────────────────────
+          An allowance that resets, or money saved toward a day — a bill and a goal are one shape. %>
+      <section class="bg-white shadow-sm rounded border border-gray-100 p-4 space-y-3 sm:p-6" data-step="2">
+        <h2 class="text-sm font-semibold text-gray-900">2. When is it needed?</h2>
+
+        <% schedules = [
+             ["per_period", "Every period", "a spending allowance that resets with your paycheck"],
+             ["by_date", "By a date", "money saved up toward a day — a bill or a goal"]
+           ] %>
+        <div class="space-y-2">
+          <% schedules.each do |value, label, help| %>
+            <label class="flex items-start gap-3 rounded border border-gray-200 p-3 cursor-pointer hover:border-gray-300">
+              <%= f.radio_button :schedule, value, class: "form-radio mt-1" %>
+              <span class="flex-1">
+                <span class="block text-sm font-medium text-gray-900"><%= label %></span>
+                <span class="block text-xs text-gray-500"><%= help %></span>
+              </span>
+            </label>
+          <% end %>
+        </div>
+
+        <% if rule_form.errors[:schedule].any? %>
+          <p class="form-error">When it is needed <%= rule_form.errors[:schedule].to_sentence %></p>
+        <% end %>
+
+        <%# A detail OF "Every period", not a third option. Disabled rather than hidden under "By a
+            date": that is the shape where what happens to unspent money most wants saying. %>
+        <div class="pl-3 border-l-2 border-gray-100"
+             data-app--budget--rule-form-target="keepsField">
+          <%= f.input :keeps,
+              as: :boolean,
+              label: "Keeps what it doesn't spend",
+              hint: "an allowance that keeps building — whatever you don't spend stays claimed, " \
+                    "with no limit",
+              input_html: { disabled: rule_form.schedule == "by_date" } %>
+        </div>
+
+        <div class="space-y-4 pl-3 border-l-2 border-gray-100">
+          <div data-rule-reveal
+               data-app--budget--rule-form-target="anchorField"
+               <%= "hidden" unless rule_form.schedule == "by_date" %>>
+            <%= f.input :anchor_date,
+                as: :date,
+                html5: true,
+                label: "Due",
+                hint: "The day the money has to be there. Change it if the last payment was early or late." %>
+          </div>
+
+          <%# Its own reveal is the interval below. Two nested reveals would each stash and clear
+              the other's inputs on the way past, so every reveal on this form is a leaf. %>
+          <div data-rule-reveal
+               data-app--budget--rule-form-target="repeatsField"
+               <%= "hidden" unless rule_form.schedule == "by_date" %>>
+            <%= f.input :repeats,
+                as: :boolean,
+                label: "Repeats every N months",
+                hint: "leave this off for something you pay once" %>
+          </div>
+
+          <div data-rule-reveal
+               data-app--budget--rule-form-target="intervalField"
+               <%= "hidden" unless rule_form.schedule == "by_date" && rule_form.repeats? %>>
+            <%= f.input :interval_months,
+                as: :integer,
+                label: "Comes round every (months)",
+                input_html: { min: 1, step: 1 } %>
+          </div>
+        </div>
+      </section>
+
+      <%# ── 3. The give-way order: choice first, bill last. Nothing is preselected, because a form
+          that pre-answered would be deciding what this person is willing to sacrifice. %>
+      <section class="bg-white shadow-sm rounded border border-gray-100 p-4 space-y-3 sm:p-6" data-step="3">
+        <h2 class="text-sm font-semibold text-gray-900">3. What kind of rule is this?</h2>
+
+        <% type_help = {
+             "bill" => "must be paid — gives way last",
+             "usage" => "a need you can trim",
+             "choice" => "up to you — gives way first"
+           } %>
+        <div class="space-y-2">
+          <% Rule.rule_types.keys.each do |type| %>
+            <label class="flex items-start gap-3 rounded border border-gray-200 p-3 cursor-pointer hover:border-gray-300">
+              <%= f.radio_button :rule_type, type, class: "form-radio mt-1" %>
+              <span class="flex-1">
+                <span class="block text-sm font-medium text-gray-900"><%= type.capitalize %></span>
+                <span class="block text-xs text-gray-500"><%= type_help[type] %></span>
+              </span>
+            </label>
+          <% end %>
+        </div>
+
+        <% if rule_form.errors[:rule_type].any? %>
+          <p class="form-error">Type <%= rule_form.errors[:rule_type].to_sentence %></p>
+        <% end %>
+      </section>
+    </div>
+
+    <%# The card renders `hidden` and Stimulus reveals it on connect, so a browser with no
+        JavaScript gets no preview rather than a stale one it has no way to refresh. %>
+    <aside class="mt-6 lg:mt-0 lg:sticky lg:top-6">
+      <%= render "rules/preview", preview: @preview %>
+    </aside>
+
+    <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end lg:col-span-2 lg:col-start-1">
+      <%= link_to "Cancel", budget_page_path, class: "btn btn-secondary" %>
+
+      <%= f.submit rule_form.persisted? ? "Update rule" : "Create rule", class: "btn btn-primary" %>
+    </div>
+
+    <%# The preview's submitter, hidden: `formaction` and the rest ride on the SUBMITTER, which is
+        what keeps the preview URL the server's rather than a string in the JavaScript. %>
+    <%= button_tag "Preview",
+        type: :submit,
+        name: nil,
+        hidden: true,
+        tabindex: -1,
+        "aria-hidden": true,
+        formaction: rule_form.persisted? ? preview_rules_path(id: rule.id) : preview_rules_path,
+        formmethod: :post,
+        formnovalidate: true,
+        data: { turbo_frame: "rule_preview", "app--budget--rule-form-target": "previewButton" } %>
+  <% end %>
+</div>

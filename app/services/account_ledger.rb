@@ -29,11 +29,11 @@ class AccountLedger
   def income_within(range) = user_entries(Entry.incomes).where(date: range).sum(:amount).to_d
 
   # The mean of regular income over the last complete periods, nil until one period is complete.
+  # Memoised with defined?, because nil is a real answer and the common one for a new user.
   def typical_income
-    periods = complete_periods(TYPICAL_PERIODS)
-    return nil if periods.empty?
+    return @typical_income if defined?(@typical_income)
 
-    (periods.sum(0.to_d) { |period| regular_income_within(period) } / periods.size).round(2)
+    @typical_income = measured_typical_income
   end
 
   # The last `limit` complete periods before today's, that begin on or after the first entry.
@@ -45,6 +45,13 @@ class AccountLedger
   end
 
   private
+
+  def measured_typical_income
+    periods = complete_periods(TYPICAL_PERIODS)
+    return nil if periods.empty?
+
+    (periods.sum(0.to_d) { |period| regular_income_within(period) } / periods.size).round(2)
+  end
 
   # Walks backward from `cursor`, collecting periods that begin on or after `first`, oldest last.
   def walk_periods_back(cursor, limit, first)
