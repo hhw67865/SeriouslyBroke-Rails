@@ -4,8 +4,8 @@
 <%# TILE 1 — the one derived number: `pot − Σ claims`. Never clamped: a negative free renders
     negative, in red, because it is a signal rather than a refusal. %>
 <div class="bg-brand-light border border-brand rounded p-4 lg:p-5 col-span-full lg:col-span-1" data-tile="free">
-  <p class="text-xs font-medium uppercase tracking-wide text-brand-dark">Free to spend</p>
-  <p class="mt-1 text-3xl font-semibold tabular-nums <%= presenter.free_to_spend.negative? ? "text-status-danger" : "text-brand-dark" %>"
+  <p class="text-xs font-medium uppercase tracking-wide text-gray-600">Free to spend</p>
+  <p class="mt-1 text-3xl font-semibold tabular-nums <%= presenter.free_to_spend.negative? ? "text-status-danger" : "text-gray-900" %>"
      data-free>
     <%= number_to_currency(presenter.free_to_spend) %>
   </p>
@@ -28,7 +28,7 @@
 
     <%# BOTH SENTENCES ARE INTENDED where free is under with nothing parked elsewhere: the claim is
         one fact and the overspend is another, and each half is gated on the predicate that says so. %>
-    <p class="text-sm <%= presenter.free_to_spend.negative? ? "text-status-danger" : "text-brand-dark" %>"
+    <p class="text-sm <%= presenter.free_to_spend.negative? ? "text-status-danger" : "text-gray-700" %>"
        data-free-subline>
       <% if presenter.free_to_spend.negative? %>
         <% if presenter.anything_claimed? %>
