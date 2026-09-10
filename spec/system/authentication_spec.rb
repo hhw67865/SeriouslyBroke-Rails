@@ -179,17 +179,17 @@ RSpec.describe "Authentication", type: :system do
     context "with invalid credentials" do
       it "shows error for wrong password" do
         attempt_sign_in(user.email, "wrongpassword")
-        expect(page).to have_content("Invalid Email or password")
+        expect(page).to have_content("Invalid email or password")
       end
 
       it "shows error for non-existent email" do
         attempt_sign_in("nonexistent@example.com", "password123")
-        expect(page).to have_content("Invalid Email or password")
+        expect(page).to have_content("Invalid email or password")
       end
 
       it "shows error for empty credentials" do
         within("form") { click_button "Sign in" }
-        expect(page).to have_content("Invalid Email or password")
+        expect(page).to have_content("Invalid email or password")
       end
 
       private

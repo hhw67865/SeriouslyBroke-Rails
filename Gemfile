@@ -18,7 +18,7 @@ gem "tailwindcss-rails"
 gem "turbo-rails"
 
 # Authentication and Authorization
-gem "devise", "~> 4.9"
+gem "devise", "~> 5.0"
 
 # Pagination
 gem "kaminari", "~> 1.2"
