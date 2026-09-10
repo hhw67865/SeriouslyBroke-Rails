@@ -20,6 +20,17 @@ RSpec.describe CadenceChange do
     expect(change(cadence: "biweekly")).not_to be_offered
   end
 
+  it "offers scaling on a first declaration, reading the old amounts as monthly", :aggregate_failures do
+    plain = create(:user)
+    rule = create(:rule, :rate, amount: 400, category: create(:category, user: plain))
+    first = described_class.new(user: plain, declaration: { period_cadence: "biweekly", period_anchor_date: "2026-09-04" })
+
+    expect(first).to be_offered
+    expect(first.periods_per_year_before).to eq(12)
+    expect(first.lines.map(&:rule)).to eq([rule])
+    expect(first.lines.first.scaled_amount).to eq(184.62) # 400 × 12 / 26
+  end
+
   it "applies the declaration and, when asked, the scaling", :aggregate_failures do
     expect(change(cadence: "monthly").apply(scale: true)).to be(true)
     expect(user.reload).to be_period_monthly

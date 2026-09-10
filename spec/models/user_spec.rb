@@ -63,6 +63,8 @@ RSpec.describe User do
     it "falls back to the calendar month with no cadence" do
       user = build(:user)
 
+      expect(user.period_boundaries(from: Date.new(2026, 9, 9), to: Date.new(2026, 12, 5)))
+        .to eq([Date.new(2026, 10, 1), Date.new(2026, 11, 1), Date.new(2026, 12, 1)])
       expect(user.period_containing(Date.new(2026, 9, 9))).to eq(Date.new(2026, 9, 1)..Date.new(2026, 9, 30))
       expect(user.periods_per_year).to eq(12)
     end

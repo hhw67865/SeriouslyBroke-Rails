@@ -37,11 +37,13 @@ class User < ApplicationRecord
 
   def toggle_theme! = update(theme: light? ? :dark : :light)
 
-  # Every period boundary in from..to on the user's grid, ascending. Empty without a cadence.
+  # Every period boundary in from..to on the user's grid, ascending. The first of each month
+  # without a cadence, so a grid always exists to spread a dated rule over.
   def period_boundaries(from:, to:)
     from = from.to_date
     to = to.to_date
-    return [] if period_cadence.blank? || period_anchor_date.blank? || to < from
+    return [] if to < from
+    return monthly_dates([1], from, to) if period_cadence.blank? || period_anchor_date.blank?
 
     case period_cadence
     when "weekly", "biweekly" then strided_dates(STRIDE_DAYS.fetch(period_cadence), from, to)
@@ -51,12 +53,12 @@ class User < ApplicationRecord
   end
 
   # The period holding the date: from its opening boundary to the day before the next one. The
-  # calendar month without a cadence.
+  # window is wider than any cadence's period, so a boundary is always found on either side.
   def period_containing(date)
     date = date.to_date
     opened_on = period_boundaries(from: date - PERIOD_WINDOW_DAYS, to: date).last
     next_boundary = period_boundaries(from: date + 1, to: date + PERIOD_WINDOW_DAYS).first
-    (opened_on || date.beginning_of_month)..(next_boundary ? next_boundary - 1 : date.end_of_month)
+    opened_on..(next_boundary - 1)
   end
 
   private

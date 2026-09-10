@@ -38,11 +38,13 @@ class ClaimCalculator
     rate? ? rate_per_period : walk.planned
   end
 
-  # What the rule costs a period: its amount, or a one-off target spread to its date.
+  # What the rule costs a period: its amount, a one-off target spread to its date, or, for a
+  # rolling rule, the rule's own share of an interval. Rule only calls back for the one-off arm.
   def standing_ask
-    return rate_per_period unless one_time?
+    return rate_per_period if allowance?
+    return (target / periods_to_fund).round(2) if one_time?
 
-    (target / periods_to_fund).round(2)
+    rule.steady_ask(today: today)
   end
 
   def accrued_this_period = planned_this_period + adjustments_within(current_period)

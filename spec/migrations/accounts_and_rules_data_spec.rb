@@ -156,6 +156,21 @@ RSpec.describe AccountsAndRulesData do
     expect(user.accounts.pluck(:name)).to contain_exactly("checking", "Checking 2", "Vacation", "vacation 2")
   end
 
+  it "returns a pool's own spending to main, from the pool's start date onward", :aggregate_failures do
+    user = plant_user
+    pool = plant_pool(user, "Vacation", start_date: Date.new(2026, 2, 1))
+    spending = plant_category(user, "Vacation spending", expense, pool: pool)
+    plant_entry(plant_category(user, "Vacation saving", savings, pool: pool), 500, at: Time.utc(2026, 3, 1, 12))
+    plant_entry(spending, 120, at: Time.utc(2026, 3, 5, 12))
+    plant_entry(spending, 80, at: Time.utc(2026, 1, 20, 12)) # before the pool opened: never its money
+
+    convert
+
+    ledger = AccountLedger.new(user.reload)
+    expect(ledger.balance_of(user.accounts.find_by!(name: "Vacation"))).to eq(380)
+    expect([ledger.pot, ledger.total_money]).to eq([-580, -200])
+  end
+
   it "drops the pool link from the categories that survive", :aggregate_failures do
     user = plant_user
     pool = plant_pool(user, "Bills")
@@ -194,6 +209,26 @@ RSpec.describe AccountsAndRulesData do
     expect(Entry.columns_hash["date"].type).to eq(:date)
   end
 
+  it "puts a day back as local midnight, so a down and up cycle never drifts the date" do
+    ny = plant_user(timezone: "America/New_York")
+    plant_entry(plant_category(ny, "Food", expense), 10, at: Time.utc(2026, 3, 1, 3, 30))
+    convert
+
+    step(:down)
+    clear_the_bank
+    convert
+
+    expect(Entry.joins(item: :category).where(categories: { user_id: ny.id }).pick(:date)).to eq(Date.new(2026, 2, 28))
+  end
+
+  it "refuses a user who already has a main account" do
+    plant_user
+    convert
+    step(:down)
+
+    expect { convert }.to raise_error(described_class::Refused, /already migrated/)
+  end
+
   it "removes main's shape", :aggregate_failures do
     convert
 
@@ -202,5 +237,14 @@ RSpec.describe AccountsAndRulesData do
     expect(Rule.column_names).not_to include("prorated")
     expect(Entry.column_names).not_to include("day")
     expect(connection.check_constraints("categories").map(&:name)).to include("categories_two_types")
+    expect(Entry.columns_hash["date"].null).to be(false)
+    expect(Rule.columns_hash["starts_on"].null).to be(false)
+  end
+
+  # `down` restores main's shape but keeps the accounts and transfers `up` minted, and `up` refuses
+  # a user who already has a main account, so a second run starts from an empty bank.
+  def clear_the_bank
+    Transfer.delete_all
+    Account.delete_all
   end
 end

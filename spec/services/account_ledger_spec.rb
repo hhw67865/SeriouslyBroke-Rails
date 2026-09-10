@@ -80,5 +80,14 @@ RSpec.describe AccountLedger do
       expect(main.reload.opening_balance).to eq(280)
       expect(main.balance).to eq(250)
     end
+
+    it "refuses a figure that is not a number, and moves nothing" do
+      main
+
+      expect(main.correct_balance("abc")).to be(false)
+      expect(main.correct_balance("")).to be(false)
+      expect(main.errors[:opening_balance]).to include("is not a number")
+      expect(main.reload.opening_balance).to eq(100)
+    end
   end
 end

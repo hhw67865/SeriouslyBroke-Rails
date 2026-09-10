@@ -72,6 +72,15 @@ RSpec.describe Category do
 
       expect(entry.reload.account).to be_nil
     end
+
+    it "refuses to become income while it carries rules", :aggregate_failures do
+      category = create(:category, user: user)
+      create(:rule, category: category)
+
+      expect(category.update(category_type: :income)).to be(false)
+      expect(category.errors[:category_type]).to include(Category::RULES_KEEP_IT_AN_EXPENSE)
+      expect(category.reload).to be_expense
+    end
   end
 
   describe "#ruled? and #display_color", :aggregate_failures do

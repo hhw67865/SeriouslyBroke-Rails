@@ -7,7 +7,6 @@ class AccountLedger
 
   # How many complete periods typical income averages over.
   TYPICAL_PERIODS = 2
-  PERIOD_WALK_LIMIT = 600
 
   attr_reader :user, :today
 
@@ -50,7 +49,7 @@ class AccountLedger
   # Walks backward from `cursor`, collecting periods that begin on or after `first`, oldest last.
   def walk_periods_back(cursor, limit, first)
     periods = []
-    while periods.size < limit && cursor.first >= first && periods.size < PERIOD_WALK_LIMIT
+    while periods.size < limit && cursor.first >= first
       periods.unshift(cursor)
       cursor = previous_period(cursor.first)
     end

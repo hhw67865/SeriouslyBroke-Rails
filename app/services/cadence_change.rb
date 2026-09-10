@@ -15,7 +15,10 @@ class CadenceChange
   end
 
   def offered? = changing? && acceptable? && lines.any?
-  def changing? = cadence.present? && user.period_cadence.present? && cadence != user.period_cadence
+
+  # A rule written before any cadence was declared is a monthly figure, so the first declaration
+  # is a change too: periods_per_year is already 12 without a cadence.
+  def changing? = cadence.present? && cadence != user.period_cadence
   def cadence = declaration[:period_cadence].presence
   def periods_per_year = User::PERIODS_PER_YEAR.fetch(cadence, 12)
 

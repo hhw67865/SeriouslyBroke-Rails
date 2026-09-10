@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-# Every rule's calculator for one user, fed from three queries: the lanes' spending since the
-# earliest window, and every adjustment in it.
+# Every rule's calculator for one user, fed in a fixed number of queries: the lanes' spending
+# since the earliest window, and every adjustment in it.
 class ClaimLedger
   class UnknownRule < StandardError; end
 

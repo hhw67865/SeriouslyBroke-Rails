@@ -125,6 +125,45 @@ RSpec.describe ClaimCalculator do
       expect(calculator(rule).next_due_on).to eq(Date.new(2027, 3, 1))
       expect(calculator(rule)).not_to be_overdue
     end
+
+    it "asks per period what the rule asks" do
+      expect(calculator(rule).standing_ask).to eq(rule.steady_ask(today: today)).and eq(13.85)
+    end
+
+    # One cycle paid, the next saved for in full. The walk, period by period:
+    #
+    #   period      due     left  planned  built_up
+    #   Dec 26      Mar 1      5    36.00     36.00
+    #   Jan 9       Mar 1      4    36.00     72.00
+    #   Jan 23      Mar 1      3    36.00    108.00
+    #   Feb 6       Mar 1      2    36.00    144.00
+    #   Feb 20      Mar 1      1    36.00      0.00  (180 accrued, 180 spent on Mar 2)
+    #   Mar 6       Sep 1     13    13.85     13.85
+    #   Mar 20 .. Aug 7, twelve more periods, 13.84 or 13.85 each
+    #   Aug 21      Sep 1      1    13.84    180.00
+    #   Sep 4       Sep 1      1     0.00    180.00  (the gap is closed)
+    it "saves the next cycle in full once the first is paid", :aggregate_failures do
+      spend(180, on: Date.new(2026, 3, 2))
+
+      expect(calculator(rule).next_due_on).to eq(Date.new(2026, 9, 1))
+      expect(calculator(rule).claim).to eq(180)
+      expect(calculator(rule).built_up).to eq(180)
+      expect(calculator(rule).planned_this_period).to eq(0)
+    end
+  end
+
+  describe "a user with no cadence" do
+    let(:plain) { create(:user) }
+    let(:rule) do
+      create(:rule, :bill, amount: 1_200, anchor_date: Date.new(2027, 3, 15), category: create(:category, user: plain), starts_on: Date.new(2026, 9, 1))
+    end
+
+    it "spreads a one-off over the calendar months to its date", :aggregate_failures do
+      # Month firsts from Sep 1 2026 to Mar 15 2027 are seven, so 1200 / 7 = 171.43 a month.
+      expect(calculator(rule).standing_ask).to eq(171.43)
+      expect(calculator(rule).claim).to eq(171.43)
+      expect(calculator(rule).planned_this_period).to eq(171.43)
+    end
   end
 
   describe "a rule that starts in the future" do

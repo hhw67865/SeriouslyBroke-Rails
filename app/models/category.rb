@@ -4,6 +4,7 @@ class Category < ApplicationRecord
   include ModelSearchable
 
   DEFAULT_COLOR = "#C9C78B"
+  RULES_KEEP_IT_AN_EXPENSE = "can't become income while it has rules — delete them first"
 
   belongs_to :user, touch: true
   has_many :items, dependent: :destroy
@@ -17,6 +18,7 @@ class Category < ApplicationRecord
   validates :name, presence: true, uniqueness: { scope: :user_id, case_sensitive: false }
   validates :category_type, presence: true
   validates :priority, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
+  validate :rules_keep_it_an_expense
 
   after_update :entries_return_to_main_when_no_longer_income
 
@@ -62,6 +64,12 @@ class Category < ApplicationRecord
   end
 
   private
+
+  def rules_keep_it_an_expense
+    return unless category_type_change == ["expense", "income"] && rules.exists?
+
+    errors.add(:category_type, RULES_KEEP_IT_AN_EXPENSE)
+  end
 
   def entries_return_to_main_when_no_longer_income
     return unless saved_change_to_category_type == ["income", "expense"]

@@ -3976,9 +3976,58 @@ The restored users keep production password hashes. To use the app locally after
 
 ## Receipts
 
-Filled in by Task 17.
+Migrated against the 2026-09-09 production dump (4 users, 3306 entries, 18 savings pools restored;
+migrations 20260910000000 and 20260910000001 both ran clean, no `Refused`).
 
----
+Migration receipt lines (from `AccountsAndRulesData`):
+
+```
+mingguan0809@gmail.com: 7 accounts, 93 transfers from 93 savings entries, 22 reimbursements, 5 rules
+danial90000@hotmail.com: 7 accounts, 59 transfers from 59 savings entries, 89 reimbursements, 3 rules
+zekeajibade@gmail.com: 7 accounts, 2 transfers from 2 savings entries, 0 reimbursements, 0 rules
+yhswhw@gmail.com: 5 accounts, 1 transfers from 1 savings entries, 1 reimbursements, 0 rules
+```
+
+Runner verification (`email | accounts | pot | total_money | rules | total_claims`):
+
+```
+zekeajibade@gmail.com | 7 | -73.25 | 0.0 | 0 | 0.0
+mingguan0809@gmail.com | 7 | -8588.29 | 124464.29 | 5 | 750.0
+yhswhw@gmail.com | 5 | 800.0 | 985.54 | 0 | 0.0
+danial90000@hotmail.com | 7 | -34781.83 | 24802.14 | 3 | 1915.35
+```
+
+Before-migration truth (income entries minus expense entries per user, captured against the restored
+dump prior to running the migrations):
+
+```
+          email          |   truth
+-------------------------+-----------
+ danial90000@hotmail.com |  24802.14
+ mingguan0809@gmail.com  | 124464.29
+ yhswhw@gmail.com        |    985.54
+ zekeajibade@gmail.com   |         0
+(4 rows)
+```
+
+Every user's post-migration `total_money` matches their before-migration truth figure exactly
+(danial90000@hotmail.com 24802.14, mingguan0809@gmail.com 124464.29, yhswhw@gmail.com 985.54,
+zekeajibade@gmail.com 0.0): the reimbursement transfers move money between a user's own accounts,
+so no total moved.
+
+The pots, before this run's reimbursements and after, each risen by exactly the pool-linked
+spending that went back to main:
+
+| user | pot before | pot after | reimbursed |
+|---|---|---|---|
+| zekeajibade@gmail.com | -73.25 | -73.25 | 0.00 (no pool-linked spending) |
+| mingguan0809@gmail.com | -16416.42 | -8588.29 | 7828.13 |
+| yhswhw@gmail.com | 785.54 | 800.00 | 14.46 |
+| danial90000@hotmail.com | -46042.42 | -34781.83 | 11260.59 |
+
+The two pots that stay negative are not the pools' doing: those users' savings contributions
+outrun the income the dump records, so main is genuinely overdrawn on these books once every
+contribution has left it.
 
 ## Self-review
 

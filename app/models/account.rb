@@ -32,7 +32,13 @@ class Account < ApplicationRecord
 
   # Moves the opening balance so that the balance today equals the typed figure. Nothing else moves.
   def correct_balance(typed)
-    update(opening_balance: opening_balance.to_d + (BigDecimal(typed.to_s) - balance))
+    corrected = BigDecimal(typed.to_s, exception: false)
+    if corrected.nil?
+      errors.add(:opening_balance, "is not a number")
+      return false
+    end
+
+    update(opening_balance: opening_balance.to_d + (corrected - balance))
   end
 
   private

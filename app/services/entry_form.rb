@@ -37,7 +37,6 @@ class EntryForm
     end
   end
 
-  # Extracted from assign_item to keep its AbcSize within Metrics limits; same behavior.
   def find_or_build_item(name)
     category = user.categories.find(@category_id)
     category.items.find_by("LOWER(name) = ?", name.downcase) || category.items.build(name: name)

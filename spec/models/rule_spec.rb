@@ -64,6 +64,14 @@ RSpec.describe Rule do
       # $600 every 6 months on a biweekly grid: 600 × 12 / (26 × 6)
       expect(build(:rule, :rolling, amount: 600, interval_months: 6, category: groceries).steady_ask(today: today)).to eq(46.15)
     end
+
+    it "hands a one-off to the calculator, which spreads it over the periods to its date" do
+      # $600 due Oct 15, started Aug 1: six biweekly periods from Jul 24, so $100 each.
+      one_off = create(:rule, :bill, amount: 600, anchor_date: Date.new(2026, 10, 15), category: groceries, starts_on: Date.new(2026, 8, 1))
+
+      expect(one_off.steady_ask(today: today))
+        .to eq(one_off.claim_calculator(today: today).standing_ask).and eq(100)
+    end
   end
 
   describe ".sort_key" do

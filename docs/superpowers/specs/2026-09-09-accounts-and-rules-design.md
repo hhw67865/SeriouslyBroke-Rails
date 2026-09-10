@@ -149,8 +149,8 @@ have no meaning without a grid.
 ### 3.4 Cadence change
 
 Changing `period_cadence` offers to scale every rate and fund rule's amount by
-`periods_per_year_before / periods_per_year_after`, floored at one cent. `CadenceChange` as on the
-reference branch, minus typed income.
+`periods_per_year_before / periods_per_year_after`, floored at one cent. Scaling is offered on the
+first declaration too, since a rule written before any cadence was set is a monthly figure.
 
 ## 4. Writing
 
@@ -260,8 +260,12 @@ Per user, in one transaction, ordered by `created_at`:
 5. Each entry in a savings category becomes a transfer from main into that category's account
    (the pool's account, or the one minted in step 4), same amount, same day. Then the savings
    categories, their items and their entries are deleted.
-6. Each expense or income category linked to a pool loses the link. `priority` is 0 and `regular`
-   is true for every category.
+6. A pool's balance was its contributions less the spending of its linked expense categories from
+   its `start_date`, so that spending goes back to main: each entry in an expense category linked
+   to a pool, dated on or after the pool's `start_date` (every entry when the pool has none),
+   becomes a transfer from the pool's account to main, same amount, same day. Then each expense or
+   income category linked to a pool loses the link. `priority` is 0 and `regular` is true for
+   every category.
 7. Each rule (the renamed budgets) gets `starts_on` = its creation day in the user's timezone;
    `rule_type` usage, no anchor, no interval, `keeps_unspent` false are already the defaults.
 
@@ -274,13 +278,13 @@ back:
 
 - `Σ balance over the user's accounts == Σ income entries − Σ expense entries` as they stood before
   the run, to the cent.
-- each account that came from a savings pool or category holds exactly what its savings entries
-  summed to.
+- each account that came from a savings pool or category holds exactly its savings entries less
+  the pool spending returned to main.
 - no entry, item or category references a savings type or a pool.
 - every rule satisfies §2's constraints.
 
-It prints one receipt line per user: accounts made, transfers written, entries deleted, rules
-written.
+It prints one receipt line per user: accounts made, transfers written, entries deleted,
+reimbursements written, rules written.
 
 Verified by a migration spec that builds a `main`-shaped fixture covering every step above,
 including name clashes, a user with no entries, a pool with no categories, a savings category with

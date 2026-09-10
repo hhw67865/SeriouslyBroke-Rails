@@ -33,7 +33,7 @@ RSpec.describe ClaimLedger do
 
     ActiveSupport::Notifications.subscribed(counter, "sql.active_record") { ledger.total_claims }
 
-    expect(queries).to be <= 8
+    expect(queries).to be <= 5
   end
 
   it "refuses a rule it does not hold" do
