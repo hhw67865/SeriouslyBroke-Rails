@@ -44,8 +44,6 @@
 # Ignore test coverage
 /coverage
 
-# Ignore database configuration
-/config/database.yml
 
 # Ignore Mac system files
 .DS_Store
@@ -87,3 +85,4 @@ node_modules/
 # tasks.json
 # tasks/ 
 .claude/scheduled_tasks.lock
+*tar.gz

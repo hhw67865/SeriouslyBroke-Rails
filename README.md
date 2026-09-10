@@ -38,18 +38,13 @@ A modern web application for tracking and managing personal finances, helping us
    yarn install
    ```
 
-4. Configure the database:
-   ```bash
-   cp config/database.yml.example config/database.yml
-   ```
-
-5. Set up the database:
+4. Set up the database (config/database.yml reads PGHOST, PGPORT, PGUSER and PGPASSWORD, with local defaults):
    ```bash
    rails db:create db:migrate
    bundle exec rake parallel:create parallel:prepare  # test databases for parallel_rspec
    ```
 
-6. Install and build Tailwind CSS:
+5. Install and build Tailwind CSS:
    ```bash
    rails tailwindcss:install
    rails tailwindcss:build
