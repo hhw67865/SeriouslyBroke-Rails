@@ -53,7 +53,11 @@
         <%= link_to "change",
                     budget_page_path(declare: 1),
                     class: "inline-flex min-h-10 items-center text-brand-dark hover:text-brand underline sm:min-h-0",
-                    data: { declare_link: true } %>
+                    data: { declare_link: true } %> ·
+        <%= link_to "which categories count",
+                    budget_page_path(declare: 1),
+                    class: "inline-flex min-h-10 items-center text-brand-dark hover:text-brand underline sm:min-h-0",
+                    data: { income_categories_link: true } %>
       </p>
     <% else %>
       <p class="mt-1 text-sm text-gray-500" data-tile-figure>Not said yet</p>

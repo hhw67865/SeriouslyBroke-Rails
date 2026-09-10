@@ -18,6 +18,11 @@
       <h2 class="text-sm font-semibold text-gray-900 mb-4">Your period</h2>
       <%= render "budget_page/declaration_form", presenter: @presenter %>
     </section>
+
+    <section class="bg-white border border-gray-200 rounded p-4 sm:px-6 sm:py-5" data-income-categories-section>
+      <h2 class="text-sm font-semibold text-gray-900 mb-4">Your income</h2>
+      <%= render "budget_page/income_categories", presenter: @presenter %>
+    </section>
   <% end %>
 
   <% if @presenter.no_categories? %>

@@ -65,6 +65,12 @@ class BudgetPagePresenter
     @typical_income = claim_ledger.account_ledger.typical_income
   end
 
+  def income_categories
+    return @income_categories if defined?(@income_categories)
+
+    @income_categories = user.categories.incomes.order(:name).to_a
+  end
+
   def leftover = typical_income && (typical_income - rules_need)
   def declared? = user.period_cadence.present?
   def history? = typical_income.present?

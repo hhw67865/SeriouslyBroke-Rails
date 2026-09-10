@@ -55,6 +55,18 @@ class Category < ApplicationRecord
   end
   private_class_method :write_fill_order
 
+  # Sets which of the user's income categories feed typical income. Unknown ids are dropped by
+  # the scope itself; expense categories are never in it.
+  def self.choose_regular_income(user:, category_ids:)
+    chosen = Array(category_ids).to_set(&:to_s)
+
+    transaction do
+      incomes = user.categories.incomes.to_a
+      incomes.each { |category| category.update!(regular: chosen.include?(category.id.to_s)) }
+      incomes.count(&:regular?)
+    end
+  end
+
   def display_color = color.presence || DEFAULT_COLOR
 
   def ruled? = rules.load.any?

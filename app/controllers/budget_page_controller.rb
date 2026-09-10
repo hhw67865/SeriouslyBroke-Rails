@@ -26,6 +26,12 @@ class BudgetPageController < ApplicationController
     refuse_on_budget_page("That order didn't match your categories — nothing was changed. Reload and try again.")
   end
 
+  def income
+    ids = params.permit(regular_category_ids: [])[:regular_category_ids] || []
+    Category.choose_regular_income(user: current_user, category_ids: ids)
+    redirect_to budget_page_path, notice: "Saved — your typical income is measured from those categories now."
+  end
+
   private
 
   def offer_scaling(change)

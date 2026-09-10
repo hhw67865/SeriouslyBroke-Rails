@@ -61,6 +61,29 @@ RSpec.describe Category do
     end
   end
 
+  describe ".choose_regular_income" do
+    it "sets regular on the chosen income categories and clears the rest", :aggregate_failures do
+      salary = create(:category, :income, user: user, name: "Salary")
+      bonus = create(:category, :income, :irregular, user: user, name: "Bonus")
+
+      count = described_class.choose_regular_income(user: user, category_ids: [bonus.id])
+
+      expect(count).to eq(1)
+      expect(salary.reload).not_to be_regular
+      expect(bonus.reload).to be_regular
+    end
+
+    it "never touches expense categories or another user's categories", :aggregate_failures do
+      expense = create(:category, :irregular, user: user, name: "Rent")
+      other_income = create(:category, :income, :irregular, user: create(:user))
+
+      described_class.choose_regular_income(user: user, category_ids: [expense.id, other_income.id])
+
+      expect(expense.reload).not_to be_regular
+      expect(other_income.reload).not_to be_regular
+    end
+  end
+
   describe "changing type" do
     it "sends an income category's entries back to main when it becomes expense" do
       account = create(:account, user: user)
