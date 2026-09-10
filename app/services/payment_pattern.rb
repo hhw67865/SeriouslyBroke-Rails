@@ -46,7 +46,7 @@ class PaymentPattern
     return "—" if count.zero?
     return "once so far" if count == 1
 
-    amount_words = range? ? "$#{fmt(low)}–$#{fmt(high)}" : "$#{fmt(typical)}"
+    amount_words = range? ? "#{fmt(low)}–#{fmt(high)}" : fmt(typical)
     words = "#{amount_words} #{cadence_words}"
     lapsed? ? "was #{words}" : words
   end
@@ -85,5 +85,5 @@ class PaymentPattern
     sorted.size.odd? ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / BigDecimal(2)
   end
 
-  def fmt(amount) = format("%.2f", amount)
+  def fmt(amount) = ActiveSupport::NumberHelper.number_to_currency(amount)
 end
