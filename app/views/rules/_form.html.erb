@@ -15,17 +15,16 @@
 
 <div data-controller="app--budget--rule-form"
      data-action="input->app--budget--rule-form#changed change->app--budget--rule-form#changed">
-  <%# The three panels are grid children of the FORM (steps · preview · buttons), so that stacked
-      on a phone the preview falls between the steps and the button that commits to them. %>
+  <%# One column: the steps, the buttons, then the preview, which reads as the last word on the form. %>
   <%= simple_form_for rule_form,
       as: :rule,
       url: rule_form.persisted? ? rule_path(rule) : rules_path,
       method: rule_form.persisted? ? :patch : :post,
       html: {
-        class: "lg:grid lg:grid-cols-3 lg:gap-8 lg:items-start",
+        class: "space-y-6",
         data: { "app--budget--rule-form-target": "form" }
       } do |f| %>
-    <div class="space-y-6 lg:col-span-2">
+    <div class="space-y-6">
       <%# Errors with nowhere else to land: simple_form prints an error under its own input, so one
           on a field this form does not render would leave a 422 with no visible reason. %>
       <%= f.error_notification %>
@@ -42,59 +41,58 @@
         </p>
 
         <% history = @history %>
-        <% money = ->(amount) { amount.present? ? number_to_currency(amount, unit: "") : "–" } %>
         <% picker_rows = history.picker_rows(rule_form.item_id) %>
         <% selected_name = history.selected_name(rule_form.item_id) %>
 
-        <%# Rows of flex divs, not <table>: a <label> can then wrap each one whole. %>
-        <div class="border border-gray-200 rounded overflow-hidden">
-          <div class="flex items-center gap-3 px-3 py-2 bg-gray-50 border-b border-gray-200 text-[11px] font-medium uppercase tracking-wide text-gray-500">
-            <span class="flex-1">Pays for</span>
-            <span class="hidden sm:block w-36 text-right">Last paid</span>
-            <span class="hidden sm:block w-44 text-right">Usually</span>
-            <span class="w-20 text-right">A period</span>
-          </div>
+        <%# Rows of flex divs, not <table>: a <label> can then wrap each one whole. Each row is a name
+            with its facts beneath, and what it comes to a period on the right. %>
+        <div class="border border-gray-200 rounded overflow-hidden divide-y divide-gray-100">
+          <% picker_rows.each do |row| %>
+            <label class="flex items-start gap-3 px-3 py-3 <%= row.disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer hover:bg-gray-50" %><%= " bg-gray-50 border-t-2 border-gray-200" if row.kind == :new %>">
+              <%= f.radio_button :item_id,
+                  row.value,
+                  id: row.dom_id,
+                  class: "form-radio mt-0.5",
+                  disabled: row.disabled,
+                  checked: row.checked,
+                  data: { "app--budget--rule-form-target": "subject", subject_name: row.name } %>
 
-          <div class="divide-y divide-gray-100">
-            <% picker_rows.each do |row| %>
-              <label class="flex items-center gap-3 px-3 py-2.5 <%= row.disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer hover:bg-gray-50" %><%= " bg-gray-50 border-t-2 border-gray-200" if row.kind == :new %>">
-                <%= f.radio_button :item_id,
-                    row.value,
-                    id: row.dom_id,
-                    class: "form-radio",
-                    disabled: row.disabled,
-                    checked: row.checked,
-                    data: { "app--budget--rule-form-target": "subject", subject_name: row.name } %>
-
-                <span class="flex-1 min-w-0">
-                  <% if row.kind == :new %>
-                    <span class="flex flex-wrap items-center gap-2">
-                      <span class="text-sm font-medium text-gray-900">Something not listed?</span>
-                      <%= f.text_field :new_item_name,
-                          placeholder: "name the new item",
-                          class: "form-input h-8 max-w-xs",
-                          data: { "app--budget--rule-form-target": "newItemName" } %>
-                    </span>
-                  <% else %>
-                    <span class="block text-sm text-gray-900 truncate"><%= row.name %></span>
-                    <% if row.caption.present? %>
-                      <span class="block text-xs <%= row.disabled ? "text-gray-400" : "text-gray-500" %> truncate"><%= row.caption %></span>
-                    <% end %>
-                  <% end %>
-                </span>
-
+              <span class="flex-1 min-w-0">
                 <% if row.kind == :new %>
-                  <span class="hidden sm:block w-36" aria-hidden="true"></span>
-                  <span class="hidden sm:block w-44" aria-hidden="true"></span>
-                  <span class="w-20 text-right text-sm text-gray-500">no history</span>
+                  <span class="flex flex-wrap items-center gap-2">
+                    <span class="text-sm font-medium text-gray-900">Something not listed?</span>
+                    <%= f.text_field :new_item_name,
+                        placeholder: "name the new item",
+                        class: "form-input h-8 max-w-xs",
+                        data: { "app--budget--rule-form-target": "newItemName" } %>
+                  </span>
                 <% else %>
-                  <span class="hidden sm:block w-36 text-right text-sm tabular-nums text-gray-600 truncate"><%= row.last_paid_words %></span>
-                  <span class="hidden sm:block w-44 text-right text-sm tabular-nums text-gray-600 truncate"><%= row.usually_words %></span>
-                  <span class="w-20 text-right text-sm font-medium tabular-nums text-gray-900"><%= money.call(row.per_period) %></span>
+                  <span class="block text-sm font-medium text-gray-900 truncate"><%= row.name %></span>
+                  <% if row.caption.present? %>
+                    <span class="block text-xs <%= row.disabled ? "text-gray-400" : "text-gray-500" %>"><%= row.caption %></span>
+                  <% end %>
+                  <span class="block text-xs text-gray-500 mt-0.5" data-item-facts>
+                    <% if row.last_paid_words == "—" %>
+                      no payments yet
+                    <% else %>
+                      last paid <%= row.last_paid_words %> · <%= row.usually_words %>
+                    <% end %>
+                  </span>
                 <% end %>
-              </label>
-            <% end %>
-          </div>
+              </span>
+
+              <span class="shrink-0 text-right text-sm pt-0.5">
+                <% if row.per_period.present? %>
+                  <span class="font-medium text-gray-900 tabular-nums"><%= number_to_currency(row.per_period) %></span>
+                  <span class="text-gray-500">a period</span>
+                <% elsif row.kind == :new %>
+                  <span class="text-gray-500">no history</span>
+                <% else %>
+                  <span class="text-gray-400">—</span>
+                <% end %>
+              </span>
+            </label>
+          <% end %>
         </div>
 
         <div class="flex flex-wrap items-center gap-2 text-sm text-gray-700">
@@ -231,15 +229,16 @@
 
     <%# The card renders `hidden` and Stimulus reveals it on connect, so a browser with no
         JavaScript gets no preview rather than a stale one it has no way to refresh. %>
-    <aside class="mt-6 lg:mt-0 lg:sticky lg:top-6">
-      <%= render "rules/preview", preview: @preview %>
-    </aside>
 
-    <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end lg:col-span-2 lg:col-start-1">
+    <div class="flex flex-col gap-3 sm:flex-row sm:justify-end">
       <%= link_to "Cancel", budget_page_path, class: "btn btn-secondary" %>
 
       <%= f.submit rule_form.persisted? ? "Update rule" : "Create rule", class: "btn btn-primary" %>
     </div>
+
+    <aside>
+      <%= render "rules/preview", preview: @preview %>
+    </aside>
 
     <%# The preview's submitter, hidden: `formaction` and the rest ride on the SUBMITTER, which is
         what keeps the preview URL the server's rather than a string in the JavaScript. %>
