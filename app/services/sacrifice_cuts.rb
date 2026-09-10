@@ -40,7 +40,7 @@ class SacrificeCuts
   # nil for a row left at its claim: not a cut, and not a refusal either.
   def line_for(rule_id, typed)
     rule = Rule.for_user(user).find(rule_id)
-    claim = rule.steady_ask(today: today)
+    claim = rule.steady_ask(today: today).round(2)
     return nil if positive_number?(typed) && typed.to_s.to_d == claim
     return { rule: rule, amount: nil } unless check?(rule, claim, typed)
 

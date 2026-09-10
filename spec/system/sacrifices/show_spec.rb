@@ -53,8 +53,12 @@ RSpec.describe "Sacrifice view", type: :system do
   def figure(name) = find("[data-figure='#{name}']")
   def row(rule) = find("[data-sacrifice-row='#{rule.id}']")
 
+  # Edit opens the row (a no-op under Rack::Test, where every input is already live).
   def cut(rule, label, to:)
-    within(row(rule)) { fill_in "Cut #{label} to", with: to }
+    within(row(rule)) do
+      click_button "Edit #{label}"
+      fill_in "Cut #{label} to", with: to
+    end
   end
 
   # $800 of groceries, $300 of fun and a $600-every-6-months insurance that claims $46.15 of a
@@ -155,7 +159,7 @@ RSpec.describe "Sacrifice view", type: :system do
 
       expect(row(rules.fetch(:groceries))).to have_css("[data-role='row-frees']", text: "frees $100.00")
 
-      cut(rules.fetch(:groceries), "Groceries", to: "800")
+      within(row(rules.fetch(:groceries))) { fill_in "Cut Groceries to", with: "800" }
 
       expect(row(rules.fetch(:groceries))).to have_css("[data-role='row-frees']", text: "frees $0.00")
     end
@@ -185,6 +189,21 @@ RSpec.describe "Sacrifice view", type: :system do
       cut(rules.fetch(:groceries), "Groceries", to: "700")
 
       expect(page).to have_button("Save these cuts", disabled: false)
+    end
+
+    # A row opens read-only; Undo puts the claim back, closes it, and takes it out of the save.
+    it "keeps a row read-only until Edit, and Undo takes it back out", :aggregate_failures, :js do
+      groceries = rules.fetch(:groceries)
+      expect(row(groceries)).to have_field("Cut Groceries to", disabled: true)
+
+      cut(groceries, "Groceries", to: "700")
+      expect(row(groceries)).to have_css("[data-role='row-frees']", text: "frees $100.00")
+
+      within(row(groceries)) { click_button "Undo Groceries" }
+
+      expect(row(groceries)).to have_field("Cut Groceries to", disabled: true, with: "800.00")
+      expect(row(groceries)).to have_css("[data-role='row-frees']", text: "frees $0.00")
+      expect(page).to have_button("Save these cuts", disabled: true)
     end
   end
 

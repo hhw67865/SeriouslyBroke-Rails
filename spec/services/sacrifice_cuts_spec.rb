@@ -55,6 +55,17 @@ RSpec.describe SacrificeCuts do
     expect(rule.reload.amount).to eq(800)
   end
 
+  it "reads a one-off's claim as the page prints it, so the same two-decimal figure is untouched", :aggregate_failures do
+    rule = rule_on("Vacation", :one_off, amount: 1_000, anchor_date: Date.new(2026, 12, 1))
+    printed = rule.steady_ask(today: today).round(2).to_s("F")
+
+    service = cuts_for(rule.id => printed)
+
+    expect(service.apply).to be(false)
+    expect(service.errors.full_messages).to eq(["Dial a rule down to cut it first"])
+    expect(rule.reload.amount).to eq(1_000)
+  end
+
   it "refuses an amount above the rule's current claim", :aggregate_failures do
     rule = rule_on("Groceries", :rate, amount: 800)
 

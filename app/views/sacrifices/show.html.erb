@@ -79,6 +79,19 @@
         </span>
 
         <div class="flex items-center gap-2">
+          <%# Read-only until Edit; Undo puts the claim back and takes the row out of the save. With
+              JavaScript off the input is simply live, and the server ignores a row at its claim. %>
+          <button type="button"
+                  class="btn btn-secondary h-8 px-3 text-xs"
+                  aria-label="Edit <%= rule_name(row.rule) %>"
+                  data-app--sacrifice--dial-target="edit"
+                  data-action="app--sacrifice--dial#edit">Edit</button>
+          <button type="button"
+                  class="btn btn-secondary h-8 px-3 text-xs"
+                  aria-label="Undo <%= rule_name(row.rule) %>"
+                  hidden
+                  data-app--sacrifice--dial-target="undo"
+                  data-action="app--sacrifice--dial#undo">Undo</button>
           <span class="text-sm text-gray-500">cut to</span>
           <%# `step` and `min` match what a cut can be, and the dial clamps anyway: a browser
               constraint is a rendering, and the arithmetic must be right without it. %>
