@@ -80,5 +80,25 @@ RSpec.describe CategoryHistoryPresenter do
       expect(without_rule.everything_else.ruled_by).to eq(catch_all)
       expect(editing_rule.everything_else.ruled_by).to be_nil
     end
+
+    it "draws the picker: everything else first and checked, each item, then a new item", :aggregate_failures do
+      presenter = described_class.new(groceries, today: today)
+      rows = presenter.picker_rows("")
+
+      expect(rows.map(&:kind)).to eq([:everything, :item, :item, :new])
+      expect(rows.map(&:checked)).to eq([true, false, false, false])
+      expect(presenter.selected_name("")).to eq("Everything else in Groceries")
+      expect(presenter.selected_name(bread.id)).to eq("Bread")
+      expect(presenter.selected_name("new")).to eq("the new item")
+    end
+
+    it "pre-selects nothing when everything else is already ruled", :aggregate_failures do
+      catch_all = create(:rule, :rate, category: groceries, amount: 200, starts_on: Date.new(2026, 1, 1))
+      presenter = described_class.new(groceries, today: today)
+
+      expect(presenter.picker_rows("").first).to have_attributes(disabled: true, checked: false, caption: "already has a rule")
+      expect(presenter.selected_name("")).to eq("what you pick above")
+      expect(described_class.new(groceries, today: today, rule: catch_all).picker_rows("").first.checked).to be(true)
+    end
   end
 end

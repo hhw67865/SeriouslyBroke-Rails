@@ -6,6 +6,7 @@ class CategoryHistoryPresenter
   PERIODS = 3
 
   Row = Data.define(:item, :amounts, :average, :ruled_by)
+  PickerRow = Data.define(:kind, :dom_id, :value, :name, :caption, :disabled, :amounts, :average, :checked)
 
   attr_reader :category, :today, :rule
 
@@ -33,7 +34,58 @@ class CategoryHistoryPresenter
     end
   end
 
+  # The rows the form draws, in order: everything else, each item, then a new item. `picked` is the
+  # form's item_id — blank, an item's id, or "new".
+  def picker_rows(picked)
+    [everything_row(picked), *rows.map { |row| item_row(row, picked) }, new_row(picked)]
+  end
+
+  def selected_name(picked) = picker_rows(picked).find(&:checked)&.name || "what you pick above"
+
   private
+
+  def everything_row(picked)
+    taken = everything_else.ruled_by.present?
+    PickerRow.new(
+      kind: :everything,
+      dom_id: "rule_item_everything",
+      value: "",
+      name: "Everything else in #{category.name}",
+      caption: taken ? "already has a rule" : "the items below that have no rule of their own",
+      disabled: taken,
+      amounts: everything_else.amounts,
+      average: everything_else.average,
+      checked: picked.blank? && !taken
+    )
+  end
+
+  def item_row(row, picked)
+    PickerRow.new(
+      kind: :item,
+      dom_id: "rule_item_#{row.item.id}",
+      value: row.item.id,
+      name: row.item.name,
+      caption: row.ruled_by && "has its own rule · #{row.ruled_by.rule_type.capitalize}",
+      disabled: row.ruled_by.present?,
+      amounts: row.amounts,
+      average: row.average,
+      checked: picked.to_s == row.item.id.to_s
+    )
+  end
+
+  def new_row(picked)
+    PickerRow.new(
+      kind: :new,
+      dom_id: "rule_item_new",
+      value: "new",
+      name: "the new item",
+      caption: nil,
+      disabled: false,
+      amounts: [],
+      average: nil,
+      checked: picked == "new"
+    )
+  end
 
   def row_for(item)
     amounts = amounts_by_item.fetch(item.id, empty_amounts)
