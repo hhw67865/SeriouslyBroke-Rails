@@ -52,7 +52,6 @@ RSpec.describe AccountLedger do
       earn(500, on: Date.new(2026, 8, 26), category: gifts)
       earn(999, on: Date.new(2026, 9, 5))
 
-      expect(ledger.complete_periods(2)).to eq([Date.new(2026, 8, 7)..Date.new(2026, 8, 20), Date.new(2026, 8, 21)..Date.new(2026, 9, 3)])
       expect(ledger.typical_income).to eq(2100)
     end
 

@@ -9,96 +9,92 @@
 <div class="space-y-6">
   <%= render "budget_income/cadence_confirm", change: @cadence_change, regular_ids: @regular_ids if @cadence_change %>
 
-  <%= simple_form_for @presenter.declaration,
-                      as: :user,
-                      url: budget_income_path,
-                      method: :patch,
-                      html: { class: "space-y-6", data: { income_form: true } } do |f| %>
-    <fieldset class="bg-white border border-gray-200 rounded p-4 sm:px-6 sm:py-5">
-      <h2 class="text-sm font-semibold text-gray-900 mb-4">Your period</h2>
+  <div data-controller="app--budget--income-form"
+       data-action="input->app--budget--income-form#changed change->app--budget--income-form#changed">
+    <%= simple_form_for @presenter.declaration,
+                        as: :user,
+                        url: budget_income_path,
+                        method: :patch,
+                        html: { class: "space-y-6", data: { "app--budget--income-form-target": "form" } } do |f| %>
+      <fieldset class="bg-white border border-gray-200 rounded p-4 sm:px-6 sm:py-5">
+        <h2 class="text-sm font-semibold text-gray-900 mb-4">Your period</h2>
 
-      <% if @presenter.declaration.errors.any? %>
-        <p class="rounded bg-status-danger-light border border-status-danger px-3 py-2 text-sm text-status-danger mb-4"
-           data-declaration-error>
-          <%= @presenter.declaration.errors.full_messages.to_sentence %>
+        <% if @presenter.declaration.errors.any? %>
+          <p class="rounded bg-status-danger-light border border-status-danger px-3 py-2 text-sm text-status-danger mb-4"
+             data-declaration-error>
+            <%= @presenter.declaration.errors.full_messages.to_sentence %>
+          </p>
+        <% end %>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <%= f.input :period_cadence,
+                      as: :select,
+                      collection: User.period_cadences.keys.map { |key| [key.humanize, key] },
+                      include_blank: "Not set",
+                      label: "How long is a period?",
+                      hint: "Weekly, every two weeks, twice a month, or monthly." %>
+
+          <%= f.input :period_anchor_date,
+                      as: :date,
+                      html5: true,
+                      label: "A day a period starts",
+                      hint: "Any one of them — the rest are counted from it. Required once you pick a period." %>
+        </div>
+
+        <p class="mt-4 text-xs text-gray-500 max-w-2xl">
+          Changing your period re-derives every figure immediately — what each rule claims, what your
+          categories need next, and how your history buckets into periods. Nothing is rewritten; it is
+          all counted from these two facts.
         </p>
-      <% end %>
+      </fieldset>
 
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <%= f.input :period_cadence,
-                    as: :select,
-                    collection: User.period_cadences.keys.map { |key| [key.humanize, key] },
-                    include_blank: "Not set",
-                    label: "How long is a period?",
-                    hint: "Weekly, every two weeks, twice a month, or monthly." %>
+      <fieldset class="bg-white border border-gray-200 rounded p-4 sm:px-6 sm:py-5">
+        <h2 class="text-sm font-semibold text-gray-900 mb-4">Which income counts</h2>
 
-        <%= f.input :period_anchor_date,
-                    as: :date,
-                    html5: true,
-                    label: "A day a period starts",
-                    hint: "Any one of them — the rest are counted from it. Required once you pick a period." %>
+        <% if @presenter.income_categories.any? %>
+          <p class="text-sm text-gray-600 mb-4">
+            Typical income is the average of these categories' entries over your last two complete periods.
+          </p>
+
+          <div class="space-y-2">
+            <% @presenter.income_categories.each do |category| %>
+              <div class="flex items-center">
+                <%= check_box_tag "regular_category_ids[]",
+                                  category.id,
+                                  @presenter.checked?(category),
+                                  id: "regular_category_#{category.id}",
+                                  class: "form-checkbox" %>
+                <%= label_tag "regular_category_#{category.id}", category.name, class: "ml-2 block text-sm text-gray-900" %>
+              </div>
+            <% end %>
+          </div>
+        <% else %>
+          <p class="text-sm text-gray-600">
+            You have no income categories yet.
+            <%= link_to "Add one", new_category_path(type: "income"), class: "text-brand-dark hover:text-brand underline" %>
+          </p>
+        <% end %>
+      </fieldset>
+
+      <%= render "budget_income/measured", presenter: @presenter %>
+
+      <div class="flex flex-col gap-3 sm:flex-row sm:justify-end">
+        <%= link_to "Cancel", budget_page_path, class: "btn btn-secondary" %>
+        <%= f.button :submit, "Save", class: "btn btn-primary" %>
       </div>
 
-      <p class="mt-4 text-xs text-gray-500 max-w-2xl">
-        Changing your period re-derives every figure immediately — what each rule claims, what your
-        categories need next, and how your history buckets into periods. Nothing is rewritten; it is
-        all counted from these two facts.
-      </p>
-    </fieldset>
-
-    <fieldset class="bg-white border border-gray-200 rounded p-4 sm:px-6 sm:py-5">
-      <h2 class="text-sm font-semibold text-gray-900 mb-4">Which income counts</h2>
-
-      <% if @presenter.income_categories.any? %>
-        <p class="text-sm text-gray-600 mb-4">
-          Typical income is the average of these categories' entries over your last two complete periods.
-        </p>
-
-        <div class="space-y-2">
-          <% @presenter.income_categories.each do |category| %>
-            <div class="flex items-center">
-              <%= check_box_tag "regular_category_ids[]",
-                                category.id,
-                                category.regular?,
-                                id: "regular_category_#{category.id}",
-                                class: "form-checkbox" %>
-              <%= label_tag "regular_category_#{category.id}", category.name, class: "ml-2 block text-sm text-gray-900" %>
-            </div>
-          <% end %>
-        </div>
-      <% else %>
-        <p class="text-sm text-gray-600">
-          You have no income categories yet.
-          <%= link_to "Add one", new_category_path(type: "income"), class: "text-brand-dark hover:text-brand underline" %>
-        </p>
-      <% end %>
-    </fieldset>
-
-    <%= f.button :submit, "Save", class: "btn btn-primary w-full sm:w-auto" %>
-  <% end %>
-
-  <%# What the two fields above resolve to, once entries have caught up to them. %>
-  <section class="bg-white border border-gray-200 rounded p-4 sm:px-6 sm:py-5" data-measured>
-    <h2 class="text-sm font-semibold text-gray-900 mb-4">Measured</h2>
-
-    <% if @presenter.declared? && @presenter.history? %>
-      <p class="text-sm text-gray-700" data-figure="typical-income">
-        You bring in <strong class="text-gray-900"><%= number_to_currency(@presenter.typical_income) %></strong> a period
-      </p>
-      <ul class="mt-3 space-y-1 text-sm text-gray-600">
-        <% @presenter.periods.each do |period| %>
-          <li data-measured-period>
-            <%= period.range.first.strftime("%b %-d") %> – <%= period.range.last.strftime("%b %-d, %Y") %>
-            · <%= number_to_currency(period.income) %>
-          </li>
-        <% end %>
-      </ul>
-    <% elsif @presenter.declared? %>
-      <p class="text-sm text-gray-500">
-        Not enough history yet — a full period has to pass before there is anything to average.
-      </p>
-    <% else %>
-      <p class="text-sm text-gray-500">Set a period above and this will say what you bring in.</p>
+      <%# The preview's submitter, hidden: `formaction` and the rest ride on the SUBMITTER, which is
+          what keeps the preview URL the server's rather than a string in the JavaScript. %>
+      <%= button_tag "Preview",
+          type: :submit,
+          name: nil,
+          hidden: true,
+          tabindex: -1,
+          "aria-hidden": true,
+          formaction: preview_budget_income_path,
+          formmethod: :post,
+          formnovalidate: true,
+          data: { turbo_frame: "income_measure", "app--budget--income-form-target": "previewButton" } %>
     <% end %>
-  </section>
+  </div>
 </div>

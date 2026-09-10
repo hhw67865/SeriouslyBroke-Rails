@@ -15,7 +15,7 @@ RSpec.describe "Budget income" do
   it "saves the period and the income categories in one PATCH", :aggregate_failures do
     patch_income(cadence: "weekly", anchor: "2026-09-04", regular_ids: [salary.id])
 
-    expect(response).to redirect_to(budget_income_path)
+    expect(response).to redirect_to(budget_page_path)
     expect(user.reload).to be_period_weekly
     expect(salary.reload).to be_regular
     expect(bonus.reload).not_to be_regular
@@ -35,7 +35,7 @@ RSpec.describe "Budget income" do
 
     patch_income(cadence: "monthly", anchor: "2026-09-04", regular_ids: [salary.id], scale: "1")
 
-    expect(response).to redirect_to(budget_income_path)
+    expect(response).to redirect_to(budget_page_path)
     expect(user.reload).to be_period_monthly
     expect(rule.reload.amount).not_to eq(100)
     expect(salary.reload).to be_regular
@@ -54,8 +54,24 @@ RSpec.describe "Budget income" do
 
     patch_income(cadence: "weekly", anchor: "2026-09-04", regular_ids: [other_category.id])
 
-    expect(response).to redirect_to(budget_income_path)
+    expect(response).to redirect_to(budget_page_path)
     expect(other_category.reload).not_to be_regular
+  end
+
+  describe "#preview" do
+    # Weekly anchored 2026-09-04 puts Sep 9 in its own period, with Aug 21–27 and Aug 28–Sep 3 the
+    # two complete periods behind it — a different grid than the user's saved biweekly one.
+    it "computes the figure from the posted cadence and ids, and writes nothing", :aggregate_failures do
+      create(:entry, item: create(:item, category: bonus), amount: 500, date: Date.new(2026, 8, 21))
+      create(:entry, item: create(:item, category: bonus), amount: 700, date: Date.new(2026, 8, 28))
+
+      travel_to(Date.new(2026, 9, 9)) { post_preview(cadence: "weekly", anchor: "2026-09-04", regular_ids: [bonus.id]) }
+
+      expect(response.body).to include('id="income_measure"', "$600.00")
+      expect(user.reload).to be_period_biweekly
+      expect(salary.reload).to be_regular
+      expect(bonus.reload).not_to be_regular
+    end
   end
 
   private
@@ -65,5 +81,11 @@ RSpec.describe "Budget income" do
     params[:regular_category_ids] = regular_ids if regular_ids
     params[:scale] = scale if scale
     patch budget_income_path, params: params
+  end
+
+  def post_preview(cadence:, anchor:, regular_ids:)
+    post preview_budget_income_path,
+         params: { user: { period_cadence: cadence, period_anchor_date: anchor }, regular_category_ids: regular_ids },
+         headers: { "Turbo-Frame" => "income_measure" }
   end
 end

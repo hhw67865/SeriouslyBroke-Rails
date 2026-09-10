@@ -5,12 +5,20 @@ class BudgetIncomeController < ApplicationController
     @presenter = BudgetIncomePresenter.new(user: current_user)
   end
 
+  # Nothing is written: the presenter reads a probe built off the posted, unsaved declaration.
+  def preview
+    @presenter = BudgetIncomePresenter.new(user: current_user, typed: declaration_params, category_ids: regular_ids)
+    return render partial: "budget_income/measured", locals: { presenter: @presenter } if turbo_frame_request?
+
+    render :show
+  end
+
   def update
     change = CadenceChange.new(user: current_user, declaration: declaration_params)
     return offer_scaling(change) if change.offered? && scale_choice.nil?
 
     if apply(change)
-      redirect_to budget_income_path, notice: saved_notice(change)
+      redirect_to budget_page_path, notice: saved_notice(change)
     else
       refuse
     end
@@ -30,14 +38,14 @@ class BudgetIncomeController < ApplicationController
   end
 
   def refuse
-    @presenter = BudgetIncomePresenter.new(user: User.find(current_user.id), declaration: current_user)
+    @presenter = BudgetIncomePresenter.new(user: current_user, typed: declaration_params, category_ids: regular_ids)
     render :show, status: :unprocessable_content
   end
 
   def offer_scaling(change)
     @cadence_change = change
     @regular_ids = regular_ids
-    @presenter = BudgetIncomePresenter.new(user: current_user)
+    @presenter = BudgetIncomePresenter.new(user: current_user, category_ids: regular_ids)
     render :show, status: :unprocessable_content
   end
 

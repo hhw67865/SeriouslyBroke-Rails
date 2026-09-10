@@ -29,18 +29,6 @@ RSpec.describe "Budget page income", type: :system do
     expect(page).to have_field(bonus.name, checked: false)
   end
 
-  it "saves the chosen categories and re-derives which ones are regular", :aggregate_failures do
-    visit budget_income_path
-
-    uncheck salary.name
-    check bonus.name
-    click_button "Save"
-
-    expect(page).to have_content("every figure is re-derived")
-    expect(salary.reload).not_to be_regular
-    expect(bonus.reload).to be_regular
-  end
-
   it "invites adding an income category when there are none", :aggregate_failures do
     salary.destroy!
     bonus.destroy!
@@ -58,17 +46,55 @@ RSpec.describe "Budget page income", type: :system do
 
     around { |example| travel_to(today) { example.run } }
 
-    before do
-      [Date.new(2026, 8, 7), Date.new(2026, 8, 25)].each do |on|
-        create(:entry, item: create(:item, category: salary), amount: 2_000, date: on)
-      end
-    end
+    def earn(category, amount, on:) = create(:entry, item: create(:item, category: category), amount: amount, date: on)
+
+    before { [Date.new(2026, 8, 7), Date.new(2026, 8, 25)].each { |on| earn(salary, 2_000, on: on) } }
 
     it "shows what it measured", :aggregate_failures do
       visit budget_income_path
 
       expect(page).to have_css("[data-figure='typical-income']", text: "$2,000.00")
       expect(page).to have_css("[data-measured-period]", count: 2)
+    end
+
+    it "saves the chosen categories and lands on Budget, where the tile shows the new figure", :aggregate_failures do
+      { Date.new(2026, 8, 7) => 500, Date.new(2026, 8, 25) => 700 }.each { |on, amount| earn(bonus, amount, on: on) }
+
+      visit budget_income_path
+
+      uncheck salary.name
+      check bonus.name
+      click_button "Save"
+
+      expect(page).to have_current_path(budget_page_path)
+      expect(page).to have_content("every figure is re-derived")
+      expect(page).to have_css("[data-tile='income'] [data-tile-figure]", text: "$600.00")
+      expect(salary.reload).not_to be_regular
+      expect(bonus.reload).to be_regular
+    end
+
+    # Both categories are regular here, so unticking one is the one interaction that changes the
+    # figure without a Save — the frame is the server's own recount, not arithmetic in the browser.
+    describe "the live preview", :js do
+      before do
+        bonus.update!(regular: true)
+        [Date.new(2026, 8, 7), Date.new(2026, 8, 25)].each { |on| earn(bonus, 500, on: on) }
+      end
+
+      it "recomputes the typical-income figure as a category is unticked and re-ticked", :aggregate_failures do
+        visit budget_income_path
+
+        expect(page).to have_css("[data-figure='typical-income']", text: "$2,500.00")
+
+        uncheck bonus.name
+
+        expect(page).to have_css("[data-figure='typical-income']", text: "$2,000.00")
+        expect(bonus.reload).to be_regular
+
+        check bonus.name
+
+        expect(page).to have_css("[data-figure='typical-income']", text: "$2,500.00")
+      end
     end
   end
 end

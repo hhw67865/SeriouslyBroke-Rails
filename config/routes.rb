@@ -45,6 +45,7 @@ Rails.application.routes.draw do
   patch "budget/reorder" => "budget_page#reorder", as: :budget_page_reorder
   get "budget/income" => "budget_income#show", as: :budget_income
   patch "budget/income" => "budget_income#update"
+  post "budget/income/preview" => "budget_income#preview", as: :preview_budget_income
   resources :adjustments, only: [:create, :destroy]
   get "sacrifice" => "sacrifices#show"
 

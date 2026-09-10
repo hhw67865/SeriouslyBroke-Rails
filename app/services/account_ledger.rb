@@ -5,9 +5,6 @@
 class AccountLedger
   class NotAnAccount < StandardError; end
 
-  # How many complete periods typical income averages over.
-  TYPICAL_PERIODS = 2
-
   attr_reader :user, :today
 
   def initialize(user, today: user.today)
@@ -33,41 +30,10 @@ class AccountLedger
   def typical_income
     return @typical_income if defined?(@typical_income)
 
-    @typical_income = measured_typical_income
-  end
-
-  # The last `limit` complete periods before today's, that begin on or after the first entry.
-  def complete_periods(limit)
-    first = user.entries.minimum(:date)
-    return [] if first.nil?
-
-    walk_periods_back(previous_period(today), limit, first)
-  end
-
-  def regular_income_within(period)
-    user_entries(Entry.incomes).where(categories: { regular: true }, date: period).sum(:amount).to_d
+    @typical_income = IncomeMeasure.new(user, category_ids: user.categories.incomes.regular.ids, today: today).typical
   end
 
   private
-
-  def measured_typical_income
-    periods = complete_periods(TYPICAL_PERIODS)
-    return nil if periods.empty?
-
-    (periods.sum(0.to_d) { |period| regular_income_within(period) } / periods.size).round(2)
-  end
-
-  # Walks backward from `cursor`, collecting periods that begin on or after `first`, oldest last.
-  def walk_periods_back(cursor, limit, first)
-    periods = []
-    while periods.size < limit && cursor.first >= first
-      periods.unshift(cursor)
-      cursor = previous_period(cursor.first)
-    end
-    periods
-  end
-
-  def previous_period(date) = user.period_containing(user.period_containing(date).first - 1)
 
   def main = user.main_account
 
