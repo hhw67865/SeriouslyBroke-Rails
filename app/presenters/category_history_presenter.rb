@@ -7,7 +7,7 @@ class CategoryHistoryPresenter
   PERIODS = 3
 
   Row = Data.define(:item, :pattern, :ruled_by)
-  PickerRow = Data.define(:kind, :dom_id, :value, :name, :caption, :disabled, :last_paid_words, :usually_words, :per_period, :checked)
+  PickerRow = Data.define(:kind, :dom_id, :value, :name, :caption, :disabled, :last_paid_words, :usually_words, :per_period, :checked, :stale)
 
   attr_reader :category, :today, :rule
 
@@ -66,7 +66,8 @@ class CategoryHistoryPresenter
       last_paid_words: last_paid_words(pattern),
       usually_words: pattern.usually_words,
       per_period: everything_else_per_period,
-      checked: picked.blank? && !taken
+      checked: picked.blank? && !taken,
+      stale: false
     )
   end
 
@@ -83,7 +84,8 @@ class CategoryHistoryPresenter
       last_paid_words: last_paid_words(pattern),
       usually_words: pattern.usually_words,
       per_period: pattern.per_period,
-      checked: picked.to_s == item.id.to_s
+      checked: picked.to_s == item.id.to_s,
+      stale: pattern.stale? && picked.to_s != item.id.to_s
     )
   end
 
@@ -98,7 +100,8 @@ class CategoryHistoryPresenter
       last_paid_words: nil,
       usually_words: nil,
       per_period: nil,
-      checked: picked == "new"
+      checked: picked == "new",
+      stale: false
     )
   end
 

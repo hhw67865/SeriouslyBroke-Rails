@@ -212,4 +212,23 @@ RSpec.describe "Rule form", type: :system do
       expect(page).to have_css("[data-preview-figure='periods_left']", text: "4")
     end
   end
+
+  describe "items you seem to have stopped paying" do
+    let(:parking) { create(:item, category: groceries, name: "Parking") }
+    let(:bread) { create(:item, category: groceries, name: "Bread") }
+
+    before do
+      create(:entry, item: parking, amount: 10, date: today - 500)
+      create(:entry, item: bread, amount: 4, date: today - 3)
+    end
+
+    it "folds them under one row, below what is still paid for", :aggregate_failures do
+      open_form
+
+      expect(page).to have_css("label", text: "Bread")
+      expect(page).to have_css("details[data-stale-items] summary", text: "Show 1 item you seem to have stopped paying")
+      expect(page).to have_css("details[data-stale-items] label", text: "Parking", visible: :all)
+      expect(page).to have_field("rule_item_#{parking.id}", type: "radio", visible: :all)
+    end
+  end
 end

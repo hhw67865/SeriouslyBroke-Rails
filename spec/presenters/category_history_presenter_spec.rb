@@ -142,5 +142,13 @@ RSpec.describe CategoryHistoryPresenter do
       expect(row.usually_words).to eq("was $10.00 monthly")
       expect(row.per_period).to be_nil
     end
+
+    it "flags the row stale, except when it is the one picked", :aggregate_failures do
+      presenter = described_class.new(groceries, today: today)
+
+      expect(presenter.picker_rows("").find { |r| r.dom_id == "rule_item_#{parking.id}" }.stale).to be(true)
+      expect(presenter.picker_rows(parking.id).find { |r| r.dom_id == "rule_item_#{parking.id}" }.stale).to be(false)
+      expect(presenter.picker_rows("").map(&:stale)).to include(false)
+    end
   end
 end

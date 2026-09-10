@@ -86,6 +86,17 @@ RSpec.describe PaymentPattern do
     end
   end
 
+  describe "stale" do
+    it "is stale once lapsed, or once a single payment is over a year old, and never with no payments", :aggregate_failures do
+      expect(pattern([pay(131, 10), pay(162, 10), pay(192, 10)]).stale?).to be(true)
+      expect(pattern([pay(367, 95), pay(732, 95)]).stale?).to be(false)
+      expect(pattern([pay(400, 48)]).stale?).to be(true)
+      expect(pattern([pay(300, 48)]).stale?).to be(false)
+      expect(pattern([pay(20, 10), pay(51, 10), pay(81, 10)]).stale?).to be(false)
+      expect(pattern([]).stale?).to be(false)
+    end
+  end
+
   describe "per_period" do
     it "divides a monthly cost by a monthly user's periods", :aggregate_failures do
       monthly = pattern([pay(0, "18.99"), pay(31, "18.99"), pay(61, "18.99"), pay(92, "18.99")], periods_per_year: 12)

@@ -42,6 +42,14 @@ class PaymentPattern
     days_since > 2 * median_gap && days_since >= 60
   end
 
+  # Fallen out of its cadence, or paid once and not for over a year: not worth a row of its own.
+  def stale?
+    return false if last_paid.nil?
+    return lapsed? if count > 1
+
+    (today - last_paid.first).to_i > 365
+  end
+
   def usually_words
     return "—" if count.zero?
     return "once so far" if count == 1
