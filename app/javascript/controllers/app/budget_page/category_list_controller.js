@@ -30,6 +30,15 @@ export default class extends Controller {
     this.open(id)
   }
 
+  // A click anywhere on the header opens the row, except on the arrows or another control, which
+  // keep their own job. The chevron stays the control a keyboard or a reader reaches.
+  toggleFromHeader(event) {
+    if (event.target.closest("a, button, form, [data-category-toggle]")) return
+
+    const chevron = event.currentTarget.querySelector("[data-category-toggle]")
+    if (chevron) chevron.click()
+  }
+
   open(id) {
     const row = this.rowFor(id)
     if (!row) return this.remember(null)

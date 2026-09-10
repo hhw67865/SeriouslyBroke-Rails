@@ -10,20 +10,18 @@
   <% if @presenter.no_categories? %>
     <%= render "budget_page/empty" %>
   <% else %>
-    <%# What `PATCH /budget/reorder` rewrites. The drag reads the order off the rows at drop; the
-        ▲▼ carry the same list already swapped, so the order is reachable with scripting off. %>
+    <%# What `PATCH /budget/reorder` rewrites. Each ▲▼ carries the whole list already swapped, so
+        the order is reachable with scripting off. %>
     <section class="space-y-2"
              data-category-list
-             data-controller="app--budget-page--reorder app--budget-page--category-list"
-             data-action="dragover->app--budget-page--reorder#over
-                          drop->app--budget-page--reorder#drop">
+             data-controller="app--budget-page--category-list">
       <div class="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 sm:gap-4 px-1">
         <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Your categories</h2>
-        <%# What dragging decides (the tie-break inside a kind), what it cannot decide (the kinds'
-            own order), and where the combined answer is shown. %>
+        <%# What the arrows decide (the tie-break inside a kind), what they cannot decide (the
+            kinds' own order), and where the combined answer is shown. %>
         <p class="text-xs text-gray-500 sm:max-w-md sm:text-right">
-          Drag to set which gives way first among rules of the same kind — choice always gives way
-          before usage, usage before bills. Home shows them in that give-way order.
+          Use the arrows to set which gives way first among rules of the same kind — choice always
+          gives way before usage, usage before bills. Home shows them in that give-way order.
         </p>
       </div>
 
@@ -31,11 +29,6 @@
       <% reorderable = @presenter.reorderable_rows %>
       <% rows.each do |row| %>
         <%= render "budget_page/category_row", row: row, reorderable: reorderable, presenter: @presenter %>
-      <% end %>
-
-      <% form_data = { app__budget_page__reorder_target: "form" } %>
-      <%= form_with(url: budget_page_reorder_path, method: :patch, class: "hidden", data: form_data) do %>
-        <%# One hidden `category_ids[]` per draggable row, appended by reorder_controller at drop. %>
       <% end %>
     </section>
   <% end %>

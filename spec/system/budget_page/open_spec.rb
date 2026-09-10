@@ -93,5 +93,20 @@ RSpec.describe "Budget page open category", type: :system do
 
       expect(page).to have_no_css("[data-category-panel='Groceries']")
     end
+
+    # The whole header is a target, but an arrow inside it keeps its own job — a reorder from a
+    # closed row does not also open it.
+    it "opens and closes from the name, and leaves an arrow inside the header to its own job", :aggregate_failures do
+      find("[data-category-row='Groceries'] h3", text: "Groceries").click
+      expect(page).to have_css("[data-category-panel='Groceries']")
+
+      find("[data-category-row='Groceries'] h3", text: "Groceries").click
+      expect(page).to have_no_css("[data-category-panel='Groceries']")
+
+      within("[data-category-row='Groceries']") { click_button "Move Groceries down" }
+
+      expect(page).to have_content("Your money fills them in that order now.")
+      expect(page).to have_no_css("[data-category-panel='Groceries']")
+    end
   end
 end

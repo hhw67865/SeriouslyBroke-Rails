@@ -302,8 +302,8 @@ browser example 1.7 s, of which about 1 s is Chrome being restarted after every 
 - **One browser per process.** The per-example driver quit is gone. Capybara resets the session.
 - **Logic lives in fast specs.** Every figure, state, formula and validation is proven in model,
   service and presenter specs. A system spec proves each page renders its figures once, and every
-  real interaction: forms, the rule preview, drag reorder, the adjust panel, the entry impact card,
-  the 375px layouts.
+  real interaction: forms, the rule preview, the adjust panel, the entry impact card, the 375px
+  layouts.
 - **Rack::Test by default; Chrome on demand.** System specs that read a page or submit a plain form
   use the in-process driver. Examples that need JavaScript are tagged `:js`.
 - **Transactional tests only.** DatabaseCleaner is removed; Rails shares the connection with the

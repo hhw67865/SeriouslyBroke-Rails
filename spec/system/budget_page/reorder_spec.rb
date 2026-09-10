@@ -9,10 +9,8 @@ require "rails_helper"
 # arrow here can reach it, so what these controls set is the tie-break inside a kind. The page draws
 # the number the buttons write.
 #
-# Through the ▲▼ buttons, deliberately: they are plain forms carrying the whole order, so they are
-# the path that works with scripting off, and the drag controller builds the same `category_ids[]`
-# out of the DOM and submits the same PATCH. The one `:js` example is the one whose subject IS the
-# drag.
+# Through the ▲▼ buttons: plain forms carrying the whole order, so a press made against a stale
+# list is refused rather than half-applied.
 RSpec.describe "Budget page reorder", type: :system do
   include ActiveSupport::Testing::TimeHelpers
 
@@ -41,22 +39,6 @@ RSpec.describe "Budget page reorder", type: :system do
       starts_on: Date.new(2026, 1, 1),
       category: create(:category, user: user, name: name, priority: priority)
     )
-  end
-
-  # Selenium's own `drag_and_drop` does not drive HTML5 drag events, so the four the controller
-  # listens for are dispatched directly.
-  def drop_the_first_card_below_the_second
-    page.execute_script(<<~JS)
-      const [first, second] = document.querySelectorAll("[data-category-row]")
-      const transfer = new DataTransfer()
-      const fire = (element, type, extra = {}) =>
-        element.dispatchEvent(new DragEvent(type, { bubbles: true, dataTransfer: transfer, ...extra }))
-
-      fire(first, "dragstart")
-      fire(second, "dragover", { clientY: Math.round(second.getBoundingClientRect().bottom) })
-      fire(second, "drop")
-      fire(first, "dragend")
-    JS
   end
 
   def rows = page.all("[data-category-row]").pluck("data-category-row")
@@ -114,18 +96,5 @@ RSpec.describe "Budget page reorder", type: :system do
       expect(page).to have_button("Move Fun Money up", disabled: false)
       expect(page).to have_button("Move Fun Money down", disabled: true)
     end
-  end
-
-  # The drag is the subject here, and nothing else on this page can be its stand-in — every other
-  # example goes through the buttons, which reach the same endpoint. The last statement is a Capybara
-  # query and not `execute_script`: a JS call as the final act leaves the session in a state the
-  # teardown does not survive here.
-  it "submits the order the cards were dropped in", :aggregate_failures, :js do
-    expect(rows).to eq(["Groceries", "Fun Money"])
-
-    drop_the_first_card_below_the_second
-
-    expect(page).to have_content("Your money fills them in that order now.")
-    expect(rows).to eq(["Fun Money", "Groceries"])
   end
 end
