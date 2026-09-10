@@ -53,4 +53,22 @@ RSpec.describe "Entries New Usual", type: :system do
       expect(page).to have_css("[data-amount-hint]", text: "Filled from the last time")
     end
   end
+
+  describe "following the form's category", :aggregate_failures, :js do
+    it "narrows the strip to the chosen category's items, and widens it again when cleared" do
+      drinks = create(:category, user: user, name: "Drinks")
+      create(:entry, item: create(:item, category: category, name: "Bread"), date: Date.current - 1)
+      create(:entry, item: create(:item, category: drinks, name: "Tea"), date: Date.current - 1)
+
+      visit new_entry_path
+      expect(page).to have_css("[data-usual-item='Bread']")
+      expect(page).to have_css("[data-usual-item='Tea']")
+
+      find("#category_id-ts-control").find(:xpath, "..").click
+      find("#category_id-ts-dropdown .option", text: "Drinks").click
+
+      expect(page).to have_no_css("[data-usual-item='Bread']")
+      expect(page).to have_css("[data-usual-item='Tea']")
+    end
+  end
 end
