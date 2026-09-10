@@ -218,8 +218,9 @@ The views, Stimulus controllers and helpers are taken from the reference branch 
 
 - **Home**: accounts with balances and an add-account form, free to spend, this period's progress,
   the trouble strip, the give-way list, the runway.
-- **Budget** (`/budget`): the declaration form (cadence and anchor only), tiles, category rows with
-  their rules and adjustments, reorder.
+- **Budget** (`/budget`): tiles, category rows with their rules and adjustments, reorder; the
+  income tile's "change" links to Your income (`/budget/income`), which holds the period and the
+  income categories in one form.
 - **Rule form** (`/rules/new`, `/rules/:id/edit`): the two schedules, the keeps checkbox, the live
   preview. No suggestion chips.
 - **Sacrifice**: what would have to give when rules need more than typical income.

@@ -118,6 +118,6 @@ RSpec.describe "Budget page tiles", type: :system do
 
     click_link "Set your period"
 
-    expect(page).to have_css("[data-declaration]")
+    expect(page).to have_current_path(budget_income_path)
   end
 end

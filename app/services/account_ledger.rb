@@ -44,6 +44,10 @@ class AccountLedger
     walk_periods_back(previous_period(today), limit, first)
   end
 
+  def regular_income_within(period)
+    user_entries(Entry.incomes).where(categories: { regular: true }, date: period).sum(:amount).to_d
+  end
+
   private
 
   def measured_typical_income
@@ -92,8 +96,4 @@ class AccountLedger
   end
 
   def user_entries(scope) = scope.where(categories: { user_id: user.id })
-
-  def regular_income_within(period)
-    user_entries(Entry.incomes).where(categories: { regular: true }, date: period).sum(:amount).to_d
-  end
 end

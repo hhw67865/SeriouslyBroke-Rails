@@ -10,22 +10,6 @@ RSpec.describe "Budget page" do
     sign_in user, scope: :user
   end
 
-  it "saves a period declaration", :aggregate_failures do
-    patch budget_page_user_path, params: { user: { period_cadence: "weekly", period_anchor_date: "2026-09-04" } }
-
-    expect(response).to redirect_to(budget_page_path)
-    expect(user.reload).to be_period_weekly
-  end
-
-  it "offers scaling when the cadence changes and per-period rules exist", :aggregate_failures do
-    create(:rule, :rate, category: create(:category, user: user))
-
-    patch budget_page_user_path, params: { user: { period_cadence: "monthly", period_anchor_date: "2026-09-04" } }
-
-    expect(response).to have_http_status(:unprocessable_content)
-    expect(response.body).to include("Scale them")
-  end
-
   it "reorders the ruled categories", :aggregate_failures do
     a = create(:category, user: user, name: "A", priority: 0)
     b = create(:category, user: user, name: "B", priority: 1)

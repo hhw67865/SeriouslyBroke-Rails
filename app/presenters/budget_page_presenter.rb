@@ -18,14 +18,12 @@ class BudgetPagePresenter
 
   TYPE_OVERVIEW_ORDER = [:bill, :usage, :choice].freeze
 
-  attr_reader :user, :today, :declaration
+  attr_reader :user, :today
 
-  def initialize(user:, today: user.today, declaration: nil, open_category_id: nil, declaring: false)
+  def initialize(user:, today: user.today, open_category_id: nil)
     @user = user
     @today = today
-    @declaration = declaration || user
     @open_category_id = open_category_id.presence&.to_s
-    @declaring = declaring
   end
 
   def tiles
@@ -43,7 +41,6 @@ class BudgetPagePresenter
   def category_rows = @category_rows ||= ruled_rows + unruled_rows
   def reorderable_rows = @reorderable_rows ||= category_rows.select(&:reorderable?)
   def open?(category) = @open_category_id.present? && @open_category_id == category.id.to_s
-  def declaring? = @declaring || declaration.errors.any?
   def no_categories? = category_rows.empty?
 
   def type_overview
@@ -63,12 +60,6 @@ class BudgetPagePresenter
     return @typical_income if defined?(@typical_income)
 
     @typical_income = claim_ledger.account_ledger.typical_income
-  end
-
-  def income_categories
-    return @income_categories if defined?(@income_categories)
-
-    @income_categories = user.categories.incomes.order(:name).to_a
   end
 
   def leftover = typical_income && (typical_income - rules_need)

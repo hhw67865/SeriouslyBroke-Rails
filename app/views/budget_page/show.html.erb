@@ -1,29 +1,11 @@
 <% content_for :title, "Budget" %>
 
 <%# Three tiles and one list: a row per expense category, ruled ones in priority order and
-    rule-less ones after. The declaration form sits behind the income tile's "change". %>
+    rule-less ones after. The period and the income categories live on their own page. %>
 <%= page_header(title: "Budget", subtitle: "The rules that claim your money") %>
 
 <div class="space-y-6">
-  <%# Off an ivar rather than the presenter: the presenter is this page's reading of what IS, and
-      this is a submission that may never become one. %>
-  <%= render "budget_page/cadence_confirm", change: @cadence_change if @cadence_change %>
-
   <%= render "budget_page/tiles", presenter: @presenter %>
-
-  <%# The form, only when asked for — or when a submission was refused, in which case it is holding
-      what the user typed and the errors, and hiding it would throw both away. %>
-  <% if @presenter.declaring? %>
-    <section class="bg-white border border-gray-200 rounded p-4 sm:px-6 sm:py-5" data-declaration>
-      <h2 class="text-sm font-semibold text-gray-900 mb-4">Your period</h2>
-      <%= render "budget_page/declaration_form", presenter: @presenter %>
-    </section>
-
-    <section class="bg-white border border-gray-200 rounded p-4 sm:px-6 sm:py-5" data-income-categories-section>
-      <h2 class="text-sm font-semibold text-gray-900 mb-4">Your income</h2>
-      <%= render "budget_page/income_categories", presenter: @presenter %>
-    </section>
-  <% end %>
 
   <% if @presenter.no_categories? %>
     <%= render "budget_page/empty" %>

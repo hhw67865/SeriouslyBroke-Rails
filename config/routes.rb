@@ -42,9 +42,9 @@ Rails.application.routes.draw do
   end
 
   get "budget" => "budget_page#show", as: :budget_page
-  patch "budget/user" => "budget_page#update", as: :budget_page_user
   patch "budget/reorder" => "budget_page#reorder", as: :budget_page_reorder
-  patch "budget/income" => "budget_page#income", as: :budget_page_income
+  get "budget/income" => "budget_income#show", as: :budget_income
+  patch "budget/income" => "budget_income#update"
   resources :adjustments, only: [:create, :destroy]
   get "sacrifice" => "sacrifices#show"
 
