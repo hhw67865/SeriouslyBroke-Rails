@@ -33,22 +33,22 @@ module Dashboard
 
     # === Totals (unruled lane — spending no rule claims money for) ===
 
-    def total_buffer_expenses
-      @total_buffer_expenses ||= buffer_expenses_scope.where(date: period_range).sum(:amount)
+    def total_unruled_expenses
+      @total_unruled_expenses ||= unruled_expenses_scope.where(date: period_range).sum(:amount)
     end
 
-    def total_tracked_buffer_expenses
-      @total_tracked_buffer_expenses ||= tracked_buffer_expenses_scope.where(date: period_range).sum(:amount)
+    def total_tracked_unruled_expenses
+      @total_tracked_unruled_expenses ||= tracked_unruled_expenses_scope.where(date: period_range).sum(:amount)
     end
 
     # === Totals (ruled lane — spending a rule claimed before it happened) ===
 
-    def total_envelope_expenses
-      @total_envelope_expenses ||= envelope_expenses_scope.where(date: period_range).sum(:amount)
+    def total_ruled_expenses
+      @total_ruled_expenses ||= ruled_expenses_scope.where(date: period_range).sum(:amount)
     end
 
-    def total_tracked_envelope_expenses
-      @total_tracked_envelope_expenses ||= tracked_envelope_expenses_scope.where(date: period_range).sum(:amount)
+    def total_tracked_ruled_expenses
+      @total_tracked_ruled_expenses ||= tracked_ruled_expenses_scope.where(date: period_range).sum(:amount)
     end
 
     # === Category breakdowns ===
@@ -73,31 +73,31 @@ module Dashboard
       @user.entries.expenses.tracked
     end
 
-    def buffer_expenses_scope
+    def unruled_expenses_scope
       @parent.unruled_expenses
     end
 
-    def tracked_buffer_expenses_scope
+    def tracked_unruled_expenses_scope
       @parent.unruled_expenses.tracked
     end
 
-    def envelope_expenses_scope
+    def ruled_expenses_scope
       @parent.ruled_expenses
     end
 
-    def tracked_envelope_expenses_scope
+    def tracked_ruled_expenses_scope
       @parent.ruled_expenses.tracked
     end
 
     def compute_expenses_chart_data
-      return [] if total_buffer_expenses.zero?
+      return [] if total_unruled_expenses.zero?
 
       @parent.ytd? ? ytd_expenses_data : monthly_expenses_data
     end
 
     def ytd_expenses_data
-      series = [{ name: "Tracked", data: monthly_running_total(tracked_buffer_expenses_scope) }]
-      series << { name: "Total", data: monthly_running_total(buffer_expenses_scope) } if @parent.show_total?
+      series = [{ name: "Tracked", data: monthly_running_total(tracked_unruled_expenses_scope) }]
+      series << { name: "Total", data: monthly_running_total(unruled_expenses_scope) } if @parent.show_total?
       series
     end
 
@@ -107,10 +107,10 @@ module Dashboard
     end
 
     def monthly_expenses_data
-      tracked = tracked_buffer_expenses_scope.group_by_day(:date, range: period_range, default_value: 0).sum(:amount)
+      tracked = tracked_unruled_expenses_scope.group_by_day(:date, range: period_range, default_value: 0).sum(:amount)
       series = [{ name: "Tracked", data: calculate_running_total(tracked) }]
       if @parent.show_total?
-        total = buffer_expenses_scope.group_by_day(:date, range: period_range, default_value: 0).sum(:amount)
+        total = unruled_expenses_scope.group_by_day(:date, range: period_range, default_value: 0).sum(:amount)
         series << { name: "Total", data: calculate_running_total(total) }
       end
       series

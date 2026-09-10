@@ -57,7 +57,7 @@ RSpec.describe "Categories Show - Content & Actions", type: :system do
       expect(page).to have_content("Summary")
       within("[data-holdings-card]") do
         expect(page).to have_css("h2", exact_text: "Target")
-        expect(page).to have_no_content("Envelope")
+        expect(page).to have_no_css("h2", exact_text: "Rules")
         expect(page).to have_no_content("Goal")
       end
     end

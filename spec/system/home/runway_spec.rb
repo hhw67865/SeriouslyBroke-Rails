@@ -29,7 +29,7 @@ RSpec.describe "Home runway", type: :system do
     )
   end
 
-  def envelope(name, rate:)
+  def rule_for(name, rate:)
     create(
       :rule,
       :rate,
@@ -81,7 +81,7 @@ RSpec.describe "Home runway", type: :system do
   # A date past the period's close and a rule with no date at all are both off the rail: the runway
   # is about the days money is needed on before this period ends.
   it "leaves off a date past the close and a rule with no date at all", :aggregate_failures do
-    envelope("Groceries", rate: 200)
+    rule_for("Groceries", rate: 200)
     later = bill("Insurance", amount: 400, due: Date.new(2026, 10, 5))
 
     read_home
@@ -91,7 +91,7 @@ RSpec.describe "Home runway", type: :system do
   end
 
   it "says what a day may cost while free is above zero" do
-    envelope("Groceries", rate: 400)
+    rule_for("Groceries", rate: 400)
 
     read_home
 
@@ -99,7 +99,7 @@ RSpec.describe "Home runway", type: :system do
   end
 
   it "says what a day must come down by while free is under" do
-    envelope("Rent", rate: 1_200)
+    rule_for("Rent", rate: 1_200)
 
     read_home
 

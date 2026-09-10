@@ -220,12 +220,12 @@ RSpec.describe "Categories New - Form", type: :system do
     end
 
     it "creates a category nothing claims when the boxes are left alone", :aggregate_failures do
-      fill_in "Name", with: "Buffer Spending"
+      fill_in "Name", with: "Spare Spending"
       find("label", text: "Expense").click
       click_button "Create Category"
 
       expect(page).to have_content("Category was successfully created")
-      category = Category.find_by(name: "Buffer Spending")
+      category = Category.find_by(name: "Spare Spending")
       expect(category).not_to be_ruled
       expect(category.rules).to be_empty
     end

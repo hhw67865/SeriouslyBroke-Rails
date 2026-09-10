@@ -14,7 +14,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
     let!(:dining) { create(:category, :expense, user: user, name: "Dining") }
     let!(:dining_item) { create(:item, category: dining, name: "Restaurants") }
 
-    # No rule speaks for either category, so both lanes' figures land in the unbudgeted cards. The
+    # No rule speaks for either category, so both lanes' figures land in the unruled cards. The
     # figures themselves are entry sums, which is what this file is about.
     before do
       create(:entry, item: groceries_item, amount: 300.00, date: base_date + 1.day)
@@ -24,16 +24,16 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
     it "shows all expenses as tracked by default" do
       visit reports_path(tab: "expenses")
 
-      within_stat_card("Tracked Unbudgeted Spending") { expect(page).to have_content("$450.00") }
-      within_stat_card("Total Unbudgeted Spending") { expect(page).to have_content("$450.00") }
+      within_stat_card("Tracked Unruled Spending") { expect(page).to have_content("$450.00") }
+      within_stat_card("Total Unruled Spending") { expect(page).to have_content("$450.00") }
     end
 
     it "reduces the tracked total when a category is untracked" do
       dining.update!(tracked: false)
       visit reports_path(tab: "expenses")
 
-      within_stat_card("Tracked Unbudgeted Spending") { expect(page).to have_content("$300.00") }
-      within_stat_card("Total Unbudgeted Spending") { expect(page).to have_content("$450.00") }
+      within_stat_card("Tracked Unruled Spending") { expect(page).to have_content("$300.00") }
+      within_stat_card("Total Unruled Spending") { expect(page).to have_content("$450.00") }
     end
 
     it "shows untracked category separately in breakdown" do
@@ -62,8 +62,8 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
       apply_tracked
 
       expect(page).to have_content("$300.00") # wait for page reload
-      within_stat_card("Tracked Unbudgeted Spending") { expect(page).to have_content("$300.00") }
-      within_stat_card("Total Unbudgeted Spending") { expect(page).to have_content("$450.00") }
+      within_stat_card("Tracked Unruled Spending") { expect(page).to have_content("$300.00") }
+      within_stat_card("Total Unruled Spending") { expect(page).to have_content("$450.00") }
     end
 
     it "applies multiple toggle changes in a single submission" do
@@ -74,8 +74,8 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
       apply_tracked
 
       expect(page).to have_content("$0.00")
-      within_stat_card("Tracked Unbudgeted Spending") { expect(page).to have_content("$0.00") }
-      within_stat_card("Total Unbudgeted Spending") { expect(page).to have_content("$450.00") }
+      within_stat_card("Tracked Unruled Spending") { expect(page).to have_content("$0.00") }
+      within_stat_card("Total Unruled Spending") { expect(page).to have_content("$450.00") }
       expect(groceries.reload).not_to be_tracked
       expect(dining.reload).not_to be_tracked
     end

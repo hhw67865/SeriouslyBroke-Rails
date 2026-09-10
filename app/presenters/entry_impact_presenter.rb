@@ -25,7 +25,7 @@ class EntryImpactPresenter
   end
 
   def noun
-    return "envelope" unless fund?
+    return "rules" unless fund?
 
     dated_rules.any?(&:bill?) ? "bill" : "target"
   end

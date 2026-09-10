@@ -1,8 +1,8 @@
 <% cache [current_user, selected_date, current_period, :all_flow] do %>
 <% income = @presenter.total_tracked_income %>
 <% expenses = @presenter.total_tracked_expenses %>
-<% unruled_spending = @presenter.total_tracked_buffer_expenses %>
-<% ruled_spending = @presenter.total_tracked_envelope_expenses %>
+<% unruled_spending = @presenter.total_tracked_unruled_expenses %>
+<% ruled_spending = @presenter.total_tracked_ruled_expenses %>
 <% remaining = @presenter.net_amount %>
 
 <div class="mb-8">
@@ -47,11 +47,11 @@
       <div class="flex flex-wrap gap-4 mt-3 text-xs">
         <div class="flex items-center gap-1.5">
           <span class="w-3 h-3 rounded-sm bg-terracotta"></span>
-          <span class="text-gray-600">Unbudgeted <%= number_to_currency(unruled_spending) %></span>
+          <span class="text-gray-600">Unruled <%= number_to_currency(unruled_spending) %></span>
         </div>
         <div class="flex items-center gap-1.5">
           <span class="w-3 h-3 rounded-sm bg-dusty-teal"></span>
-          <span class="text-gray-600">Out of an Envelope <%= number_to_currency(ruled_spending) %></span>
+          <span class="text-gray-600">Ruled <%= number_to_currency(ruled_spending) %></span>
         </div>
         <div class="flex items-center gap-1.5">
           <span class="w-3 h-3 rounded-sm bg-brand-dark"></span>

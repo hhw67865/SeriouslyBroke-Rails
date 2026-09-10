@@ -17,7 +17,7 @@ RSpec.describe "Home money row", type: :system do
     sign_in user, scope: :user
   end
 
-  def envelope(name, rate:)
+  def rule_for(name, rate:)
     create(
       :rule,
       :rate,
@@ -39,7 +39,7 @@ RSpec.describe "Home money row", type: :system do
   # figures are planted rather than derived, so a card that stopped subtracting would fail rather
   # than agree with itself.
   it "answers what is in checking and what of it is free", :aggregate_failures do
-    envelope("Groceries", rate: 400)
+    rule_for("Groceries", rate: 400)
 
     read_home
 
@@ -49,14 +49,14 @@ RSpec.describe "Home money row", type: :system do
     # The words this row does not say. Case-insensitive, because a substring match would pass over
     # the app's own capitalised spelling — which is the spelling that could slip in.
     within("[data-money]") do
-      expect(page).to have_no_content(/available|unclaimed|buffer|set aside|spoken for/i)
+      expect(page).to have_no_content(/available|unclaimed|left to spend|set aside|spoken for/i)
     end
   end
 
   # The bar is the subline as a picture: two segments of the pot off ONE figure, so they cannot add
   # up to something that is not the whole.
   it "draws what is claimed as a fraction of what is in checking" do
-    envelope("Groceries", rate: 400)
+    rule_for("Groceries", rate: 400)
 
     read_home
 
@@ -88,7 +88,7 @@ RSpec.describe "Home money row", type: :system do
   # Both halves of the negative arm, on two fixtures: money elsewhere is a thing to move, and a
   # single-account user is simply past what they had.
   it "is honest when the rules ask for more than there is", :aggregate_failures do
-    envelope("Rent", rate: 1_200)
+    rule_for("Rent", rate: 1_200)
     elsewhere("Ally", 500)
 
     read_home
@@ -100,7 +100,7 @@ RSpec.describe "Home money row", type: :system do
   end
 
   it "tells a single-account user they have spent past what they had", :aggregate_failures do
-    envelope("Rent", rate: 1_200)
+    rule_for("Rent", rate: 1_200)
 
     read_home
 
@@ -137,7 +137,7 @@ RSpec.describe "Home money row", type: :system do
     # Selenium's own geometry rather than a trailing `evaluate_script`, which leaves the session in
     # a state Capybara's teardown does not survive here.
     it "spans the free tile and halves the other two inside a 375px viewport", :aggregate_failures do
-      envelope("Groceries", rate: 400)
+      rule_for("Groceries", rate: 400)
       elsewhere("Vanguard", 100)
 
       read_home

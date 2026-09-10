@@ -21,7 +21,7 @@
          data-balance="<%= impact.balance_param %>"
          data-denominator="<%= impact.denominator_param %>">
       <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <p class="text-sm font-medium text-gray-900" data-figure="envelope">
+        <p class="text-sm font-medium text-gray-900" data-figure="title">
           <%= impact.category.name %> <%= impact.noun %>
         </p>
         <%# Omitted outright for a user who has declared no period: a date invented from the
@@ -39,7 +39,7 @@
         <span class="font-semibold <%= "text-status-danger" if impact.overdrawn? %>"
               data-app--entry--impact-target="after"
               data-figure="balance-after"><%= number_to_currency(impact.balance_after) %></span>
-        <%# A fund says what it is filling; an envelope says what is left in it. A fund beside a
+        <%# A fund says what it is filling; a rate rule says what is left in it. A fund beside a
             sibling rule withholds its target, because the figure is the whole category's claim. %>
         <% if impact.fund_target.present? %>
           <span class="text-sm text-gray-600" data-figure="target">of <%= number_to_currency(impact.fund_target) %></span>
@@ -64,10 +64,10 @@
       <%# Both states are rendered by the server and the browser only toggles `hidden`, so nothing
           blocks: the button below stays live and changes only its words. %>
       <p class="mt-2 text-sm text-status-danger"
-         data-app--entry--impact-target="buffer"
-         data-figure="buffer"
+         data-app--entry--impact-target="overdraw"
+         data-figure="overdraw"
          <%= "hidden" unless impact.overdrawn? %>>
-        This <%= impact.noun %> goes over — the difference comes straight out of what's free.
+        This goes over its <%= impact.noun %> — the difference comes straight out of what's free.
       </p>
     </div>
   <% end %>

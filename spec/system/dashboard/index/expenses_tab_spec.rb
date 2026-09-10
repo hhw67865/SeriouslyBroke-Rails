@@ -2,9 +2,9 @@
 
 require "rails_helper"
 
-# The Expenses tab's two sections are the two lanes spending comes out of: "Unbudgeted" (a category
-# no rule claims money for) and "Out of an Envelope" (a category a rule speaks for). The predicate
-# is `Category#ruled?`.
+# The Expenses tab's two sections are the two lanes spending comes out of: "Unruled spending" (a
+# category no rule claims money for) and "Ruled spending" (a category a rule speaks for). The
+# predicate is `Category#ruled?`.
 RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
   let!(:user) { create(:user) }
   let(:base_date) { Date.current.beginning_of_month }
@@ -15,8 +15,8 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
     before { visit reports_path(tab: "expenses") }
 
     it "shows empty messages for both lanes" do
-      expect(page).to have_content("No unbudgeted spending")
-      expect(page).to have_content("No envelope spending")
+      expect(page).to have_content("No unruled spending")
+      expect(page).to have_content("No ruled spending")
     end
   end
 
@@ -34,16 +34,16 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
       visit reports_path(tab: "expenses")
     end
 
-    it "shows the unbudgeted section with only the categories no rule speaks for" do
-      within unbudgeted_section do
+    it "shows the unruled section with only the categories no rule speaks for" do
+      within unruled_section do
         expect(page).to have_link("Groceries")
         expect(page).to have_content("$150.00")
         expect(page).not_to have_link("Car Repair")
       end
     end
 
-    it "shows the envelope section with only the categories a rule claims for" do
-      within envelope_section do
+    it "shows the ruled section with only the categories a rule claims for" do
+      within ruled_section do
         expect(page).to have_link("Car Repair")
         expect(page).to have_content("$200.00")
         expect(page).not_to have_link("Groceries")
@@ -51,10 +51,10 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
     end
 
     it "keeps each lane's spending out of the other lane's totals" do
-      within_stat_card("Tracked Unbudgeted Spending") { expect(page).to have_content("$150.00") }
-      within_stat_card("Total Unbudgeted Spending") { expect(page).to have_content("$150.00") }
-      within_stat_card("Tracked Envelope Spending") { expect(page).to have_content("$200.00") }
-      within_stat_card("Total Envelope Spending") { expect(page).to have_content("$200.00") }
+      within_stat_card("Tracked Unruled Spending") { expect(page).to have_content("$150.00") }
+      within_stat_card("Total Unruled Spending") { expect(page).to have_content("$150.00") }
+      within_stat_card("Tracked Ruled Spending") { expect(page).to have_content("$200.00") }
+      within_stat_card("Total Ruled Spending") { expect(page).to have_content("$200.00") }
     end
 
     # The other direction: the cap-era vocabulary is gone from the page, headings included.
@@ -99,16 +99,16 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
       visit reports_path(tab: "expenses")
     end
 
-    it "shows tracked and total unbudgeted stats with category links" do
-      within_stat_card("Tracked Unbudgeted Spending") { expect(page).to have_content("$300.00") }
-      within_stat_card("Total Unbudgeted Spending") { expect(page).to have_content("$450.00") }
+    it "shows tracked and total unruled stats with category links" do
+      within_stat_card("Tracked Unruled Spending") { expect(page).to have_content("$300.00") }
+      within_stat_card("Total Unruled Spending") { expect(page).to have_content("$450.00") }
       expect(page).to have_css("p.uppercase", text: /untracked/i)
       expect(page).to have_link("Groceries", href: category_path(groceries))
       expect(page).to have_link("Dining", href: category_path(dining))
     end
   end
 
-  describe "rows in the unbudgeted section", :aggregate_failures do
+  describe "rows in the unruled section", :aggregate_failures do
     let!(:groceries) { create(:category, :expense, user: user, name: "Groceries") }
     let!(:groceries_item) { create(:item, category: groceries, name: "Weekly Shopping") }
     let!(:utilities) { create(:category, :expense, user: user, name: "Utilities") }
@@ -124,7 +124,7 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
     # A name and a figure, exactly — no cap beside the figure, no "over" clause, and no column
     # total under the list: the stat card above it is the one reader of that figure.
     it "prints a name and a figure per row, highest first, and closes the list there" do
-      within unbudgeted_section do
+      within unruled_section do
         rows = all("div.space-y-3 > div").map(&:text)
         expect(rows).to eq(["Groceries $650.00", "Utilities $80.00"])
         expect(page).to have_no_css("div.border-t")
@@ -143,9 +143,9 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
     end
 
     it "carries the YTD prefix into the chart heading and the stat cards", :aggregate_failures do
-      expect(page).to have_content("YTD Unbudgeted Spending")
-      within_stat_card("YTD Tracked Unbudgeted Spending") { expect(page).to have_content("$220.00") }
-      within_stat_card("YTD Total Unbudgeted Spending") { expect(page).to have_content("$220.00") }
+      expect(page).to have_content("YTD Unruled Spending")
+      within_stat_card("YTD Tracked Unruled Spending") { expect(page).to have_content("$220.00") }
+      within_stat_card("YTD Total Unruled Spending") { expect(page).to have_content("$220.00") }
     end
 
     it "shows no YTD Budget card" do
@@ -155,12 +155,12 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
 
   private
 
-  def unbudgeted_section
-    find("h2", text: "Unbudgeted").ancestor("section")
+  def unruled_section
+    find("h2", text: "Unruled spending").ancestor("section")
   end
 
-  def envelope_section
-    find("h2", text: "Out of an Envelope").ancestor("section")
+  def ruled_section
+    find("h2", text: "Ruled spending", exact_text: true).ancestor("section")
   end
 
   def within_stat_card(label, &)

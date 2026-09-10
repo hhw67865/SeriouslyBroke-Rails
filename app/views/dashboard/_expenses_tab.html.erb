@@ -1,17 +1,17 @@
 <% show_total = params[:show_total] == "true" %>
 <% cache [current_user, selected_date, current_period, show_total, :expenses] do %>
 
-<%# === UNBUDGETED === %>
+<%# === UNRULED === %>
 <section class="mb-12">
   <div class="border-l-4 border-terracotta pl-4 mb-6">
-    <h2 class="text-xl font-semibold text-gray-900">Unbudgeted</h2>
-    <p class="text-sm text-gray-500">Spending from categories with no envelope — nothing reserved this money before you spent it</p>
+    <h2 class="text-xl font-semibold text-gray-900">Unruled spending</h2>
+    <p class="text-sm text-gray-500">Spending no rule claims — it comes straight out of what's free.</p>
   </div>
 
   <%# Running-total chart %>
   <div class="mb-8">
     <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
-      <h3 class="text-lg font-medium text-gray-900"><%= @presenter.ytd? ? "YTD Unbudgeted Spending" : "Unbudgeted Spending" %></h3>
+      <h3 class="text-lg font-medium text-gray-900"><%= @presenter.ytd? ? "YTD Unruled Spending" : "Unruled Spending" %></h3>
       <%= link_to reports_path(tab: @tab, period: params[:period], show_total: show_total ? "false" : "true"),
           class: "inline-flex items-center gap-2 px-3 py-1 text-xs font-medium rounded border #{show_total ? "border-brand bg-brand/10 text-brand-dark" : "border-gray-300 bg-white text-gray-500 hover:bg-gray-50"} transition" do %>
         <%= heroicon show_total ? "eye-slash" : "eye", options: { class: "h-3.5 w-3.5" } %>
@@ -26,25 +26,25 @@
             prefix: "$ ",
             colors: @presenter.expenses_chart_colors %>
       <% else %>
-        <p class="text-gray-500 text-center py-8">No unbudgeted spending <%= period_time_label %></p>
+        <p class="text-gray-500 text-center py-8">No unruled spending <%= period_time_label %></p>
       <% end %>
     </div>
   </div>
 
-  <%# Unbudgeted stats %>
+  <%# Unruled stats %>
   <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
     <div class="bg-gray-50 rounded p-4">
-      <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Tracked Unbudgeted Spending" : "Tracked Unbudgeted Spending" %></p>
-      <p class="text-2xl font-semibold text-brand-dark"><%= number_to_currency(@presenter.total_tracked_buffer_expenses) %></p>
+      <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Tracked Unruled Spending" : "Tracked Unruled Spending" %></p>
+      <p class="text-2xl font-semibold text-brand-dark"><%= number_to_currency(@presenter.total_tracked_unruled_expenses) %></p>
     </div>
     <div class="bg-gray-50 rounded p-4">
-      <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Total Unbudgeted Spending" : "Total Unbudgeted Spending" %></p>
-      <p class="text-2xl font-semibold text-terracotta"><%= number_to_currency(@presenter.total_buffer_expenses) %></p>
+      <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Total Unruled Spending" : "Total Unruled Spending" %></p>
+      <p class="text-2xl font-semibold text-terracotta"><%= number_to_currency(@presenter.total_unruled_expenses) %></p>
     </div>
   </div>
 
-  <%# Unbudgeted breakdown %>
-  <% unruled_categories = @presenter.buffer_categories_breakdown %>
+  <%# Unruled breakdown %>
+  <% unruled_categories = @presenter.unruled_categories_breakdown %>
   <% if unruled_categories.any? %>
     <div class="space-y-3">
       <% unruled_categories.each do |cat| %>
@@ -55,31 +55,31 @@
       <% end %>
     </div>
   <% else %>
-    <p class="text-gray-500 text-sm">No unbudgeted spending <%= period_time_label %></p>
+    <p class="text-gray-500 text-sm">No unruled spending <%= period_time_label %></p>
   <% end %>
 </section>
 
-<%# === OUT OF AN ENVELOPE === %>
+<%# === RULED === %>
 <section class="mb-12">
   <div class="border-l-4 border-dusty-teal pl-4 mb-6">
-    <h2 class="text-xl font-semibold text-gray-900">Out of an Envelope</h2>
-    <p class="text-sm text-gray-500">Spending on categories a rule claims money for</p>
+    <h2 class="text-xl font-semibold text-gray-900">Ruled spending</h2>
+    <p class="text-sm text-gray-500">Spending a rule claims.</p>
   </div>
 
-  <%# Envelope stats %>
+  <%# Ruled stats %>
   <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
     <div class="bg-gray-50 rounded p-4">
-      <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Tracked Envelope Spending" : "Tracked Envelope Spending" %></p>
-      <p class="text-2xl font-semibold text-brand-dark"><%= number_to_currency(@presenter.total_tracked_envelope_expenses) %></p>
+      <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Tracked Ruled Spending" : "Tracked Ruled Spending" %></p>
+      <p class="text-2xl font-semibold text-brand-dark"><%= number_to_currency(@presenter.total_tracked_ruled_expenses) %></p>
     </div>
     <div class="bg-gray-50 rounded p-4">
-      <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Total Envelope Spending" : "Total Envelope Spending" %></p>
-      <p class="text-2xl font-semibold text-terracotta"><%= number_to_currency(@presenter.total_envelope_expenses) %></p>
+      <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Total Ruled Spending" : "Total Ruled Spending" %></p>
+      <p class="text-2xl font-semibold text-terracotta"><%= number_to_currency(@presenter.total_ruled_expenses) %></p>
     </div>
   </div>
 
-  <%# Envelope breakdown %>
-  <% ruled_categories = @presenter.envelope_categories_breakdown %>
+  <%# Ruled breakdown %>
+  <% ruled_categories = @presenter.ruled_categories_breakdown %>
   <% if ruled_categories.any? %>
     <div class="space-y-3">
       <% ruled_categories.each do |cat| %>
@@ -90,7 +90,7 @@
       <% end %>
     </div>
   <% else %>
-    <p class="text-gray-500 text-sm">No envelope spending <%= period_time_label %></p>
+    <p class="text-gray-500 text-sm">No ruled spending <%= period_time_label %></p>
   <% end %>
 </section>
 

@@ -23,6 +23,7 @@ RSpec.describe EntryImpactPresenter do
     create(:entry, item: create(:item, category: groceries), amount: 100, date: Date.new(2026, 9, 5))
 
     figures = impact(category: groceries, amount: "50")
+    expect(figures.noun).to eq("rules")
     expect(figures.balance).to eq(300)
     expect(figures.balance_after).to eq(250)
     expect(figures.denominator).to eq(400)

@@ -79,7 +79,7 @@ RSpec.describe Dashboard::OverviewPresenter do
       expect(presenter.savings_target(row)).to eq(5_000)
     end
 
-    # A rule whose money resets is an envelope. Kept because it is the half that stops the example
+    # A rule whose money resets is not saving toward a day. Kept because it is the half that stops the example
     # above passing against a strip that lists everything.
     it "leaves out a category whose rule resets" do
       create(:rule, :rate, category: category("Groceries"), amount: 400)

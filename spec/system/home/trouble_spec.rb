@@ -16,7 +16,7 @@ RSpec.describe "Home trouble strip", type: :system do
 
   def category(name) = create(:category, user: user, name: name)
 
-  def envelope(name, rate:, **attributes)
+  def rule_for(name, rate:, **attributes)
     create(
       :rule,
       :rate,
@@ -43,7 +43,7 @@ RSpec.describe "Home trouble strip", type: :system do
   def read_home = travel_to(today) { visit root_path }
 
   it "says nothing at all when nothing needs a human", :aggregate_failures do
-    envelope("Groceries", rate: 400)
+    rule_for("Groceries", rate: 400)
 
     read_home
 
@@ -67,7 +67,7 @@ RSpec.describe "Home trouble strip", type: :system do
   # lands the period at zero. $1,000 in, $1,100 spent on nothing any rule claims and a $50 claim
   # standing — so the shortfall outlasts the give-way list by $100.
   it "says who gives way, by how much, and what is left over", :aggregate_failures do
-    envelope("Fun", rate: 50, rule_type: :choice)
+    rule_for("Fun", rate: 50, rule_type: :choice)
     spend(category("Repairs"), 1_100, on: Date.new(2026, 9, 6))
     create(:account, user: user, name: "Ally", opening_balance: 500)
 
@@ -84,7 +84,7 @@ RSpec.describe "Home trouble strip", type: :system do
   # SPENT PAST WHAT THE RULE HAD. The excess is the pre-clamp figure: the claim itself is zero here,
   # so a figure taken from the claim would print "over by $0.00" on every overspend.
   it "names a rule spent past what it had", :aggregate_failures do
-    rule = envelope("Groceries", rate: 400)
+    rule = rule_for("Groceries", rate: 400)
     spend(rule.category, 450)
 
     read_home
@@ -122,7 +122,7 @@ RSpec.describe "Home trouble strip", type: :system do
   # A verdict about the SHAPE of the rules, which no amount of care this period can fix. Aug 21
   # opens the last complete period, so income from that day gives the ledger a period to average.
   it "offers the sacrifice door when the rules outrun typical income", :aggregate_failures do
-    envelope("Rent", rate: 5_000, rule_type: :bill)
+    rule_for("Rent", rate: 5_000, rule_type: :bill)
     create(:entry, :income, user: user, amount: 100, date: Date.new(2026, 8, 21))
 
     read_home

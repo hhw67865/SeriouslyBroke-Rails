@@ -28,20 +28,20 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
 
   # State 2 — a rate rule claims it. PLANTED: `max(0, rate + Σ adjustments − spent)` =
   # `max(0, 400 + 0 − 0)` = $400.00, which is the whole of the category's claim.
-  def envelope
+  def ruled_category
     create(:category, :expense, user: user, name: "Groceries")
       .tap { |groceries| create(:rule, :rate, category: groceries, amount: 400) }
   end
 
   # The card offers no editor of its own: what a category claims is decided by its rules, and a
   # rule is written on the Budget page.
-  it "names an envelope, prints what it claims and points at the Budget page", :aggregate_failures do
-    visit category_path(envelope)
+  it "names a ruled category, prints what it claims and points at the Budget page", :aggregate_failures do
+    visit category_path(ruled_category)
 
     expect(card["data-holdings-state"]).to eq("ruled")
     expect(find("[data-figure='claim']").text).to eq("$400.00")
     within(card) do
-      expect(page).to have_css("h2", exact_text: "Envelope")
+      expect(page).to have_css("h2", exact_text: "Rules")
       expect(page).to have_link("Rules on the Budget page", href: budget_page_path)
       expect(page).to have_css("[data-holdings-rule='Groceries']").and have_content("1 rule")
       expect(page).to have_no_content("swept").and have_no_content("available")
@@ -71,7 +71,7 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
     visit category_path(goal)
 
     within(card) { expect(page).to have_css("h2", exact_text: "Target") }
-    expect(card).to have_no_content("Envelope")
+    expect(card).to have_no_css("h2", exact_text: "Rules")
     expect(find("[data-figure='claim']").text).to eq("$500.00")
     within("[data-holdings-progress]") do
       expect(page).to have_content("25% complete")

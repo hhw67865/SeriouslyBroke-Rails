@@ -71,10 +71,10 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
 
     # The casing is load-bearing: these two labels name the same two lanes the Expenses tab heads
     # its sections with, and `have_content` is a case-sensitive substring match.
-    it "shows three legend amounts: Unbudgeted, Envelope, left over" do
+    it "shows three legend amounts: Unruled, Ruled, left over" do
       within money_flow_section do
-        expect(page).to have_content("Unbudgeted $400.00")
-        expect(page).to have_content("Out of an Envelope $200.00")
+        expect(page).to have_content("Unruled $400.00")
+        expect(page).to have_content("Ruled $200.00")
         expect(page).to have_content("Left over $2,400.00")
       end
     end

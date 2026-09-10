@@ -29,12 +29,12 @@ module Dashboard
 
     # === Expense split, by the lane the money came out of ===
 
-    def buffer_categories_breakdown
-      @buffer_categories_breakdown ||= @parent.build_category_breakdown(@parent.tracked_unruled_categories)
+    def unruled_categories_breakdown
+      @unruled_categories_breakdown ||= @parent.build_category_breakdown(@parent.tracked_unruled_categories)
     end
 
-    def envelope_categories_breakdown
-      @envelope_categories_breakdown ||= @parent.build_category_breakdown(@parent.tracked_ruled_categories)
+    def ruled_categories_breakdown
+      @ruled_categories_breakdown ||= @parent.build_category_breakdown(@parent.tracked_ruled_categories)
     end
 
     # The savings strip. Money being saved toward a day is a shape rather than a kind of category,

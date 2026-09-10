@@ -17,7 +17,7 @@ RSpec.describe "Home this period", type: :system do
 
   def category(name, **attributes) = create(:category, user: user, name: name, **attributes)
 
-  def envelope(name, rate:, **attributes)
+  def rule_for(name, rate:, **attributes)
     create(
       :rule,
       :rate,
@@ -47,7 +47,7 @@ RSpec.describe "Home this period", type: :system do
 
   # A RATE RULE'S ROW: what it has of what it allows, what shape it is, and the day it starts again.
   it "says what a rate rule has, what shape it is and when it resets", :aggregate_failures do
-    rule = envelope("Groceries", rate: 400)
+    rule = rule_for("Groceries", rate: 400)
     spend(rule.category, 300)
 
     read_home
@@ -92,7 +92,7 @@ RSpec.describe "Home this period", type: :system do
   # SPENDING PAST THE RATE tints the block's header and reddens the figure — the section's own
   # signal, inches from the strip that says the same thing in a sentence.
   it "tints a block whose rule has been overspent", :aggregate_failures do
-    rule = envelope("Groceries", rate: 400)
+    rule = rule_for("Groceries", rate: 400)
     spend(rule.category, 450)
 
     read_home
@@ -104,8 +104,8 @@ RSpec.describe "Home this period", type: :system do
   # THE BLOCKS ARE IN GIVE-WAY ORDER, AND IT IS THE ONLY SORT ON THE SCREEN: a choice gives way
   # before a bill whatever the categories' priorities say.
   it "puts the block that gives way first at the top", :aggregate_failures do
-    envelope("Rent", rate: 900, rule_type: :bill)
-    envelope("Fun", rate: 300, rule_type: :choice)
+    rule_for("Rent", rate: 900, rule_type: :bill)
+    rule_for("Fun", rate: 300, rule_type: :choice)
 
     read_home
 

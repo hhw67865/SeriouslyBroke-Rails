@@ -58,17 +58,17 @@ RSpec.describe "Entry impact card", :js, type: :system do
   # A biweekly period anchored on today closes on the thirteenth day after it.
   def period_end_label = (Date.current + 13).strftime("%b %-d")
 
-  describe "an envelope the spending fits inside" do
+  describe "a ruled category the spending fits inside" do
     before do
       visit new_entry_path
       select_category("Groceries")
     end
 
-    it "opens on the envelope, its balance and the day the period runs to", :aggregate_failures do
-      expect(page).to have_css("[data-impact-card='envelope']")
+    it "opens on the rules, their balance and the day the period runs to", :aggregate_failures do
+      expect(page).to have_css("[data-impact-card='rules']")
 
       within(card) do
-        expect(figure("envelope")).to have_text("Groceries envelope")
+        expect(figure("title")).to have_text("Groceries rules")
         expect(figure("balance")).to have_text("$240.00")
         expect(figure("balance-after")).to have_text("$240.00")
         expect(figure("period-end")).to have_text("until #{period_end_label}")
@@ -76,7 +76,7 @@ RSpec.describe "Entry impact card", :js, type: :system do
     end
 
     # 240 of a 300-a-period claim.
-    it "draws the bar at what is left over what the envelope claims from a period" do
+    it "draws the bar at what is left over what the rules claim from a period" do
       expect(page).to have_css("[data-figure='bar'][style*='width: 80%']")
     end
 
@@ -121,7 +121,7 @@ RSpec.describe "Entry impact card", :js, type: :system do
       within(card) { expect(figure("balance-after")).to have_text("$185.00") }
     end
 
-    it "gives the whole envelope back when the amount is cleared", :aggregate_failures do
+    it "gives the whole claim back when the amount is cleared", :aggregate_failures do
       fill_in "Amount", with: "55"
       within(card) { expect(figure("balance-after")).to have_text("$185.00") }
 
@@ -131,7 +131,7 @@ RSpec.describe "Entry impact card", :js, type: :system do
       expect(page).to have_css("[data-figure='bar'][style*='width: 80%']")
     end
 
-    it "keeps the ordinary submit label and stays quiet about a buffer", :aggregate_failures do
+    it "keeps the ordinary submit label and stays quiet about free money", :aggregate_failures do
       fill_in "Amount", with: "55"
 
       within(card) { expect(figure("balance-after")).to have_text("$185.00") }
@@ -151,18 +151,18 @@ RSpec.describe "Entry impact card", :js, type: :system do
     end
   end
 
-  describe "overdrawing the envelope" do
+  describe "overdrawing the rules" do
     before do
       visit new_entry_path
       select_category("Groceries")
     end
 
-    it "shows the envelope going negative, says free money covers it, and does not block", :aggregate_failures do
+    it "shows the claim going negative, says free money covers it, and does not block", :aggregate_failures do
       fill_in "Amount", with: "300"
 
       within(card) do
         expect(figure("balance-after")).to have_text("-$60.00")
-        expect(figure("buffer")).to have_text("This envelope goes over — the difference comes straight out of what's free.")
+        expect(figure("overdraw")).to have_text("This goes over its rules — the difference comes straight out of what's free.")
       end
       expect(page).to have_button("Save anyway")
       expect(page).not_to have_button("Create Entry")
@@ -171,7 +171,7 @@ RSpec.describe "Entry impact card", :js, type: :system do
       expect(page).to have_css("[data-figure='bar'][style*='width: 0%']", visible: :all)
     end
 
-    it "puts everything back when the amount comes back inside the envelope", :aggregate_failures do
+    it "puts everything back when the amount comes back inside the claim", :aggregate_failures do
       fill_in "Amount", with: "300"
       expect(page).to have_button("Save anyway")
 
@@ -183,9 +183,9 @@ RSpec.describe "Entry impact card", :js, type: :system do
       expect(page).not_to have_text("comes straight out of what's free")
     end
 
-    # Spending an envelope to the exact penny is level, not negative, and
+    # Spending a claim to the exact penny is level, not negative, and
     # `Intl.NumberFormat().format(-0)` is "-$0.00".
-    it "reads level, not negative, when the envelope is spent to the penny", :aggregate_failures do
+    it "reads level, not negative, when the claim is spent to the penny", :aggregate_failures do
       fill_in "Amount", with: "240"
 
       within(card) do
@@ -212,7 +212,7 @@ RSpec.describe "Entry impact card", :js, type: :system do
   end
 
   # A $1,500 balance reaches the browser as `data-balance`, and `parseFloat("1,500.00")` is 1.5 —
-  # an envelope offering a dollar fifty. The delimiter is the defect this example would catch.
+  # a claim offering a dollar fifty. The delimiter is the defect this example would catch.
   describe "a category with four figures in it" do
     before do
       rent = create(:category, :expense, user: user, name: "Rent")
@@ -249,8 +249,8 @@ RSpec.describe "Entry impact card", :js, type: :system do
       end
     end
 
-    it "shows no envelope figures at all", :aggregate_failures do
-      expect(page).not_to have_css("[data-impact-card='envelope']")
+    it "shows no rule figures at all", :aggregate_failures do
+      expect(page).not_to have_css("[data-impact-card='rules']")
       expect(page).not_to have_css("[data-figure='balance']")
       expect(page).not_to have_css("[data-figure='bar']")
     end
@@ -258,17 +258,17 @@ RSpec.describe "Entry impact card", :js, type: :system do
     it "cannot be overdrawn, whatever is typed", :aggregate_failures do
       fill_in "Amount", with: "99999"
 
-      expect(page).to have_no_css("[data-figure='buffer']", visible: :all)
+      expect(page).to have_no_css("[data-figure='overdraw']", visible: :all)
       expect(page).to have_button("Create Entry")
       expect(page).not_to have_button("Save anyway")
     end
 
-    # The other direction on the same screen: give a category one rule and it is an envelope with a
+    # The other direction on the same screen: give a category one rule and it gets a claim with a
     # figure and a bar. The pair is what makes this a pin on the rule rather than on the copy.
-    it "unlike a category with a rule, which gets the envelope, the figure and the bar", :aggregate_failures do
+    it "unlike a category with a rule, which gets the claim, the figure and the bar", :aggregate_failures do
       select_category("Groceries")
 
-      expect(page).to have_css("[data-impact-card='envelope']")
+      expect(page).to have_css("[data-impact-card='rules']")
       within(card) { expect(figure("balance")).to have_text("$240.00") }
       expect(page).to have_css("[data-figure='bar']", visible: :all)
     end
@@ -284,23 +284,23 @@ RSpec.describe "Entry impact card", :js, type: :system do
     it "gets no card at all, of either kind", :aggregate_failures do
       expect(page).to have_select("category_id", selected: "Paycheck")
       expect(page).not_to have_css("[data-impact-card]")
-      expect(page).not_to have_text("No envelope")
+      expect(page).not_to have_text("No rules")
     end
   end
 
   describe "changing the category" do
     before { visit new_entry_path }
 
-    it "re-renders the card for whichever envelope the new category reaches", :aggregate_failures do
+    it "re-renders the card for whichever rules the new category reaches", :aggregate_failures do
       select_category("Groceries")
-      within(card) { expect(figure("envelope")).to have_text("Groceries envelope") }
+      within(card) { expect(figure("title")).to have_text("Groceries rules") }
 
       select_category("Shopping")
       expect(page).to have_css("[data-impact-card='unbudgeted']")
-      expect(page).not_to have_css("[data-impact-card='envelope']")
+      expect(page).not_to have_css("[data-impact-card='rules']")
 
       select_category("Groceries")
-      expect(page).to have_css("[data-impact-card='envelope']")
+      expect(page).to have_css("[data-impact-card='rules']")
       within(card) { expect(figure("balance")).to have_text("$240.00") }
     end
 
@@ -317,7 +317,7 @@ RSpec.describe "Entry impact card", :js, type: :system do
       expect(page).to have_field("Amount", with: "55")
     end
 
-    it "drops the overdraw label with the envelope it belonged to", :aggregate_failures do
+    it "drops the overdraw label with the claim it belonged to", :aggregate_failures do
       select_category("Groceries")
       fill_in "Amount", with: "300"
       expect(page).to have_button("Save anyway")
@@ -348,7 +348,7 @@ RSpec.describe "Entry impact card", :js, type: :system do
       fill_in "Amount", with: "150"
 
       within(card) do
-        expect(figure("envelope")).to have_text("Vacation target")
+        expect(figure("title")).to have_text("Vacation target")
         expect(figure("balance")).to have_text("$600.00")
         expect(figure("balance-after")).to have_text("$450.00")
         expect(figure("target")).to have_text("of $2,400.00")
@@ -412,7 +412,7 @@ RSpec.describe "Entry impact card", :js, type: :system do
       fill_in "Amount", with: "150"
 
       within(card) do
-        expect(figure("envelope")).to have_text("Car bill")
+        expect(figure("title")).to have_text("Car bill")
         expect(figure("balance")).to have_text("$1,200.00")
         expect(figure("balance-after")).to have_text("$1,050.00")
         expect(figure("target")).to have_text("built up")
@@ -438,7 +438,7 @@ RSpec.describe "Entry impact card", :js, type: :system do
       fill_in "Amount", with: "150"
 
       within(card) do
-        expect(figure("envelope")).to have_text("House Deposit target")
+        expect(figure("title")).to have_text("House Deposit target")
         expect(figure("balance-after")).to have_text("$450.00")
         expect(figure("target")).to have_text("of $600.00")
         expect(page).to have_no_content("left")
@@ -456,7 +456,7 @@ RSpec.describe "Entry impact card", :js, type: :system do
     # The claim is $195 — a $300 rate less the fixture's $60 and this $45. The card says $240,
     # because the question on the screen is what this entry costs, not what the last one did.
     it "opens on the world without this entry, then puts it back", :aggregate_failures do
-      expect(page).to have_css("[data-impact-card='envelope']")
+      expect(page).to have_css("[data-impact-card='rules']")
 
       expect(groceries.rules.sole.claim_calculator.claim).to eq(BigDecimal("195"))
       within(card) do
@@ -473,7 +473,7 @@ RSpec.describe "Entry impact card", :js, type: :system do
       within(card) { expect(figure("balance-after")).to have_text("$230.00") }
     end
 
-    # The figures differ from the create case on the same envelope and the same amount, which is
+    # The figures differ from the create case on the same category and the same amount, which is
     # the whole of what the exclusion is for.
     it "differs from logging the same amount as a new entry", :aggregate_failures do
       visit new_entry_path
@@ -494,7 +494,7 @@ RSpec.describe "Entry impact card", :js, type: :system do
       select_category("Dining Out")
 
       within(card) do
-        expect(figure("envelope")).to have_text("Dining Out envelope")
+        expect(figure("title")).to have_text("Dining Out rules")
         expect(figure("balance")).to have_text("$100.00")
         expect(figure("balance-after")).to have_text("$55.00")
       end
@@ -509,11 +509,11 @@ RSpec.describe "Entry impact card", :js, type: :system do
     it "opens on the negative figure and on 'Save anyway'", :aggregate_failures do
       visit edit_entry_path(existing)
 
-      expect(page).to have_css("[data-impact-card='envelope']")
+      expect(page).to have_css("[data-impact-card='rules']")
       within(card) do
         expect(figure("balance")).to have_text("$240.00")
         expect(figure("balance-after")).to have_text("-$60.00")
-        expect(figure("buffer")).to be_visible
+        expect(figure("overdraw")).to be_visible
       end
       expect(page).to have_button("Save anyway")
       expect(page).not_to have_button("Update Entry")

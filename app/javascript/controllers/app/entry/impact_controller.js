@@ -3,7 +3,7 @@ import { Controller } from "@hotwired/stimulus"
 // The impact card's live half: two figures come down in the card and this does one subtraction and
 // one division with them. It re-derives no status — that answer lives on the server.
 export default class extends Controller {
-  static targets = ["card", "figures", "after", "bar", "buffer", "amount", "submit"]
+  static targets = ["card", "figures", "after", "bar", "overdraw", "amount", "submit"]
   static values = { url: String, entryId: String }
 
   // The same expression as `EntryImpactPresenter::TYPED_AMOUNT`: a formula (`10*5`) reads as
@@ -41,7 +41,7 @@ export default class extends Controller {
     this.afterTarget.classList.toggle("text-status-danger", after < 0)
     // A category nothing claims has no bar at all — a real absence, not a defensive guard.
     if (this.hasBarTarget) this.barTarget.style.width = `${this.barPercent(after, denominator)}%`
-    this.bufferTarget.hidden = after >= 0
+    this.overdrawTarget.hidden = after >= 0
     this.writeSubmit(after < 0)
   }
 

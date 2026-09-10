@@ -201,10 +201,10 @@ RSpec.describe "Categories Index - Cards", type: :system do
       expect(page).to have_no_css("[data-holdings-progress]")
     end
 
-    # An envelope claims money too — it just has no target for a bar to be a fraction of.
+    # A rate rule claims money too — it just has no target for a bar to be a fraction of.
     #
     # PLANTED: `max(0, rate + Σ adjustments − spent)` = `max(0, 400 + 0 − 0)` = $400.00.
-    it "shows an envelope's claim and no bar" do
+    it "shows a rate rule's claim and no bar" do
       create(:rule, :rate, category: create(:category, :expense, user: user, name: "Groceries"), amount: 400)
 
       visit categories_path(type: "expense")

@@ -87,10 +87,10 @@ RSpec.describe "Dashboard Index - Savings strip", type: :system do
       expect(page).to have_no_css("[data-savings-strip]")
     end
 
-    # A rule that resets every period is an envelope, whatever else is true of its category.
+    # A rule that resets every period claims its money again, whatever else is true of its category.
     it "leaves out a category whose rule resets" do
-      envelope = create(:category, :expense, user: user, name: "Groceries")
-      create(:rule, :rate, category: envelope, amount: 400)
+      groceries = create(:category, :expense, user: user, name: "Groceries")
+      create(:rule, :rate, category: groceries, amount: 400)
 
       visit reports_path
 
