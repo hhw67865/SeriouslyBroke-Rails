@@ -42,7 +42,7 @@ RSpec.describe "Sacrifices" do
     patch_cuts(groceries_rule.id => { on: "1", amount: "750" })
 
     expect(response).to redirect_to(sacrifice_path)
-    expect(flash[:notice]).to eq("Saved — 1 rules cut. Still $50.00 underwater a period.")
+    expect(flash[:notice]).to eq("Saved — 1 rule cut. Still $50.00 underwater a period.")
     expect(groceries_rule.reload.amount).to eq(750)
   end
 
@@ -54,11 +54,19 @@ RSpec.describe "Sacrifices" do
     expect(groceries_rule.reload.amount).to eq(800)
   end
 
-  it "ignores the typed amount on a row that is not ticked", :aggregate_failures do
+  it "ignores the typed amount on a row that is not ticked, and refuses a save with nothing ticked", :aggregate_failures do
     patch_cuts(groceries_rule.id => { on: "0", amount: "1" })
 
-    expect(response).to redirect_to(sacrifice_path)
-    expect(flash[:notice]).to eq("Saved — 0 rules cut. Still $100.00 underwater a period.")
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.body).to include("Tick a rule to cut it first")
     expect(groceries_rule.reload.amount).to eq(800)
+  end
+
+  it "keeps what was typed on a refused save", :aggregate_failures do
+    patch_cuts(groceries_rule.id => { on: "1", amount: "900" })
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.body).to include('value="900"')
+    expect(response.body).to include("checked")
   end
 end

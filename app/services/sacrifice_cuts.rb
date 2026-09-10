@@ -16,6 +16,8 @@ class SacrificeCuts
   end
 
   def apply
+    return false if nothing_ticked?
+
     written = false
     ActiveRecord::Base.transaction do
       lines = @cuts.map { |rule_id, typed| line_for(rule_id, typed) }
@@ -29,6 +31,13 @@ class SacrificeCuts
   end
 
   private
+
+  def nothing_ticked?
+    return false if @cuts.any?
+
+    errors.add(:base, "Tick a rule to cut it first")
+    true
+  end
 
   def line_for(rule_id, typed)
     rule = Rule.for_user(user).find(rule_id)
