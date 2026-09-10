@@ -1,12 +1,6 @@
 import { Controller } from "@hotwired/stimulus"
 
-// Drives an on-screen calculator pad for a numeric/formula input. The pad
-// starts hidden and is revealed with the toggle button. Each key inserts at
-// the cursor so users can build expressions (e.g. 192.92-85.02). Reusable on
-// any form: add data-controller="shared--calculator-pad", point the input at
-// the "input" target, render shared/calculator_pad_toggle inside a relative
-// wrapper around the input (with right padding for the button), and render
-// the shared/calculator_pad partial below.
+// Drives an on-screen calculator pad for a numeric/formula input, inserting at the cursor.
 export default class extends Controller {
   static targets = ["input", "pad", "toggleButton"]
 

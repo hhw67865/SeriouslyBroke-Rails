@@ -1,27 +1,106 @@
+/* ══ THE PALETTE IS MEASURED, NOT PICKED (design review B2/B3) ══
+   Every token below that is ever painted as TEXT, or ever carries white text, was computed
+   against the surface it actually lands on and clears WCAG AA (4.5:1 for text, 3:1 for the
+   graphical pairs — a progress fill against its track, a focus ring against its gap).
+
+   THE HUES ARE UNCHANGED. Each value is the same hue, darkened — the app still reads olive,
+   warm and muted; it simply reads. The old values and their measured failures are recorded
+   beside each token so nobody lightens one back by eye. */
 :root {
-  /* Brand Colors */
+  /* Brand Colors.
+
+     `--color-primary` STAYS THE BRAND SAGE and is a SURFACE, never text: #C9C78B is 1.75:1
+     against white, which no amount of weight fixes. Anything that has to be READ in the brand
+     colour takes `--color-primary-dark`; see `.text-brand` below, which is why that class does
+     not paint `--color-primary`. */
   --color-primary: #C9C78B;
   --color-primary-light: #e2e1c6;
-  --color-primary-dark: #a9a76b;
-  
+  /* Was #a9a76b — 2.49:1 on white, unreadable as the body text this class is mostly used for.
+     #63612F is 6.4:1 on white, 6.03:1 on `--color-gray-50` and 4.82:1 on `--color-primary-light`,
+     so it passes on all three of the surfaces this app paints it on. It is `--color-sage-800`
+     from app/assets/tailwind/application.css, deliberately: the two scales now meet. */
+  --color-primary-dark: #63612F;
+  /* The hover partner for the above, and the fill white button labels sit on: 8.81:1 on white. */
+  --color-primary-darker: #4E4C24;
+  /* ── THE SIDEBAR GRADIENT IS THE ONE SURFACE WITH A FOREGROUND OF ITS OWN ──
+     The palette sweep above left this pair alone on the reasoning that "a gradient is decoration
+     with no foreground": #C9C78B → #a9a76b. It is not decoration. The wordmark, every nav item and
+     the three section eyebrows are painted ON it, and they were the worst-failing text in the app:
+
+       white wordmark   on #C9C78B  1.75:1    on #a9a76b  2.49:1
+       70%-white eyebrow on #C9C78B 1.49:1    on #a9a76b  1.96:1
+
+     THE EYEBROW IS THE BINDING CONSTRAINT and it is why the light end had to move this far.
+     `--color-text-on-primary-light` is `rgba(255,255,255,0.7)`, so its effective colour is 70% of
+     the way from the background to white and the pair it must clear 4.5:1 against is that same
+     background — a much smaller gap than solid white's. #63612F, the readable olive from the sweep
+     above, gives the wordmark 6.40:1 and the eyebrow only 4.11:1; the crossover is at ≈#5A5829.
+
+     THE HUE AND SATURATION ARE THE BRAND SAGE'S, UNCHANGED — HSL(58.4°, 34%), lightness alone
+     taken from 67%/54% down to 25%/17%. Measured, at both ends and therefore at every stop between
+     (channel-wise interpolation is monotone in luminance, so no interior stop can be lighter than
+     the light end):
+
+       #56552B  white 7.69:1   eyebrow 4.75:1   (+ hover white/5 → 6.74 / 4.27)
+       #3A391D  white 11.78:1  eyebrow 6.69:1
+
+     (Those three were 6.71 / 11.65 / 6.63 as first written — a rounding slip of about 1%, found
+     and corrected when Task 4 recomputed them for the spec's as-built. The pass/fail verdicts
+     never changed; every figure here is the composited colour against the SAME background, which
+     is the only comparison a translucent foreground has.)
+
+     The other foregrounds on this surface clear AA too: the sign-out button's `bg-white/10` reads
+     5.91:1 under white and 4.60:1 at its `bg-white/20` hover, and the ACTIVE nav item is a white
+     pill carrying `--color-primary-darker` (8.81:1), which the darker ground only sharpens.
+
+     THE TOKENS ARE THE SIDEBAR'S OWN and `.from-brand`/`.to-brand-dark` are gone with
+     `--color-primary-mid`. `--color-primary` is a SURFACE elsewhere — cards, borders, the
+     marketing hero — and darkening it to fix one screen's text would have repainted the brand
+     everywhere it is doing no harm. */
+  --color-sidebar-from: #56552B;
+  --color-sidebar-to: #3A391D;
+
   /* Accent Colors */
   --color-terracotta: #C4977A;
   --color-dusty-teal: #7BA3A8;
+
+  /* The same two accents one step darker, for TEXT — see `.text-dusty-teal-dark` below for the
+     measurements and for why the fills above do not move. */
+  --color-terracotta-dark: #9E6440;
+  --color-dusty-teal-dark: #4B7C82;
 
   /* Background Colors */
   --color-bg-primary: var(--color-primary);
   --color-bg-primary-light: var(--color-primary-light);
   --color-bg-primary-dark: var(--color-primary-dark);
-  
+
   /* Text Colors */
   --color-text-on-primary: #ffffff;
   --color-text-on-primary-light: rgba(255, 255, 255, 0.7);
 
-  /* Status Colors */
-  --color-success: #34c759;
-  --color-warning: #ff9500;
-  --color-danger: #ff3b30;
-  --color-info: #0a84ff;
+  /* Status Colors. Each is painted three ways in this app — as text on white, as text on its own
+     `-light` tint, and as a fill under white text — so each value clears 4.5:1 on all three.
+
+       success  #34c759 → #1B7F3B   was 2.07:1 on white; now 5.07 / 4.68 / 5.07
+       warning  #ff9500 → #B45309   was 2.20:1 on white; now 5.02 / 4.67 / 5.02
+       danger   #ff3b30 → #C1271B   was 3.55:1 on white; now 5.88 / 5.23 / 5.88
+       info     #0a84ff → #0B63CE   was 3.20:1 on white; now 5.69 / 5.05 / 5.69
+
+     ONE VALUE PER STATUS RATHER THAN A TEXT TWIN. A `--color-danger-text` beside a brighter
+     `--color-danger` would have meant auditing ~50 sites for which of the two each one wanted,
+     and the fills were failing too: white on #ff3b30 is 3.55:1, so the delete button and the
+     savings badge needed the darker red as much as the sentences did. */
+  --color-success: #1B7F3B;
+  --color-warning: #B45309;
+  --color-danger: #C1271B;
+  --color-info: #0B63CE;
+
+  /* THE FOCUS RING (design review M3). Near-black rather than brand olive, because this one
+     colour has to be visible on white cards, on gray-50 strips AND on the olive sidebar — no
+     single olive clears 3:1 against both #ffffff and the sidebar's own dark olive. The ring is
+     drawn with a white halo beneath it (see the `:focus-visible` rule at the foot of this file) so its adjacent
+     colour is always #ffffff, 15.36:1, whatever it is sitting on. */
+  --color-focus-ring: #26251F;
 
   /* Status Background Colors */
   --color-success-light: #edf9f0;
@@ -35,7 +114,13 @@
   --color-gray-200: #e5e5e5;
   --color-gray-300: #d4d4d4;
   --color-gray-400: #a3a3a3;
-  --color-gray-500: #737373;
+  /* THIS IS TAILWIND'S `text-gray-500` TOO, which is why the nudge is worth making here rather
+     than site by site: Tailwind v4 emits `color: var(--color-gray-500)` and this file loads after
+     the build, so every `text-gray-500` in the app resolves to whatever is written on this line.
+     #737373 measured 4.46:1 against the page's own `--color-gray-50` ground — the page-header
+     subtitle, the app's most-repeated piece of secondary text, sat just under AA on every screen.
+     #6E6E6E is 4.8:1 there and 5.1:1 on a white card. */
+  --color-gray-500: #6E6E6E;
   --color-gray-600: #525252;
   --color-gray-700: #404040;
   --color-gray-800: #262626;
@@ -55,8 +140,18 @@
   background-color: var(--color-primary-dark);
 }
 
+.bg-brand-darker {
+  background-color: var(--color-primary-darker);
+}
+
+/* ── THE TWO TEXT OLIVES ARE ONE STEP DARKER THAN THEIR FILLS ──
+   `.text-brand` used to paint `--color-primary`, the brand sage, at 1.75:1 on white: the "Rename"
+   link on Home, the active tab on Categories and every "Edit" beside an item were all painting it.
+   The fills keep the sage (`.bg-brand`, `.border-brand`); only the *readable* pair moves down the
+   scale, so `text-brand hover:text-brand-dark` still darkens on hover and every existing site is
+   fixed without touching a view. */
 .text-brand {
-  color: var(--color-primary);
+  color: var(--color-primary-dark);
 }
 
 .text-brand-light {
@@ -64,11 +159,29 @@
 }
 
 .text-brand-dark {
-  color: var(--color-primary-dark);
+  color: var(--color-primary-darker);
 }
 
 .text-terracotta {
   color: var(--color-terracotta);
+}
+
+/* ── THE THREE RULE-TYPE COLOURS, AS TEXT (two-shapes spec §3) ──
+   Home's category blocks stripe every row by the RULE's type and say the type in words beside it:
+   bill = --color-primary-darker, usage = the dusty teal, choice = the terracotta. The two decorative
+   tokens are FILLS and fail as text — measured on white, #7BA3A8 is 2.75:1 and #C4977A is 2.61:1,
+   both under WCAG 1.4.3's 4.5:1 — so each gets one darker step that keeps the hue and clears the
+   bar: #4B7C82 is 4.66:1 and #9E6440 is 4.83:1 (and 3.51:1 / 3.64:1 on the sage tile, which is why
+   neither is used there). The FILLS are untouched: `.bg-dusty-teal` and `.bg-terracotta` still paint
+   the stripes and the dashboard's segmented bars, where the contrast rule is 3:1 for a graphic and
+   the pair is legible. `.text-terracotta` is likewise untouched — three dashboard figures paint it
+   and re-tinting them is not this task's ruling to take. */
+.text-dusty-teal-dark {
+  color: var(--color-dusty-teal-dark);
+}
+
+.text-terracotta-dark {
+  color: var(--color-terracotta-dark);
 }
 
 .bg-terracotta {
@@ -83,13 +196,14 @@
   border-color: var(--color-primary);
 }
 
-.from-brand {
-  --tw-gradient-from: var(--color-primary);
-  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(201, 199, 139, 0));
+/* The sidebar's two stops, named for the one surface they paint (see the tokens above). */
+.from-sidebar {
+  --tw-gradient-from: var(--color-sidebar-from);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(86, 85, 43, 0));
 }
 
-.to-brand-dark {
-  --tw-gradient-to: var(--color-primary-dark);
+.to-sidebar {
+  --tw-gradient-to: var(--color-sidebar-to);
 }
 
 /* Status Colors */
@@ -121,17 +235,58 @@
 .border-status-info { border-color: var(--color-info); }
 
 /* Hover Utilities */
-.hover\:text-brand:hover { color: var(--color-primary); }
-.hover\:text-brand-dark:hover { color: var(--color-primary-dark); }
+.hover\:text-brand:hover { color: var(--color-primary-dark); }
+.hover\:text-brand-dark:hover { color: var(--color-primary-darker); }
 .hover\:bg-brand-dark:hover { background-color: var(--color-primary-dark); }
+.hover\:bg-brand-darker:hover { background-color: var(--color-primary-darker); }
 .hover\:opacity-90:hover { opacity: 0.9; }
 .hover\:opacity-80:hover { opacity: 0.8; }
+
+/* THE STATUS COLOURS ARE CUSTOM.CSS CLASSES, NOT TAILWIND UTILITIES, so Tailwind generates no
+   `hover:`/`focus-visible:` variant of them and a view writing one gets silence rather than an
+   error — the hazard budget_page/_structural_check.html.erb warns about at length. Each variant
+   this app actually uses is therefore declared by hand, here, once. */
+.hover\:text-status-danger:hover { color: var(--color-danger); }
+.focus-visible\:text-status-danger:focus-visible { color: var(--color-danger); }
 
 /* Active Utilities */
 .active\:bg-brand:active { background-color: var(--color-primary); }
 
 /* Focus Ring Brand */
-.focus\:ring-brand:focus { --tw-ring-color: var(--color-primary); }
+.focus\:ring-brand:focus { --tw-ring-color: var(--color-primary-dark); }
+
+/* ══ THE FOCUS RING, ONCE, FOR EVERY INTERACTIVE THING (design review M3) ══
+
+   ONE RULE RATHER THAN A `focus:` UTILITY PER SITE, because the defect it fixes is an ABSENCE:
+   thirteen link-shaped buttons and every bare `<a>` in this app had no focus style at all, and a
+   per-site fix leaves the fourteenth as broken as the first. Declared at zero specificity with
+   `:where()` so any component that wants a different ring (a `.btn`, an input) simply states one
+   and wins.
+
+   WHY A WHITE HALO UNDER A NEAR-BLACK RING. WCAG 1.4.11 measures an indicator against what it
+   touches, and this app's interactive surfaces run from white cards through gray-50 strips to the
+   olive sidebar gradient — no single colour clears 3:1 against all of them. The `box-shadow`
+   fills the 2px `outline-offset` gap with white, so the ring's neighbour is #ffffff everywhere
+   (15.36:1) and the halo's own neighbour is the ring. It is legible on any background this app
+   has or later grows.
+
+   Form controls are excluded: `.form-input`/`.form-select`/`.form-textarea` already carry a
+   designed sage focus ring in app/assets/tailwind/application.css, and two rings would fight. */
+:where(a[href], button, summary, [role="button"], [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px #ffffff;
+}
+
+/* THE TWO SR-ONLY RADIO SETS ON THE CATEGORY FORM (design review B1/H2). Their real control is
+   1px square and invisible, so the ring has to be drawn on the tile the user is actually looking
+   at. The tile is the input's next sibling in both cases — see categories/_form.html.erb. */
+.sr-only:focus-visible + .category-type-option,
+.color-radio:focus-visible + [data-color] {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px #ffffff;
+}
 
 /* Accent Color Brand (for native checkbox/radio tinting) */
 .accent-brand { accent-color: var(--color-primary); }

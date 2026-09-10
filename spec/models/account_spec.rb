@@ -51,6 +51,40 @@ RSpec.describe Account do
     end
   end
 
+  describe "#revise" do
+    it "writes the name and the balance correction together", :aggregate_failures do
+      account = described_class.open(user, name: "Old", balance: 10)
+
+      expect(account.revise(name: "New", balance: "99.5")).to be(true)
+      expect(account.reload).to have_attributes(name: "New", opening_balance: 99.5)
+      expect(account.balance).to eq(99.5)
+    end
+
+    # The whole point of the method: a refused figure must not leave the rename behind it.
+    it "keeps the old name when the balance is refused", :aggregate_failures do
+      account = described_class.open(user, name: "Old", balance: 10)
+
+      expect(account.revise(name: "New", balance: "abc")).to be(false)
+      expect(account.errors[:opening_balance]).to include("is not a number")
+      expect(account.reload).to have_attributes(name: "Old", opening_balance: 10)
+    end
+
+    it "renames alone when no balance is typed", :aggregate_failures do
+      account = described_class.open(user, name: "Old", balance: 10)
+
+      expect(account.revise(name: "New", balance: "")).to be(true)
+      expect(account.reload).to have_attributes(name: "New", opening_balance: 10)
+    end
+
+    it "writes nothing when the name is refused", :aggregate_failures do
+      described_class.open(user, name: "Taken", balance: 0)
+      account = described_class.open(user, name: "Old", balance: 10)
+
+      expect(account.revise(name: "taken", balance: "99.5")).to be(false)
+      expect(account.reload).to have_attributes(name: "Old", opening_balance: 10)
+    end
+  end
+
   describe "#destroy" do
     it "refuses to delete main", :aggregate_failures do
       main = create(:account, user: user)

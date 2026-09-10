@@ -1,16 +1,24 @@
 # frozen_string_literal: true
 
 Rails.application.routes.draw do
-  # Authentication routes
   devise_for :users, controllers: { registrations: "users/registrations" }
 
-  # Application routes (protected by authentication)
   authenticated :user do
-    root "dashboard#index", as: :authenticated_root
+    root "home#index", as: :authenticated_root
   end
 
-  resources :entries, except: [:show]
+  get "reports", to: "dashboard#index", as: :reports
+
+  resources :accounts, only: [:create, :edit, :update, :destroy]
+
+  resources :entries, except: [:show] do
+    collection do
+      get :impact
+    end
+  end
+
   resources :items, only: [:edit, :update, :destroy]
+
   resources :categories do
     resources :items, only: [:index, :new, :create], controller: "categories/items" do
       collection do
@@ -26,18 +34,27 @@ Rails.application.routes.draw do
       patch :update_tracked
     end
   end
+
+  resources :rules, only: [:new, :create, :edit, :update, :destroy] do
+    collection do
+      match :preview, via: [:post, :patch]
+    end
+  end
+
+  get "budget" => "budget_page#show", as: :budget_page
+  patch "budget/user" => "budget_page#update", as: :budget_page_user
+  patch "budget/reorder" => "budget_page#reorder", as: :budget_page_reorder
+  resources :adjustments, only: [:create, :destroy]
+  get "sacrifice" => "sacrifices#show"
+
   resource :settings, only: [:show] do
     patch :toggle_theme
     patch :toggle_ming_mode
   end
 
-  # Calendar
   get "calendar", to: "calendar#index", as: :calendar
   get "calendar/week", to: "calendar#week", as: :calendar_week
 
-  # Landing page for non-authenticated users
   root "pages#home"
-
-  # Health check
   get "up" => "rails/health#show", as: :rails_health_check
 end

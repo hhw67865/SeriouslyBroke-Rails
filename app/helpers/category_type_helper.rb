@@ -1,18 +1,10 @@
 # frozen_string_literal: true
 
 # Helper for category type presentation (colors, labels, formatting).
-# Keeps styling concerns out of models.
-#
-# Usage in views:
-#   category_type_color(:expense)     # => "text-status-danger"
-#   category_type_label(:expense)     # => "Expense"
-#   format_amount_with_sign(100, :expense) # => "-$100.00"
-#
 module CategoryTypeHelper
   TYPE_CONFIG = {
     expense: { label: "Expense", plural: "Expenses", color: "text-status-danger", bg: "bg-status-danger", sign: "-" },
-    income: { label: "Income", plural: "Income", color: "text-status-success", bg: "bg-status-success", sign: "+" },
-    savings: { label: "Savings", plural: "Savings", color: "text-brand-dark", bg: "bg-brand-dark", sign: "+" }
+    income: { label: "Income", plural: "Income", color: "text-status-success", bg: "bg-status-success", sign: "+" }
   }.freeze
 
   CATEGORY_TYPES = TYPE_CONFIG.keys.freeze

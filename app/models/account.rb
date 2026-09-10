@@ -30,6 +30,21 @@ class Account < ApplicationRecord
 
   def balance = AccountLedger.new(user).balance_of(self)
 
+  # The edit form's two answers, applied together or not at all: a rename must not survive a balance
+  # the account refuses. Returns true only when both writes landed.
+  def revise(name:, balance:)
+    self.name = name
+    return false unless balance.blank? || numeric?(balance)
+
+    transaction do
+      next false unless save
+      next true if balance.blank?
+      next true if correct_balance(balance)
+
+      raise ActiveRecord::Rollback
+    end || false
+  end
+
   # Moves the opening balance so that the balance today equals the typed figure. Nothing else moves.
   def correct_balance(typed)
     corrected = BigDecimal(typed.to_s, exception: false)
@@ -42,6 +57,15 @@ class Account < ApplicationRecord
   end
 
   private
+
+  # The refusal is raised before anything is written, so a refused figure cannot cost a rollback of
+  # a rename that was otherwise fine.
+  def numeric?(typed)
+    return true if BigDecimal(typed.to_s, exception: false)
+
+    errors.add(:opening_balance, "is not a number")
+    false
+  end
 
   def main_is_not_deletable
     return unless main?

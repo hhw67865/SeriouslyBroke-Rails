@@ -1,0 +1,110 @@
+<%# "THIS PERIOD" — one block per category, one row per rule. Local: `presenter`. The order is
+    `#give_way_order` grouped back, the only sort on the screen; the strip walks the same list. %>
+<section data-this-period>
+  <%# The counts trade places with the figure at 375: a phone has no right margin to put a figure
+      at, so the figure joins the heading and the counts drop to a muted second line. %>
+  <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1 pb-2 sm:justify-between sm:gap-x-3">
+    <h3 class="text-sm font-semibold text-gray-900" data-this-period-heading>
+      This period<span class="hidden sm:inline"> ·
+        <%= pluralize(presenter.blocks.size, "category") %> ·
+        <%= pluralize(presenter.blocks.sum(&:rule_count), "rule") %></span>
+    </h3>
+    <p class="text-sm text-gray-700 tabular-nums" data-this-period-claimed>
+      <span class="sm:hidden" aria-hidden="true">· </span><%= number_to_currency(presenter.total_claims) %> claimed
+    </p>
+    <p class="basis-full text-xs text-gray-500 sm:hidden" data-this-period-counts>
+      <%= pluralize(presenter.blocks.size, "category") %> ·
+      <%= pluralize(presenter.blocks.sum(&:rule_count), "rule") %>
+    </p>
+  </div>
+
+  <%# `items-start` so a two-rule block beside a five-rule one keeps its own height. %>
+  <div class="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:items-start">
+    <% presenter.blocks.each do |block| %>
+      <div class="bg-white border border-gray-200 rounded overflow-hidden" data-category-block="<%= block.name %>">
+        <%# The header tints when any row is over, short or overdue — CategoryBlock#trouble?, which
+            is deliberately wider than the trouble strip's own two triggers. %>
+        <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 px-4 py-2 border-b border-gray-200 <%= block.trouble? ? "bg-status-danger-light" : "bg-gray-50" %>"
+             data-block-header>
+          <div class="flex items-baseline gap-2">
+            <h4 class="text-sm font-semibold text-gray-900"><%= block.name %></h4>
+            <span class="text-xs text-gray-500"><%= pluralize(block.rule_count, "rule") %></span>
+          </div>
+          <span class="text-sm text-gray-700 tabular-nums" data-block-claimed>
+            <%= number_to_currency(block.claimed) %> claimed
+          </span>
+        </div>
+
+        <% block.rows.each do |row| %>
+          <%# `data-rule-row` is named by the LANE, not by the category: a block may carry two rules
+              and both would answer to the category's name. %>
+          <div class="flex gap-3 px-4 py-3 border-b border-gray-100 last:border-b-0"
+               data-rule-row="<%= row.name %>">
+            <%# The stripe is the RULE's type, which is a fact about the rule and not its category.
+                `aria-hidden`, because the same fact is the first word of the shape clause below. %>
+            <span class="w-1 shrink-0 rounded <%= stripe_fill(row) %>" aria-hidden="true"></span>
+
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-baseline justify-between gap-x-3">
+                <p class="text-sm font-medium text-gray-900 truncate"><%= row.name %></p>
+                <%# `over?` is the pre-clamp reader and the only one that can tell "spent it exactly"
+                    from "spent more than there was". %>
+                <p class="text-sm tabular-nums <%= row.over? ? "text-status-danger font-medium" : "text-gray-700" %>"
+                   data-rule-figure>
+                  <%= figure_words(row) %>
+                </p>
+              </div>
+
+              <p class="mt-0.5 text-xs <%= type_text_class(row) %>" data-rule-shape><%= shape_words(row) %></p>
+
+              <%# The percent rides on the TRACK: a 0% fill has no width, so a hook there would be
+                  unassertable on exactly the row a bar most needs pinning. %>
+              <% if row.bar? %>
+                <div class="mt-1.5 hidden sm:block h-1.5 bg-gray-200 rounded-full overflow-hidden"
+                     role="progressbar"
+                     aria-valuenow="<%= row.percent %>"
+                     aria-valuemin="0"
+                     aria-valuemax="100"
+                     aria-label="<%= block.name %> · <%= row.name %>"
+                     data-rule-bar="<%= row.percent %>"
+                     data-rule-bar-state="<%= row.bar_state %>">
+                  <div class="h-1.5 rounded-full <%= bar_fill(row) %>"
+                       style="width: <%= row.percent %>%;"
+                       data-rule-fill></div>
+                </div>
+              <% end %>
+
+              <%# A rate rule in a period with no boundary declared has nothing to say and renders no
+                  element at all. %>
+              <% if when_clause = when_words(row) %>
+                <p class="mt-1 text-xs <%= row.trouble? || row.short? ? "text-status-danger font-medium" : "text-gray-500" %>"
+                   data-rule-when>
+                  <%= when_clause %>
+                </p>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    <% end %>
+
+    <%# A category no rule claims, with spending this period: the fact, no bar, no pressure. Nothing
+        claims these receipts, so a denominator would invent the pressure rather than report it. %>
+    <% presenter.unbudgeted_rows.each do |row| %>
+      <div class="bg-white border border-gray-200 rounded px-4 py-3 flex items-baseline justify-between gap-3"
+           data-unbudgeted-row="<%= row.category.name %>">
+        <span class="text-sm font-medium text-gray-900"><%= row.category.name %></span>
+        <span class="text-sm text-gray-700 tabular-nums">spent <%= number_to_currency(row.spent) %></span>
+      </div>
+    <% end %>
+  </div>
+
+  <%# Said plainly rather than left as an empty card: a blank panel on a money screen reads as
+      something that failed to load. %>
+  <% if presenter.blocks.empty? && presenter.unbudgeted_rows.empty? %>
+    <p class="bg-white border border-gray-200 rounded px-4 py-3 text-sm text-gray-500">
+      Nothing is budgeted yet, and nothing has been spent this period.
+      <%= link_to "Give a category a rule on the Budget page", budget_page_path, class: "text-status-info hover:underline" %>
+    </p>
+  <% end %>
+</section>

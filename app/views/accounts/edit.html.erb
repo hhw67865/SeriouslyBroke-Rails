@@ -1,0 +1,44 @@
+<%# RENAMING AN ACCOUNT AND CORRECTING WHAT IT HOLDS — the two things about an account that are the
+    user's to say. Everything else is the flow of entries and transfers through it. %>
+<% content_for :title, "Rename #{@account.name}" %>
+
+<%= page_header(
+    title: @account.name,
+    subtitle: "Account",
+    breadcrumbs: [
+      { label: "Home", url: root_path },
+      { label: @account.name }
+    ]
+) %>
+
+<div class="container mx-auto px-4 py-6 max-w-2xl">
+  <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100">
+    <div class="p-6">
+      <%= simple_form_for @account, url: account_path(@account) do |f| %>
+        <%# The balance correction writes `opening_balance`, so its refusal arrives on that
+            attribute rather than on the field the user typed into. %>
+        <%= f.error_notification %>
+        <%= f.error_notification message: f.object.errors[:opening_balance].to_sentence if f.object.errors[:opening_balance].present? %>
+        <%= f.error_notification message: f.object.errors[:base].to_sentence if f.object.errors[:base].present? %>
+
+        <%= f.input :name,
+            label: "Account name",
+            hint: "What your bank calls it." %>
+
+        <%# It opens on today's balance, because that is the figure the user is being asked to
+            confirm or correct. %>
+        <%= f.input :balance,
+            as: :decimal,
+            label: "Balance today",
+            required: false,
+            input_html: { step: 0.01, value: number_with_precision(@account.balance, precision: 2) },
+            hint: "Correcting the balance moves the opening balance; nothing else changes." %>
+
+        <div class="flex flex-col sm:flex-row sm:justify-end gap-3 mt-6">
+          <%= link_to "Cancel", root_path, class: "btn btn-secondary" %>
+          <%= f.button :submit, "Save account" %>
+        </div>
+      <% end %>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,92 @@
+<%# THE MONEY ROW — Home's first two answers as three stat tiles. Local: `presenter` (HomePresenter).
+    The tiles are the cards; `index.html.erb` owns the grid that lays them out. %>
+
+<%# TILE 1 — the one derived number: `pot − Σ claims`. Never clamped: a negative free renders
+    negative, in red, because it is a signal rather than a refusal. %>
+<div class="bg-brand-light border border-brand rounded p-4 lg:p-5 col-span-full lg:col-span-1" data-tile="free">
+  <p class="text-xs font-medium uppercase tracking-wide text-brand-dark">Free to spend</p>
+  <p class="mt-1 text-3xl font-semibold tabular-nums <%= presenter.free_to_spend.negative? ? "text-status-danger" : "text-brand-dark" %>"
+     data-free>
+    <%= number_to_currency(presenter.free_to_spend) %>
+  </p>
+
+  <%# The percent rides on the track, not the fill: at 0% a fill has no width and cannot be found. %>
+  <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+    <% if claimed = presenter.claimed_percent %>
+      <div class="h-2 min-w-24 flex-1 bg-white rounded-full overflow-hidden"
+           role="progressbar"
+           aria-valuenow="<%= claimed %>"
+           aria-valuemin="0"
+           aria-valuemax="100"
+           aria-label="<%= number_to_currency(presenter.total_claims) %> of checking claimed by your rules"
+           data-claimed-bar="<%= claimed %>">
+        <div class="h-2 <%= presenter.short? ? "bg-status-danger" : "bg-brand-darker" %>"
+             style="width: <%= claimed %>%;"
+             data-claimed-fill></div>
+      </div>
+    <% end %>
+
+    <%# BOTH SENTENCES ARE INTENDED where free is under with nothing parked elsewhere: the claim is
+        one fact and the overspend is another, and each half is gated on the predicate that says so. %>
+    <p class="text-sm <%= presenter.free_to_spend.negative? ? "text-status-danger" : "text-brand-dark" %>"
+       data-free-subline>
+      <% if presenter.free_to_spend.negative? %>
+        <% if presenter.anything_claimed? %>
+          Your rules claim <%= number_to_currency(presenter.shortfall) %> more than checking holds.
+        <% end %>
+        <% if presenter.money_parked_elsewhere? %>
+          Move some in from your other accounts.
+        <% else %>
+          You have spent past what you had.
+        <% end %>
+      <% else %>
+        <%= number_to_currency(presenter.total_claims) %> claimed by your rules
+      <% end %>
+    </p>
+  </div>
+</div>
+
+<%# TILE 2 — main's balance, not the user's money everywhere. One type step smaller below `sm`,
+    where a six-figure balance at `text-2xl` is wider than this tile's half of 375px. %>
+<div class="bg-white border border-gray-200 rounded p-4 lg:p-5" data-tile="checking">
+  <p class="text-xs font-medium uppercase tracking-wide text-gray-500">In checking</p>
+  <p class="mt-1 text-xl sm:text-2xl font-semibold tabular-nums <%= presenter.in_checking.negative? ? "text-status-danger" : "text-gray-900" %>"
+     data-in-checking>
+    <%= number_to_currency(presenter.in_checking) %>
+  </p>
+  <%# The fact alone: which negative-pot state it is belongs to the free tile's subline. %>
+  <% if presenter.in_checking.negative? %>
+    <p class="mt-1 text-sm text-status-danger" data-checking-overdrawn>
+      Your checking account is already spent past zero.
+    </p>
+  <% end %>
+</div>
+
+<%# TILE 3 — money that is not in checking: shown, never subtracted from anything. Absent for a
+    one-account user, so the row becomes two tiles rather than inventing an absence. %>
+<% if presenter.other_accounts.any? %>
+  <div class="bg-white border border-gray-200 rounded p-4 lg:p-5" data-tile="elsewhere" data-other-accounts>
+    <%# Two spellings of one label: "In 3 other accounts" wraps to two lines in half of 375px and
+        pushes the figure below the fold of its own tile. %>
+    <p class="text-xs font-medium uppercase tracking-wide text-gray-500">
+      <span class="sm:hidden">Elsewhere</span>
+      <span class="hidden sm:inline">In <%= pluralize(presenter.other_accounts.count, "other account") %></span>
+    </p>
+    <p class="mt-1 text-xl sm:text-2xl font-semibold tabular-nums text-gray-900" data-other-accounts-total>
+      <%= number_to_currency(presenter.other_accounts_total) %>
+    </p>
+    <%# The chips are a wide-screen answer: three names in half of 375px is three ellipses, and the
+        accounts line at the foot of the page is still the door to them. %>
+    <ul class="mt-2 hidden gap-1.5 overflow-hidden sm:flex">
+      <% presenter.other_accounts.first(3).each do |account| %>
+        <li class="min-w-0 truncate rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700"
+            data-account-chip="<%= account.name %>">
+          <%= account.name %>
+        </li>
+      <% end %>
+      <% if (rest = presenter.other_accounts.count - 3).positive? %>
+        <li class="shrink-0 rounded px-2 py-0.5 text-xs text-gray-500" data-more-accounts>+<%= rest %> more</li>
+      <% end %>
+    </ul>
+  </div>
+<% end %>

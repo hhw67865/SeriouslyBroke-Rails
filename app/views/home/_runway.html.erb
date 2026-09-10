@@ -1,0 +1,123 @@
+<%# THE RUNWAY — this period as a line, with a mark on every day money is needed. Local:
+    `presenter`. Absent for a user who has declared no period: a runway is a picture OF a period. %>
+<% if runway = presenter.runway %>
+  <section class="bg-white border border-gray-200 rounded p-4 lg:p-5" data-runway aria-labelledby="runway-heading">
+    <div class="flex items-baseline justify-between gap-3">
+      <h3 id="runway-heading" class="text-sm font-semibold text-gray-900">This period</h3>
+      <p class="text-xs text-gray-500" data-period-days-left><%= pluralize(runway.days_left, "day") %> left</p>
+    </div>
+
+    <%# The padding is what the absolutely positioned labels overhang into: a tick's name below the
+        rail, its amount above, and a label centred on a tick at 0% or 100% out to either side. %>
+    <div class="px-4 pt-7 sm:px-6">
+      <%# The percent rides on the TRACK: a 0% fill has no width and cannot be found. %>
+      <div class="relative h-2 rounded-full bg-brand-dark"
+           role="progressbar"
+           aria-valuenow="<%= runway.percent %>"
+           aria-valuemin="0"
+           aria-valuemax="100"
+           aria-label="Day <%= runway.day %> of <%= runway.days %> in this period"
+           data-period-progress="<%= runway.percent %>">
+        <div class="absolute inset-y-0 left-0 rounded-full bg-gray-300" style="width: <%= runway.percent %>%;"></div>
+
+        <%# Same-day dots step 6px each, which does nothing for a ~110px label: the clearance is 22
+            points because the narrowest rail that labels at all is `sm`, ~510px, and 110 ÷ 510 ≈ 21.5. %>
+        <% nudged_by = Hash.new(0) %>
+        <% label_clearance = 22 %>
+        <% last_labelled = nil %>
+        <% any_suppressed = false %>
+        <% runway.ticks.each do |tick| %>
+          <% nudge = nudged_by[tick.day_index] %>
+          <% nudged_by[tick.day_index] += 1 %>
+          <% suppressed = !last_labelled.nil? && (tick.percent - last_labelled).abs < label_clearance %>
+          <% last_labelled = tick.percent unless suppressed %>
+          <% any_suppressed ||= suppressed %>
+          <%# Keyed on the RULE and labelled separately: two categories may each own an item called
+              "Electric", and a hook keyed on the label would answer for both. %>
+          <div class="absolute top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center"
+               style="left: calc(<%= tick.percent %>% + <%= nudge * 6 %>px);"
+               data-tick="<%= tick.line.rule.id %>"
+               data-tick-label="<%= tick.label %>">
+            <span class="mb-2 text-xs font-medium leading-4 tabular-nums whitespace-nowrap <%= "invisible" if suppressed %> <%= tick.short? ? "text-status-danger" : "text-gray-900" %>"
+                  data-tick-amount>
+              <%= number_to_currency(tick.amount) %>
+            </span>
+            <span class="h-3 w-3 shrink-0 rounded-full border border-white <%= tick.short? ? "bg-status-danger" : "bg-status-success" %>"
+                  title="<%= number_to_currency(tick.amount) %> <%= tick.label %>"
+                  data-tick-mark="<%= tick.line.rule.id %>"
+                  data-tick-label="<%= tick.label %>"></span>
+            <%# `invisible` and not `hidden` below `sm`: hiding the name would take its half of the
+                column away and drop the dot off the rail. %>
+            <span class="invisible <%= "sm:visible" unless suppressed %> mt-2 text-xs leading-4 whitespace-nowrap <%= tick.short? ? "text-status-danger" : "text-gray-600" %>"
+                  data-tick-name>
+              <%= runway_tick_words(tick) %>
+            </span>
+          </div>
+        <% end %>
+
+        <%# Today, as a mark on the ruler rather than as the end of a fill: what is left of the
+            period is the thing the ticks are placed in. %>
+        <span class="absolute top-1/2 z-10 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded bg-gray-900 ring-1 ring-white"
+              style="left: <%= runway.percent %>%;"
+              title="Today"
+              data-today-mark></span>
+      </div>
+
+      <%# The period's own ends: the ruler is meaningless without them. %>
+      <div class="mt-3 sm:mt-7 flex items-baseline justify-between gap-3 text-xs text-gray-500 tabular-nums"
+           data-period-range>
+        <span><%= runway.first.strftime("%b %-d") %></span>
+        <span><%= runway.last.strftime("%b %-d") %></span>
+      </div>
+    </div>
+
+    <%# THE PACE LINE. `safe_join`ed from parts rather than punctuated by hand, so the separator
+        cannot appear before a part that did not render. %>
+    <div class="mt-4 border-t border-gray-100 pt-3" data-pace>
+      <%# The ticks' words wherever the rail cannot hold them: always below `sm`, where the rail is
+          ~310px, and at every width the moment any label was suppressed. %>
+      <% if runway.any_due? %>
+        <ul class="mb-2 space-y-1 <%= "sm:hidden" unless any_suppressed %>" data-tick-list>
+          <% runway.ticks.each do |tick| %>
+            <li class="text-sm text-gray-700" data-tick-words="<%= tick.line.rule.id %>">
+              <span class="font-medium tabular-nums <%= tick.short? ? "text-status-danger" : "text-gray-900" %>">
+                <%= number_to_currency(tick.amount) %>
+              </span>
+              <%= runway_tick_words(tick) %>
+            </li>
+          <% end %>
+        </ul>
+      <% end %>
+
+      <% parts = [] %>
+      <% if pace = presenter.pace_line %>
+        <% parts << tag.span(
+             pace_words(pace).delete_suffix("."),
+             class: pace.fine? ? "text-gray-700" : "text-status-danger font-medium",
+             data: { pace_line: "" }
+           ) %>
+      <% end %>
+
+      <%# "Nothing is due before Sep 30" is an answer; "$0.00 due" is a figure pretending to be news.
+          One sentence either way, so the panel has the same shape on a quiet period. %>
+      <% parts << tag.span(
+           runway.any_due? ? "#{number_to_currency(runway.due_total)} due before #{runway.last.strftime("%b %-d")}" : "Nothing is due before #{runway.last.strftime("%b %-d")}",
+           class: "text-gray-700 tabular-nums",
+           data: { due_total: "" }
+         ) %>
+
+      <%# Named one by one, because "2 rules are short" is a fact the user cannot act on. %>
+      <% if runway.short.any? %>
+        <% parts << tag.span(
+             runway.short.map { |tick| "#{tick.label} is #{number_to_currency(tick.gap)} short" }.join(", "),
+             class: "text-status-danger font-medium",
+             data: { short_list: "" }
+           ) %>
+      <% end %>
+
+      <p class="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
+        <%= safe_join(parts, tag.span("·", class: "text-gray-400", aria: { hidden: true })) %>
+      </p>
+    </div>
+  </section>
+<% end %>

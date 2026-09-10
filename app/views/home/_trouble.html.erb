@@ -1,0 +1,68 @@
+<%# THE TROUBLE STRIP — rendered only when something real needs a human. Local: `presenter`. A
+    `case` on the kind, so a new trigger cannot be added to the list and forgotten in the markup. %>
+<section class="bg-white border border-gray-200 rounded" data-trouble aria-labelledby="trouble-heading">
+  <div class="px-6 py-4 border-b border-gray-200">
+    <%# The count is the heading, because the count is the news. Sentence case: the `uppercase`
+        treatment this codebase gives short labels renders a whole sentence as a shout. %>
+    <h3 id="trouble-heading" class="text-sm font-semibold text-gray-900">
+      <%= pluralize(presenter.troubles.size, "thing") %> need<%= "s" if presenter.troubles.one? %> you
+    </h3>
+  </div>
+
+  <% presenter.troubles.each do |trouble| %>
+    <% case trouble.kind %>
+    <% when :overdraft %>
+      <%# Main is excluded by the presenter, because main's overdraft IS the money row's red "In
+          checking" figure. No button: nothing on the purpose side can reach a bank overdraft. %>
+      <p class="px-6 py-3 border-b border-gray-100 last:border-b-0 bg-status-danger-light text-sm font-medium text-status-danger"
+         data-overdrawn-account="<%= trouble.subject.name %>">
+        <%= trouble.subject.name %> is overdrawn <%= number_to_currency(presenter.overdraft_for(trouble.subject)) %> —
+        already spent, and none of the figures above count it.
+      </p>
+
+    <% when :shortfall %>
+      <%= render "home/shortfall", presenter: presenter %>
+
+    <% when :over, :overdue %>
+      <%# The subject is a ClaimLine — the same object the "This period" row below prints — so the
+          two panels cannot describe one rule differently. %>
+      <div class="px-6 py-3 border-b border-gray-100 last:border-b-0 <%= "bg-status-danger-light" if trouble.kind == :over %>"
+           data-problem-category="<%= trouble.subject.category.name %>">
+        <div class="flex justify-between items-baseline gap-4">
+          <span class="font-medium text-gray-900"><%= trouble.subject.category.name %></span>
+          <span class="text-sm text-status-danger font-medium" data-problem-state>
+            <%= claim_trouble_label(trouble.subject) %>
+          </span>
+        </div>
+        <%# The trigger is the date; what the fund state decides is the instruction — find the rest
+            of the money, or write the cheque. %>
+        <p class="mt-1 text-sm text-gray-600" data-problem-detail>
+          <%= rule_label(trouble.subject.rule) %> ·
+          <% if trouble.kind == :over %>
+            <%= claim_over_detail(trouble.subject) %>
+            — the excess comes straight out of what is free.
+          <% elsif trouble.subject.fund_short? %>
+            <%= number_to_currency(trouble.subject.built_up) %> built up of
+            <%= number_to_currency(trouble.subject.target) %> —
+            <%= number_to_currency(trouble.subject.fund_gap) %> short — this needs paying.
+          <% else %>
+            <%= number_to_currency(trouble.subject.built_up) %> built up of
+            <%= number_to_currency(trouble.subject.target) %> — it's all there — pay it and it
+            starts again.
+          <% end %>
+        </p>
+      </div>
+
+    <% when :structural %>
+      <%# A verdict about the SHAPE of the rules, which no amount of care this period can fix —
+          which is exactly why it belongs on a strip about things that need a human. %>
+      <div class="px-6 py-3 border-b border-gray-100 last:border-b-0">
+        <%= link_to("Your budget doesn't fit your income",
+                    sacrifice_path,
+                    class: "inline-flex items-center gap-2 px-4 py-2 rounded border " \
+                           "border-status-danger text-status-danger text-sm font-medium hover:bg-status-danger-light",
+                    data: { sacrifice_link: true }) %>
+      </div>
+    <% end %>
+  <% end %>
+</section>

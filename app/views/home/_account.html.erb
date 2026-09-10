@@ -1,0 +1,53 @@
+<%# ONE ACCOUNT. Locals: `presenter` (HomePresenter), `account`. Rename and delete live here,
+    because Home is the accounts index. %>
+<% balance = presenter.balance_of(account) %>
+<section class="bg-white border border-gray-200 rounded" data-account-group="<%= account.name %>">
+  <%# It stacks below `sm`, where a name, a balance and two controls cannot share a line — and the
+      balance must not be the thing that wraps. %>
+  <div class="px-6 py-3 flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2 sm:gap-4">
+    <%# `flex-wrap` and no `truncate`: truncating put "Ev…" beside a full-length note the app wrote
+        itself. The note wraps to its own line below `sm` instead. %>
+    <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 min-w-0">
+      <%# Not the `uppercase` eyebrow this codebase gives short labels: an account name is a proper
+          noun the user typed. %>
+      <h3 class="text-sm font-semibold text-gray-900"><%= account.name %></h3>
+      <%# The label rather than a disabled Delete: main being main is a fact about the account
+          rather than a state it might leave. Account#main_is_not_deletable is the refusal. %>
+      <% if presenter.main?(account) %>
+        <span class="text-xs font-medium text-gray-500" data-account-main="<%= account.name %>">
+          Main account — everything flows through it
+        </span>
+      <% end %>
+    </div>
+
+    <div class="flex items-baseline gap-4 shrink-0">
+      <%# An overdraft is the loudest thing in the app and this row owns the number, so it says so
+          here rather than leaving the strip's sentence as the only place a negative balance shows. %>
+      <span class="text-sm <%= balance.negative? ? "text-status-danger font-medium" : "text-gray-700" %>">
+        balance now <strong><%= number_to_currency(balance) %></strong>
+      </span>
+
+      <%= link_to "Rename",
+                  edit_account_path(account),
+                  class: "text-xs font-medium text-brand hover:text-brand-dark",
+                  data: { account_edit: account.name } %>
+
+      <% unless presenter.main?(account) %>
+        <%# True of a non-main account, which is the only one this renders on: main is on the other
+            end of its transfers, so destroying them puts that money back in checking. %>
+        <% confirm = "Delete #{account.name}? The transfers into and out of it are deleted with it, " \
+                     "so the money they moved goes back to your main account — and whatever it was " \
+                     "opened with goes with it. Your balances will change. This action cannot be " \
+                     "undone." %>
+        <%# Delete is tertiary until you reach for it: grey at rest, red on hover and on focus. %>
+        <%= button_to "Delete",
+                      account_path(account),
+                      method: :delete,
+                      class: "text-xs font-medium text-gray-500 hover:text-status-danger " \
+                             "focus-visible:text-status-danger transition-colors",
+                      form: { class: "inline-block leading-none", data: { turbo_confirm: confirm } },
+                      data: { account_delete: account.name } %>
+      <% end %>
+    </div>
+  </div>
+</section>
