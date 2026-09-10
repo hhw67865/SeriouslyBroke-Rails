@@ -3,7 +3,7 @@ import { Controller } from "@hotwired/stimulus"
 // The what-if dial: arithmetic over figures the server already printed, in per-period units
 // throughout (`Rule#steady_ask`, never `rule.amount`) and in integer cents, never float dollars.
 export default class extends Controller {
-  static targets = ["row", "toggle", "amount", "rowFrees", "freed", "verdict", "save"]
+  static targets = ["row", "amount", "rowFrees", "freed", "verdict", "save"]
   // Dollars on the attribute (that is what the server prints), cents inside — see #cents.
   static values = { gap: Number }
 
@@ -11,37 +11,25 @@ export default class extends Controller {
     this.recompute()
   }
 
-  // Typing a figure is the intent, so it ticks the row; the box stays yours to untick.
-  dial(event) {
-    const row = event.target.closest(`[data-${this.identifier}-target="row"]`)
-    if (row) this.fieldFor(row, "toggle").checked = true
-    this.recompute()
-  }
-
   // Read out of the DOM every time: a cache would be one more description of "what is on screen",
   // free to disagree with the screen itself.
   recompute() {
     let freed = 0
-    let ticked = 0
 
     this.rowTargets.forEach((row) => {
       const rowFreed = this.freedBy(row)
       freed += rowFreed
-      if (this.fieldFor(row, "toggle").checked) ticked += 1
       this.freesFieldFor(row).textContent = this.money(rowFreed)
     })
 
     this.freedTarget.textContent = this.money(freed)
     this.writeVerdict(this.cents(this.gapValue) - freed)
-    this.saveTarget.disabled = ticked === 0
+    this.saveTarget.disabled = freed === 0
   }
 
-  // Cutting TO a figure, so `claim - typed` clamped into [0, claim]. An unchecked row frees nothing
-  // whatever is typed in it: the checkbox is the sentence.
+  // Cutting TO a figure, so `claim - typed` clamped into [0, claim]: a row left at its claim frees
+  // nothing, and the figure typed is the whole statement.
   freedBy(row) {
-    const toggle = this.fieldFor(row, "toggle")
-    if (!toggle.checked) return 0
-
     const claim = this.cents(parseFloat(row.dataset.claim))
     const typed = this.cents(parseFloat(this.fieldFor(row, "amount").value))
 

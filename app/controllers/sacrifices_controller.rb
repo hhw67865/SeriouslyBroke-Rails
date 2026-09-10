@@ -9,12 +9,12 @@ class SacrificesController < ApplicationController
   end
 
   def update
-    cuts = SacrificeCuts.new(current_user, cuts: ticked_cuts, today: current_user.today)
+    cuts = SacrificeCuts.new(current_user, cuts: dialled_cuts, today: current_user.today)
     return redirect_to(*landing_for(cuts)) if cuts.apply
 
     @presenter = presenter
     @cut_errors = cuts.errors
-    @typed = ticked_cuts
+    @typed = dialled_cuts
     render :show, status: :unprocessable_content
   end
 
@@ -30,9 +30,7 @@ class SacrificesController < ApplicationController
     "Your rules already fit what you bring in, so there's nothing here to cut."
   end
 
-  def ticked_cuts
-    params.permit(cuts: {})[:cuts].to_h.select { |_id, fields| fields["on"] == "1" }.transform_values { |fields| fields["amount"] }
-  end
+  def dialled_cuts = params.permit(cuts: {})[:cuts].to_h
 
   def landing_for(cuts)
     fresh = presenter

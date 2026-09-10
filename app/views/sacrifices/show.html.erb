@@ -43,9 +43,9 @@
       <h3 class="text-sm font-semibold text-gray-900">What could you cut?</h3>
       <%# The order is part of the offer, so it is said: unexplained, it reads as arbitrary. %>
       <p class="mt-1 text-sm text-gray-500" data-cut-list-order>
-        Tick a rule and type what to keep it at, per period. Save writes those amounts to the
-        rules; untouched rules stay as they are. To drop a rule entirely, delete it on the Budget
-        page. The biggest claim is first, so the cuts that close the gap fastest are at the top.
+        Type what to keep each rule at, per period. Save writes the rules you dialled down; a rule
+        left at its figure stays as it is. To drop a rule entirely, delete it on the Budget page.
+        The biggest claim is first, so the cuts that close the gap fastest are at the top.
       </p>
     </div>
 
@@ -67,17 +67,7 @@
            data-sacrifice-row="<%= row.rule.id %>"
            data-app--sacrifice--dial-target="row"
            data-claim="<%= row.claim_param %>">
-        <input type="checkbox"
-               id="cut-<%= row.rule.id %>"
-               name="cuts[<%= row.rule.id %>][on]"
-               value="1"
-               <%= "checked" if @typed&.key?(row.rule.id.to_s) %>
-               class="form-checkbox"
-               aria-label="Cut <%= rule_name(row.rule) %>"
-               data-app--sacrifice--dial-target="toggle"
-               data-action="change->app--sacrifice--dial#recompute">
-
-        <label class="flex-1 min-w-40 text-sm font-medium text-gray-900" for="cut-<%= row.rule.id %>">
+        <label class="flex-1 min-w-40 text-sm font-medium text-gray-900" for="cut-amount-<%= row.rule.id %>">
           <%= rule_name(row.rule) %>
         </label>
 
@@ -94,7 +84,7 @@
               constraint is a rendering, and the arithmetic must be right without it. %>
           <input type="number"
                  id="cut-amount-<%= row.rule.id %>"
-                 name="cuts[<%= row.rule.id %>][amount]"
+                 name="cuts[<%= row.rule.id %>]"
                  class="form-input w-28 tabular-nums"
                  step="0.01"
                  min="0.01"
@@ -103,7 +93,7 @@
                  data-app--sacrifice--dial-target="amount"
                  <%# `change` as well as `input`, for a value set without keystrokes. #recompute
                      re-reads the whole DOM, so firing twice can never double-count. %>
-                 data-action="input->app--sacrifice--dial#dial change->app--sacrifice--dial#dial">
+                 data-action="input->app--sacrifice--dial#recompute change->app--sacrifice--dial#recompute">
         </div>
 
         <%# The word is what makes the figure readable, and it is outside the target span because

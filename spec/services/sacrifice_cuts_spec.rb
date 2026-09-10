@@ -55,13 +55,26 @@ RSpec.describe SacrificeCuts do
     expect(rule.reload.amount).to eq(800)
   end
 
-  it "refuses an amount at or above the rule's current claim", :aggregate_failures do
+  it "refuses an amount above the rule's current claim", :aggregate_failures do
     rule = rule_on("Groceries", :rate, amount: 800)
 
-    service = cuts_for(rule.id => "800")
+    service = cuts_for(rule.id => "900")
 
     expect(service.apply).to be(false)
     expect(rule.reload.amount).to eq(800)
+  end
+
+  it "leaves a row at its claim alone, and refuses a save where nothing is dialled down", :aggregate_failures do
+    untouched = rule_on("Groceries", :rate, amount: 800)
+    cut = rule_on("Fun", :rate, amount: 300)
+
+    expect(cuts_for(untouched.id => "800").apply).to be(false)
+    expect(untouched.reload.amount).to eq(800)
+
+    service = cuts_for(untouched.id => "800", cut.id => "200")
+    expect(service.apply).to be(true)
+    expect(service.count).to eq(1)
+    expect(cut.reload.amount).to eq(200)
   end
 
   it "404s on a rule that belongs to another user" do

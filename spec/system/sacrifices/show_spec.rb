@@ -54,10 +54,7 @@ RSpec.describe "Sacrifice view", type: :system do
   def row(rule) = find("[data-sacrifice-row='#{rule.id}']")
 
   def cut(rule, label, to:)
-    within(row(rule)) do
-      check "Cut #{label}"
-      fill_in "Cut #{label} to", with: to
-    end
+    within(row(rule)) { fill_in "Cut #{label} to", with: to }
   end
 
   # $800 of groceries, $300 of fun and a $600-every-6-months insurance that claims $46.15 of a
@@ -124,7 +121,7 @@ RSpec.describe "Sacrifice view", type: :system do
 
     it "says saving writes the cuts to the rules", :aggregate_failures do
       order = find("[data-cut-list-order]")
-      expect(order).to have_content("Save writes those amounts to the rules")
+      expect(order).to have_content("Save writes the rules you dialled down")
       expect(order).to have_content("delete it on the Budget page")
     end
   end
@@ -152,14 +149,13 @@ RSpec.describe "Sacrifice view", type: :system do
     end
 
     # Each row says what its own cut frees, because the footer's total cannot say which of several
-    # ticked rows produced it. Typing ticks the row; unticking it afterwards frees nothing again.
-    it "says what each row frees, ticks a row as it is typed in, and frees nothing once unticked", :aggregate_failures do
-      within(row(rules.fetch(:groceries))) { fill_in "Cut Groceries to", with: "700" }
+    # dialled rows produced it. Typing the claim back is the undo.
+    it "says what each row frees, and frees nothing once the figure is typed back", :aggregate_failures do
+      cut(rules.fetch(:groceries), "Groceries", to: "700")
 
-      expect(row(rules.fetch(:groceries))).to have_checked_field("Cut Groceries")
       expect(row(rules.fetch(:groceries))).to have_css("[data-role='row-frees']", text: "frees $100.00")
 
-      within(row(rules.fetch(:groceries))) { uncheck "Cut Groceries" }
+      cut(rules.fetch(:groceries), "Groceries", to: "800")
 
       expect(row(rules.fetch(:groceries))).to have_css("[data-role='row-frees']", text: "frees $0.00")
     end
@@ -175,7 +171,7 @@ RSpec.describe "Sacrifice view", type: :system do
       visit sacrifice_path
     end
 
-    it "writes the ticked cut and lands on Budget once it closes the gap", :aggregate_failures do
+    it "writes the dialled cut and lands on Budget once it closes the gap", :aggregate_failures do
       cut(rules.fetch(:groceries), "Groceries", to: "500")
       click_button "Save these cuts"
 
@@ -183,7 +179,7 @@ RSpec.describe "Sacrifice view", type: :system do
       expect(rules.fetch(:groceries).reload.amount).to eq(500)
     end
 
-    it "disables the save button until a row is ticked", :aggregate_failures, :js do
+    it "disables the save button until a row is dialled down", :aggregate_failures, :js do
       expect(page).to have_button("Save these cuts", disabled: true)
 
       cut(rules.fetch(:groceries), "Groceries", to: "700")
