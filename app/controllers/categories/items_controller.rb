@@ -12,7 +12,7 @@ module Categories
     def index
       respond_to do |format|
         format.html
-        format.json { render json: @category.items.order(:name).map { |item| item_json(item) } }
+        format.json { render json: items_json(@category.items.order(:name)) }
       end
     end
 
@@ -66,9 +66,13 @@ module Categories
     private
 
     # What the item select's own option carries: its history, so picking one can offer to fill
-    # the amount from the last time without a second round trip.
-    def item_json(item)
-      last = item.last_entry
+    # the amount from the last time without a second round trip. One query for every last entry.
+    def items_json(items)
+      lasts = Entry.latest_per_item(items.map(&:id)).index_by(&:item_id)
+      items.map { |item| item_json(item, lasts[item.id]) }
+    end
+
+    def item_json(item, last)
       {
         id: item.id,
         name: item.name,

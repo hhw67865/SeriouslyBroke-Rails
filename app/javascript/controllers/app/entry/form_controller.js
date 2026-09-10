@@ -35,7 +35,7 @@ export default class extends Controller {
     if (!this.hasAmountTarget || !item || !item.last_amount || this.amountTarget.value !== "") return
 
     this.amountTarget.value = item.last_amount
-    this.amountHintTarget.textContent = `Filled from the last time: $${item.last_amount} on ${this.formatDate(item.last_date)}.`
+    this.amountHintTarget.textContent = `Filled from the last time: $${item.last_amount} on ${this.formatDate(item.last_date)}. Change it if this one differs.`
     this.amountHintTarget.hidden = false
   }
 

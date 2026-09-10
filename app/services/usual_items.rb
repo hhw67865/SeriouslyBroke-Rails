@@ -45,12 +45,5 @@ class UsualItems
       .first(limit)
   end
 
-  # The newest entry per ranked item, picked in Ruby rather than with one query each.
-  def last_entries_by_item(item_ids)
-    user.entries
-      .where(item_id: item_ids)
-      .order(date: :desc, created_at: :desc)
-      .group_by(&:item_id)
-      .transform_values(&:first)
-  end
+  def last_entries_by_item(item_ids) = Entry.latest_per_item(item_ids).index_by(&:item_id)
 end

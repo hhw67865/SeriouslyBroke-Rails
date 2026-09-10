@@ -25,6 +25,11 @@ class Entry < ApplicationRecord
           expenses.where(items: { category_id: rule.category_id }).on_unruled_items
         }
   scope :since, ->(day) { where(date: day..) }
+  # The newest entry of each item, in one query.
+  scope :latest_per_item,
+        lambda { |item_ids|
+          where(item_id: item_ids).select("DISTINCT ON (entries.item_id) entries.*").order("entries.item_id, entries.date DESC, entries.created_at DESC")
+        }
 
   searchable :description, label: "Description"
   searchable :date, type: :date, label: "Date"
