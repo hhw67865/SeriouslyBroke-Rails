@@ -168,4 +168,16 @@ RSpec.describe "Budget page rules", type: :system do
 
     expect(page).to have_content("New rule for Groceries")
   end
+
+  # The other door on the row: the rule goes and the row goes with it. The confirm is a data
+  # attribute, so Rack::Test submits the `button_to` form without one.
+  it "deletes a rule from its own row", :aggregate_failures do
+    rate_rule(groceries)
+
+    open_panel(groceries)
+    within(rule_row("Groceries")) { click_button "Delete" }
+
+    expect(page).to have_content("Rule deleted.")
+    expect(page).to have_no_css("[data-rule='Groceries']")
+  end
 end

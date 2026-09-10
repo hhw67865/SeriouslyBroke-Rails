@@ -60,13 +60,22 @@
                 <%= when_words(line) %>
               </p>
 
-              <p class="flex items-baseline gap-3 shrink-0 sm:w-24 sm:justify-end text-sm">
-                <%# `_adjust` renders its own summary, so this column holds only Edit. Both wear
-                    RuleActionsHelper::RULE_ACTION_CLASSES — one string, not two. %>
+              <%# A `div`, not a `p`: Delete is a `button_to`, and a form is not phrasing content. %>
+              <div class="flex items-baseline gap-3 shrink-0 sm:w-24 sm:justify-end text-sm">
+                <%# `_adjust` renders its own summary, so this column holds the rule's two doors.
+                    All three wear RuleActionsHelper::RULE_ACTION_CLASSES — one string, not three. %>
                 <%= link_to "Edit",
                             edit_rule_path(line.rule),
                             class: rule_action_classes("mt-1 sm:mt-0 sm:text-right sm:underline") %>
-              </p>
+                <%# `text-status-danger` is declared after `text-brand-dark` in custom.css, so it
+                    wins over the shared skin's colour without a second class list. %>
+                <%= button_to "Delete",
+                              rule_path(line.rule),
+                              method: :delete,
+                              form: { draggable: "false",
+                                      data: { turbo_confirm: "Delete this rule? Its adjustments go with it." } },
+                              class: rule_action_classes("mt-1 sm:mt-0 sm:text-right sm:underline text-status-danger") %>
+              </div>
             </div>
 
             <%= render "budget_page/adjust", line: line %>

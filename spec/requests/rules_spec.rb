@@ -73,4 +73,23 @@ RSpec.describe "Rules" do
 
     expect(response).to have_http_status(:not_found)
   end
+
+  # The row's Delete button: the rule goes, its adjustments go with it, and the Budget page comes
+  # back with the category the rule belonged to still open.
+  it "deletes a rule and its adjustments, and reopens its category", :aggregate_failures do
+    rule = create(:rule, category: groceries, amount: 400)
+    adjustment = create(:adjustment, rule: rule)
+
+    delete rule_path(rule)
+
+    expect(response).to redirect_to(budget_page_path(open: groceries.id))
+    expect(Rule.where(id: rule.id)).to be_empty
+    expect(Adjustment.where(id: adjustment.id)).to be_empty
+  end
+
+  it "never deletes another user's rule" do
+    delete rule_path(create(:rule))
+
+    expect(response).to have_http_status(:not_found)
+  end
 end

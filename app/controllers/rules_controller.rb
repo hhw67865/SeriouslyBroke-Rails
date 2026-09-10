@@ -38,9 +38,12 @@ class RulesController < ApplicationController
     render @rule ? :edit : :new
   end
 
+  # The category is read before the destroy, so the page it returns to still opens on the panel the
+  # button was pressed in.
   def destroy
+    category_id = @rule.category_id
     @rule.destroy
-    redirect_to budget_page_path, notice: "Rule was successfully deleted."
+    redirect_to budget_page_path(open: category_id), notice: "Rule deleted."
   end
 
   private
