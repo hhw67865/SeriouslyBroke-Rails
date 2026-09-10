@@ -38,11 +38,11 @@
         <h2 class="text-sm font-semibold text-gray-900">1. What is this rule for, and how much?</h2>
 
         <p class="form-hint">
-          Per period, over the last three complete periods. Pick what this rule pays for, or name a new item.
+          What each one last cost, and how often it comes round. Pick what this rule pays for, or name a new item.
         </p>
 
         <% history = @history %>
-        <% money = ->(amount) { amount.present? && !amount.zero? ? number_to_currency(amount, unit: "") : "—" } %>
+        <% money = ->(amount) { amount.present? ? number_to_currency(amount, unit: "") : "–" } %>
         <% picker_rows = history.picker_rows(rule_form.item_id) %>
         <% selected_name = history.selected_name(rule_form.item_id) %>
 
@@ -50,10 +50,9 @@
         <div class="border border-gray-200 rounded overflow-hidden">
           <div class="flex items-center gap-3 px-3 py-2 bg-gray-50 border-b border-gray-200 text-[11px] font-medium uppercase tracking-wide text-gray-500">
             <span class="flex-1">Pays for</span>
-            <% history.periods.each do |period| %>
-              <span class="hidden sm:block w-20 text-right"><%= period.first.strftime("%b %-d") %></span>
-            <% end %>
-            <span class="w-20 text-right"><%= history.periods.any? ? "Avg" : "no history yet" %></span>
+            <span class="hidden sm:block w-36 text-right">Last paid</span>
+            <span class="hidden sm:block w-44 text-right">Usually</span>
+            <span class="w-20 text-right">A period</span>
           </div>
 
           <div class="divide-y divide-gray-100">
@@ -85,15 +84,13 @@
                 </span>
 
                 <% if row.kind == :new %>
-                  <% history.periods.size.times do %>
-                    <span class="hidden sm:block w-20" aria-hidden="true"></span>
-                  <% end %>
+                  <span class="hidden sm:block w-36" aria-hidden="true"></span>
+                  <span class="hidden sm:block w-44" aria-hidden="true"></span>
                   <span class="w-20 text-right text-sm text-gray-500">no history</span>
                 <% else %>
-                  <% history.periods.each_index do |i| %>
-                    <span class="hidden sm:block w-20 text-right text-sm tabular-nums text-gray-600"><%= money.call(row.amounts[i]) %></span>
-                  <% end %>
-                  <span class="w-20 text-right text-sm font-medium tabular-nums text-gray-900"><%= money.call(row.average) %></span>
+                  <span class="hidden sm:block w-36 text-right text-sm tabular-nums text-gray-600 truncate"><%= row.last_paid_words %></span>
+                  <span class="hidden sm:block w-44 text-right text-sm tabular-nums text-gray-600 truncate"><%= row.usually_words %></span>
+                  <span class="w-20 text-right text-sm font-medium tabular-nums text-gray-900"><%= money.call(row.per_period) %></span>
                 <% end %>
               </label>
             <% end %>

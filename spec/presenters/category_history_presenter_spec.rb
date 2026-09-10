@@ -13,12 +13,13 @@ RSpec.describe CategoryHistoryPresenter do
 
   def spend(item, amount, on:) = create(:entry, item: item, amount: amount, date: on)
 
-  it "has no periods, no rows and nil averages with no history at all", :aggregate_failures do
+  it "has no periods, no rows and no figures with no history at all", :aggregate_failures do
     presenter = described_class.new(groceries, today: today)
 
     expect(presenter.periods).to eq([])
     expect(presenter.rows).to eq([])
-    expect(presenter.everything_else.average).to be_nil
+    expect(presenter.everything_else.pattern.count).to eq(0)
+    expect(presenter.everything_else_per_period).to be_nil
   end
 
   describe "with three periods of history" do
@@ -32,18 +33,16 @@ RSpec.describe CategoryHistoryPresenter do
       spend(milk, 5, on: middle_period.first)
     end
 
-    it "sums each item's spending per period, oldest first, and averages it", :aggregate_failures do
+    it "hands each item a pattern read from its own entries, newest first", :aggregate_failures do
       presenter = described_class.new(groceries, today: today)
-
-      expect(presenter.periods).to eq([oldest_period, middle_period, latest_period])
 
       bread_row = presenter.rows.find { |row| row.item == bread }
       milk_row = presenter.rows.find { |row| row.item == milk }
 
-      expect(bread_row.amounts).to eq([10, 20, 30])
-      expect(bread_row.average).to eq(20)
-      expect(milk_row.amounts).to eq([0, 5, 0])
-      expect(milk_row.average).to eq(1.67)
+      expect(bread_row.pattern).to be_a(PaymentPattern)
+      expect(bread_row.pattern.last_paid).to eq([latest_period.first, 30.to_d])
+      expect(bread_row.pattern.count).to eq(3)
+      expect(milk_row.pattern.last_paid).to eq([middle_period.first, 5.to_d])
     end
 
     it "lists items alphabetically" do
@@ -52,13 +51,13 @@ RSpec.describe CategoryHistoryPresenter do
       expect(presenter.rows.map { |row| row.item.name }).to eq(["Bread", "Milk"])
     end
 
-    it "sums everything else from items with no rule of their own, excluding a ruled item", :aggregate_failures do
+    it "sums everything else's per-period figure from items with no rule of their own", :aggregate_failures do
       create(:rule, :rate, category: groceries, item: bread, amount: 100, starts_on: Date.new(2026, 1, 1))
 
       presenter = described_class.new(groceries, today: today)
 
-      expect(presenter.everything_else.amounts).to eq([0, 5, 0])
-      expect(presenter.everything_else.average).to eq(1.67)
+      expect(presenter.everything_else.pattern.last_paid).to eq([middle_period.first, 5.to_d])
+      expect(presenter.everything_else_per_period).to eq(1.67)
     end
 
     it "sets ruled_by for an item ruled by another rule, and nil for the rule being edited", :aggregate_failures do
@@ -99,6 +98,49 @@ RSpec.describe CategoryHistoryPresenter do
       expect(presenter.picker_rows("").first).to have_attributes(disabled: true, checked: false, caption: "already has a rule")
       expect(presenter.selected_name("")).to eq("what you pick above")
       expect(described_class.new(groceries, today: today, rule: catch_all).picker_rows("").first.checked).to be(true)
+    end
+
+    it "gives the new-item row no history to show", :aggregate_failures do
+      presenter = described_class.new(groceries, today: today)
+      new_row = presenter.picker_rows("").last
+
+      expect(new_row).to have_attributes(last_paid_words: nil, usually_words: nil, per_period: nil)
+    end
+  end
+
+  describe "an item paid yearly" do
+    let(:membership) { create(:item, category: groceries, name: "Membership") }
+
+    before do
+      spend(membership, 95, on: Date.new(2024, 9, 7))
+      spend(membership, 95, on: Date.new(2025, 9, 7))
+    end
+
+    it "reads the yearly cadence off the picker row", :aggregate_failures do
+      presenter = described_class.new(groceries, today: today)
+      row = presenter.picker_rows("").find { |r| r.dom_id == "rule_item_#{membership.id}" }
+
+      expect(row.last_paid_words).to eq("Sep 7, 2025 · $95.00")
+      expect(row.usually_words).to eq("$95.00 every 12 months")
+      expect(row.per_period).to eq((95.to_d * (365.25 / 365) / user.periods_per_year).round(2))
+    end
+  end
+
+  describe "an item that has lapsed" do
+    let(:parking) { create(:item, category: groceries, name: "Parking") }
+
+    before do
+      spend(parking, 10, on: today - 192)
+      spend(parking, 10, on: today - 162)
+      spend(parking, 10, on: today - 131)
+    end
+
+    it "marks the picker row lapsed and drops its per-period figure", :aggregate_failures do
+      presenter = described_class.new(groceries, today: today)
+      row = presenter.picker_rows("").find { |r| r.dom_id == "rule_item_#{parking.id}" }
+
+      expect(row.usually_words).to eq("was $10.00 monthly")
+      expect(row.per_period).to be_nil
     end
   end
 end

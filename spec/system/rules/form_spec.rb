@@ -121,14 +121,16 @@ RSpec.describe "Rule form", type: :system do
     let!(:bread) { create(:item, category: groceries, name: "Bread") }
 
     it "shows an item's history and checks everything else by default", :aggregate_failures do
-      # On a period's own opening day, so the walk counts it as a whole complete period.
-      create(:entry, item: bread, amount: 12, date: Date.new(2026, 7, 24))
+      create(:entry, item: bread, amount: 95, date: Date.new(2024, 9, 7))
+      create(:entry, item: bread, amount: 95, date: Date.new(2025, 9, 7))
 
       open_form
 
       expect(page).to have_css("label", text: "Bread")
       expect(page).to have_field("rule_item_everything", checked: true)
-      expect(page).to have_content("12.00")
+      expect(page).to have_content("Sep 7, 2025 · $95.00")
+      expect(page).to have_content("$95.00 every 12 months")
+      expect(page).to have_content("3.66")
     end
 
     it "disables a ruled item's radio and tags it", :aggregate_failures do

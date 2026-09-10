@@ -1,12 +1,13 @@
 # frozen_string_literal: true
 
 # A category's spending, shaped for the rule form's item picker: one row per item, and one row
-# for everything else — over the user's last complete periods.
+# for everything else — what each one last cost, how often it comes round, and what that is a
+# period.
 class CategoryHistoryPresenter
   PERIODS = 3
 
-  Row = Data.define(:item, :amounts, :average, :ruled_by)
-  PickerRow = Data.define(:kind, :dom_id, :value, :name, :caption, :disabled, :amounts, :average, :checked)
+  Row = Data.define(:item, :pattern, :ruled_by)
+  PickerRow = Data.define(:kind, :dom_id, :value, :name, :caption, :disabled, :last_paid_words, :usually_words, :per_period, :checked)
 
   attr_reader :category, :today, :rule
 
@@ -16,6 +17,8 @@ class CategoryHistoryPresenter
     @rule = rule
   end
 
+  # Kept only for everything_else's honest per-period figure — an item's own figure comes from its
+  # PaymentPattern instead.
   def periods
     @periods ||= category.user.complete_periods(PERIODS, today: today)
   end
@@ -25,13 +28,19 @@ class CategoryHistoryPresenter
   end
 
   # Every item with no rule of its own (besides the one being edited): the lane a whole-category
-  # rule pays for, summed the same way as any other row.
+  # rule pays for, its history read as one combined item.
   def everything_else
     @everything_else ||= begin
-      unruled = rows.select { |row| row.ruled_by.nil? }
-      amounts = periods.each_index.map { |i| unruled.sum { |row| row.amounts[i] } }
-      Row.new(item: nil, amounts: amounts, average: average(amounts), ruled_by: catch_all_rule)
+      unruled = rows.reject(&:ruled_by)
+      payments = unruled.flat_map { |row| payments_by_item[row.item.id] }.sort_by { |(date, _amount)| date }.reverse
+      Row.new(item: nil, pattern: pattern_for(payments), ruled_by: catch_all_rule)
     end
+  end
+
+  def everything_else_per_period
+    return nil if periods.empty?
+
+    (unruled_period_amounts.sum / periods.size).round(2)
   end
 
   # The rows the form draws, in order: everything else, each item, then a new item. `picked` is the
@@ -46,6 +55,7 @@ class CategoryHistoryPresenter
 
   def everything_row(picked)
     taken = everything_else.ruled_by.present?
+    pattern = everything_else.pattern
     PickerRow.new(
       kind: :everything,
       dom_id: "rule_item_everything",
@@ -53,23 +63,27 @@ class CategoryHistoryPresenter
       name: "Everything else in #{category.name}",
       caption: taken ? "already has a rule" : "the items below that have no rule of their own",
       disabled: taken,
-      amounts: everything_else.amounts,
-      average: everything_else.average,
+      last_paid_words: last_paid_words(pattern),
+      usually_words: pattern.usually_words,
+      per_period: everything_else_per_period,
       checked: picked.blank? && !taken
     )
   end
 
   def item_row(row, picked)
+    item = row.item
+    pattern = row.pattern
     PickerRow.new(
       kind: :item,
-      dom_id: "rule_item_#{row.item.id}",
-      value: row.item.id,
-      name: row.item.name,
-      caption: row.ruled_by && "has its own rule · #{row.ruled_by.rule_type.capitalize}",
+      dom_id: "rule_item_#{item.id}",
+      value: item.id,
+      name: item.name,
+      caption: ruled_caption(row),
       disabled: row.ruled_by.present?,
-      amounts: row.amounts,
-      average: row.average,
-      checked: picked.to_s == row.item.id.to_s
+      last_paid_words: last_paid_words(pattern),
+      usually_words: pattern.usually_words,
+      per_period: pattern.per_period,
+      checked: picked.to_s == item.id.to_s
     )
   end
 
@@ -81,44 +95,55 @@ class CategoryHistoryPresenter
       name: "the new item",
       caption: nil,
       disabled: false,
-      amounts: [],
-      average: nil,
+      last_paid_words: nil,
+      usually_words: nil,
+      per_period: nil,
       checked: picked == "new"
     )
   end
 
-  def row_for(item)
-    amounts = amounts_by_item.fetch(item.id, empty_amounts)
-    Row.new(item: item, amounts: amounts, average: average(amounts), ruled_by: item.rule == rule ? nil : item.rule)
+  def ruled_caption(row) = row.ruled_by && "has its own rule · #{row.ruled_by.rule_type.capitalize}"
+
+  def last_paid_words(pattern)
+    paid = pattern.last_paid
+    return "—" if paid.nil?
+
+    date, amount = paid
+    when_words = date.year == today.year ? date.strftime("%b %-d") : date.strftime("%b %-d, %Y")
+    "#{when_words} · $#{format("%.2f", amount)}"
   end
+
+  def row_for(item)
+    Row.new(item: item, pattern: pattern_for(payments_by_item[item.id]), ruled_by: item.rule == rule ? nil : item.rule)
+  end
+
+  def pattern_for(payments) = PaymentPattern.new(payments, today: today, periods_per_year: category.user.periods_per_year)
 
   def catch_all_rule
     catch_all = category.rules.detect { |candidate| candidate.item_id.nil? }
     catch_all == rule ? nil : catch_all
   end
 
-  def average(amounts)
-    return nil if periods.empty?
-
-    (amounts.sum / periods.size).round(2)
-  end
-
-  def empty_amounts = Array.new(periods.size, 0.to_d)
-
-  # One query for every item's amounts, grouped into periods in Ruby rather than in SQL — the
-  # window is small and this avoids a GROUP BY that Postgres would refuse to run un-aggregated.
-  def amounts_by_item
-    @amounts_by_item ||= entry_amounts.each_with_object(Hash.new { |h, k| h[k] = empty_amounts }) do |(item_id, date, amount), grouped|
-      index = periods.index { |range| range.cover?(date) }
-      grouped[item_id][index] += amount if index
+  # One query for every item's payments, newest first — grouped in Ruby rather than fetched per item.
+  def payments_by_item
+    @payments_by_item ||= entry_rows.each_with_object(Hash.new { |h, k| h[k] = [] }) do |(item_id, date, amount), grouped|
+      grouped[item_id] << [date, amount]
     end
   end
 
-  def entry_amounts
-    return [] if periods.empty?
+  def entry_rows
+    @entry_rows ||= Entry.joins(:item).where(items: { category_id: category.id }).order(date: :desc).pluck(:item_id, :date, :amount)
+  end
 
-    Entry.expenses
-      .where(items: { category_id: category.id }, date: periods.first.first..periods.last.last)
-      .pluck(:item_id, :date, :amount)
+  def unruled_period_amounts
+    unruled_ids = rows.reject(&:ruled_by).to_set { |row| row.item.id }
+    amounts = Array.new(periods.size, 0.to_d)
+    entry_rows.each do |item_id, date, amount|
+      next unless unruled_ids.include?(item_id)
+
+      index = periods.index { |range| range.cover?(date) }
+      amounts[index] += amount if index
+    end
+    amounts
   end
 end
