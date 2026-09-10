@@ -62,8 +62,9 @@ entry may name an account, and no account means main. Main is not deletable whil
 - **Entry.** Dated to the calendar day the user means. Income lands in `account` or main; expense
   leaves main.
 - **Transfer.** A hand move between two of the user's accounts, dated when it happened.
-- **Category.** `priority` is its place in the give-way order on the home page (lower gives way
-  first). `tracked` keeps it on or off the spending screens. `regular` on an income category means
+- **Category.** `priority` is its place in the fill order: money fills categories from 0 upward,
+  so when money is short the highest number gives way first. `tracked` keeps it on or off the
+  spending screens. `regular` on an income category means
   its entries count toward typical income.
 - **Rule.** The lane a rule speaks for is its item's entries when `item_id` is set, else the
   category's entries on items that have no rule of their own. `starts_on` is the first day whose

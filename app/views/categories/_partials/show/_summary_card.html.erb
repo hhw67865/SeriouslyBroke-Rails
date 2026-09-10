@@ -1,20 +1,26 @@
 <!-- Summary Card -->
-<div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 p-6">
+<%# `data-summary-card` scopes the specs: this card and the holdings card answer the same question
+    in the same words, so an unscoped assertion is satisfied by whichever card is wrong. %>
+<div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 p-6" data-summary-card>
   <h2 class="text-xl font-semibold mb-4">Summary</h2>
 
   <% calc = category.calculator(selected_date, period: current_period) %>
-  <% if category.pool_covered? %>
-    <!-- Pool-Covered Expense Category Summary -->
+  <% if category.expense? %>
+    <!-- Expense Category Summary -->
     <div class="space-y-6">
       <div>
         <div class="flex justify-between text-sm mb-2">
           <span class="text-gray-500">Spent <%= period_time_label %></span>
           <span class="font-medium text-gray-900"><%= number_to_currency(calc.total_amount) %></span>
         </div>
+        <%# `Category#ruled?` is the predicate the holdings card branches on too, so the two cards
+            on this page cannot say different things about the same category. %>
         <p class="text-xs text-gray-500">
-          Funded by savings pool
-          <%= link_to category.savings_pool.name, savings_pool_path(category.savings_pool), class: "text-brand hover:text-brand-dark" %>
-          — separate from your monthly budget
+          <% if category.ruled? %>
+            Spending here counts against what this category's rules claim
+          <% else %>
+            Nothing claims this category's spending — it comes straight out of what's free to spend
+          <% end %>
         </p>
       </div>
 
@@ -29,67 +35,6 @@
                             end
           %>
           <%= line_chart [{ name: "Spending", data: spending_data }], curve: false, points: false, colors: [DashboardPresenter::COLORS[:brand]], prefix: "$ " %>
-        </div>
-      </div>
-    </div>
-
-  <% elsif category.expense? %>
-    <!-- Budgeted Expense Category Summary -->
-    <div class="space-y-6">
-      <div>
-        <div class="flex justify-between text-sm mb-2">
-          <span class="text-gray-500"><%= period_budget_label %></span>
-          <span class="font-medium text-gray-900">
-            <%= number_to_currency(calc.total_amount) %> /
-            <%= calc.effective_budget ? number_to_currency(calc.effective_budget) : "N/A" %>
-          </span>
-        </div>
-
-        <% if calc.effective_budget %>
-          <% cap_percentage = calc.budget_percentage %>
-          <% pace_percentage = calc.budget_pace_percentage %>
-          <div class="h-3 bg-gray-200 rounded-full overflow-hidden">
-            <div class="h-3 rounded-full <%= budget_status_color(pace_percentage) %>" style="width: <%= [cap_percentage, 100].min %>%;"></div>
-          </div>
-
-          <div class="flex justify-between mt-2">
-            <p class="text-sm text-gray-500"><%= cap_percentage %>% used</p>
-            <p class="text-sm <%= budget_status_color(pace_percentage).gsub("bg-", "text-") %>">
-              <%= budget_status(pace_percentage) %>
-            </p>
-          </div>
-
-          <% if category.budget&.prorated? && calc.budget_pace != calc.effective_budget %>
-            <p class="text-xs text-gray-500 mt-1">
-              Expected by today: <%= number_to_currency(calc.budget_pace) %>
-            </p>
-          <% end %>
-        <% else %>
-          <div class="h-3 bg-gray-200 rounded-full overflow-hidden">
-            <div class="bg-gray-300 h-3 rounded w-0"></div>
-          </div>
-
-          <div class="flex justify-between mt-2">
-            <p class="text-sm text-gray-500">No budget set</p>
-            <p class="text-sm text-gray-500">Set budget to track spending</p>
-          </div>
-        <% end %>
-      </div>
-
-      <div class="border-t border-gray-200 pt-4">
-        <h3 class="text-base font-medium mb-3"><%= period_trend_label %> Spending Trend</h3>
-        <div class="bg-gray-50 rounded p-4 flex items-center justify-center">
-          <%
-            spending_data = if current_period == :ytd
-                              calculate_running_total(category.entries.group_by_month(:date, range: calc.date_range).sum(:amount))
-                            else
-                              calculate_running_total(category.entries.group_by_day(:date, range: calc.date_range).sum(:amount))
-                            end
-            budget_curve = calc.budget_curve
-            chart_data = [{ name: "Spending", data: spending_data }]
-            chart_data << { name: "Budget", data: budget_curve } if budget_curve.any?
-          %>
-          <%= line_chart chart_data, curve: false, points: false, colors: [DashboardPresenter::COLORS[:brand], DashboardPresenter::COLORS[:dusty_teal]], prefix: "$ " %>
         </div>
       </div>
     </div>
@@ -126,78 +71,5 @@
         </div>
       </div>
     </div>
-    
-  <% elsif category.savings? %>
-    <!-- Savings Category Summary -->
-    <div class="space-y-6">
-      <div>
-        <div class="flex justify-between text-sm mb-2">
-          <span class="text-gray-500"><%= period_amount_label(:savings) %></span>
-          <span class="font-medium text-gray-900"><%= number_to_currency(calc.monthly_contribution) %></span>
-        </div>
-        
-        <% if category.savings_pool.present? %>
-          <div class="mt-4 p-4 rounded bg-gray-50 border border-gray-200">
-            <div class="flex justify-between items-start">
-              <div>
-                <h4 class="text-sm font-medium text-gray-700">Savings Pool</h4>
-                <p class="text-base font-medium mt-1"><%= category.savings_pool.name %></p>
-                <p class="text-xs text-gray-500 mt-1">This category contributes to a shared savings pool</p>
-              </div>
-              
-              <div class="text-right">
-                <%= link_to savings_pool_path(category.savings_pool), class: "text-sm text-brand hover:text-brand-dark flex items-center" do %>
-                  <span>View details</span>
-                  <%= heroicon "arrow-right", options: { class: "h-3.5 w-3.5 ml-1" } %>
-                <% end %>
-              </div>
-            </div>
-            
-            <% if category.savings_pool.target_amount.present? && category.savings_pool.target_amount.positive? %>
-              <% 
-                progress = category.savings_pool.calculator.progress_percentage
-                current_balance = category.savings_pool.calculator.current_balance
-              %>
-              <div class="mt-3">
-                <div class="flex justify-between text-xs text-gray-500 mb-1">
-                  <span>Pool progress</span>
-                  <span><%= number_to_currency(category.savings_pool.calculator.current_balance) %> / <%= number_to_currency(category.savings_pool.target_amount) %></span>
-                </div>
-                <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
-                  <div class="h-2 rounded-full
-                       <%= if progress >= 100
-                             'bg-status-success'
-                           elsif progress < 0
-                             'bg-status-danger'
-                           else
-                             'bg-brand'
-                           end %>"
-                       style="width: <%= progress %>%;"></div>
-                </div>
-                <p class="text-xs text-gray-500 mt-1">
-                  <% if progress.negative? %>
-                    <span class="text-status-danger font-medium"><%= progress %>% of target</span>
-                  <% else %>
-                    <%= progress %>% of target
-                  <% end %>
-                </p>
-              </div>
-            <% end %>
-          </div>
-        <% end %>
-      </div>
-      
-      <div class="border-t border-gray-200 pt-4">
-        <h3 class="text-base font-medium mb-3">Savings <%= current_period == :ytd ? "This Year" : "Progress" %></h3>
-        <div class="bg-gray-50 rounded p-4 flex items-center justify-center">
-          <%
-            savings_chart_range = current_period == :ytd ?
-              calc.date_range :
-              (selected_date.beginning_of_month - 5.months)..selected_date.end_of_month
-          %>
-          <%= line_chart savings_evolution_series(category, savings_chart_range), curve: false, points: false, colors: [DashboardPresenter::COLORS[:brand_dark]], prefix: "$ " %>
-        </div>
-      </div>
-    </div>
   <% end %>
-</div> 
+</div>

@@ -6,10 +6,8 @@
                 "Manage your expense categories and track your spending"
               when "income"
                 "Track your income sources and monthly earnings"
-              when "savings"
-                "Organize your savings pools and track progress"
               else
-                "Manage your expense, income, and savings categories"
+                "Manage your expense and income categories"
               end,
     search: show_search_form? ? {
       enabled: true,
@@ -43,10 +41,10 @@
 <%# Main Content %>
 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
   <% if @categories.present? %>
+    <%# No fragment cache: the card prints what the category CLAIMS, and a claim moves with the
+        calendar and with rules edited elsewhere — neither of which any key on this row can see. %>
     <% @categories.each do |category| %>
-      <% cache [category, selected_date] do %>
-        <%= render "categories/_partials/category_card", category: category %>
-      <% end %>
+      <%= render "categories/_partials/category_card", category: category %>
     <% end %>
   <% else %>
     <%= render "categories/_partials/empty_state" %>

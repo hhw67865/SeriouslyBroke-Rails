@@ -153,6 +153,10 @@
           </div>
         <% end %>
 
+        <%# The form is submitted by pressing Enter in the box, which leaves anyone who reaches it
+            by keyboard alone with no control to activate. Visually hidden, not absent. %>
+        <%= f.submit "Search", name: nil, class: "sr-only" %>
+
         <%# Hidden Fields for State Preservation %>
         <% if search[:hidden_fields].present? %>
           <% search[:hidden_fields].each do |field, value| %>

@@ -2,56 +2,63 @@
   <%= f.error_notification %>
   <%= f.error_notification message: f.object.errors[:base].to_sentence if f.object.errors[:base].present? %>
   <%= hidden_field_tag :previous_url, @previous_url if @previous_url.present? %>
-  <div>
+  <%# The impact card's controller spans the whole form because overdrawing changes both the card
+      and the submit button's words. `entry-id` lets the card leave this entry's own amount out. %>
+  <div data-controller="app--entry--impact app--entry--form"
+       data-action="entry:categoryChanged->app--entry--impact#categoryChanged"
+       data-app--entry--impact-url-value="<%= impact_entries_path %>"
+       data-app--entry--impact-entry-id-value="<%= entry.id %>"
+       data-app--entry--form-income-ids-value="<%= @categories.select(&:income?).map(&:id).to_json %>">
     <%# Transaction Details Section %>
     <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 mb-6">
       <div class="p-6">
         <h2 class="text-xl font-semibold mb-4">Transaction Details</h2>
-        
-        <div data-controller="app--entry--form">
-          <%= f.simple_fields_for :item do |df| %>
-            <%= df.hidden_field :name, data: { app__entry__form_target: "itemNameField" } %>
+
+        <%# The name of an item the user typed rather than picked. `EntryForm` reads it only when
+            the item select holds no id, so it starts empty on an edit too. %>
+        <%= hidden_field_tag "entry[item_attributes][name]",
+                             nil,
+                             id: "entry_item_attributes_name",
+                             data: { app__entry__form_target: "itemNameField" } %>
+
+        <div class="form-group">
+          <label for="category_id" class="form-label">
+            <abbr title="required">*</abbr> Category
+          </label>
+          <%= select_tag :category_id,
+              grouped_options_for_select(
+                @categories.group_by(&:category_type).transform_keys { |type| type.to_s.pluralize.titleize }.transform_values { |cats| cats.map { |c| [c.name, c.id] } },
+                entry.item&.category_id
+              ),
+              prompt: "Select a category",
+              data: {
+                app__entry__form_target: "categorySelect"
+              },
+              class: "form-select #{"form-input-error" if entry.errors[:item].any? && entry.item&.category_id.blank?}" %>
+          <% if entry.errors[:item].any? && entry.item&.category_id.blank? %>
+            <p class="form-error">must be selected</p>
           <% end %>
+        </div>
 
-          <div class="form-group">
-            <label for="category_id" class="form-label">
-              <abbr title="required">*</abbr> Category
-            </label>
-            <%= select_tag :category_id,
-                grouped_options_for_select(
-                  @categories.group_by(&:category_type).transform_keys { |type| type.to_s.pluralize.titleize }.transform_values { |cats| cats.map { |c| [c.name, c.id] } },
-                  entry.item&.category_id
-                ),
-                prompt: "Select a category",
-                data: {
-                  app__entry__form_target: "categorySelect"
-                },
-                class: "form-select #{"form-input-error" if entry.errors[:item].any? && entry.item&.category_id.blank?}" %>
-            <% if entry.errors[:item].any? && entry.item&.category_id.blank? %>
-              <p class="form-error">must be selected</p>
-            <% end %>
-          </div>
-
-          <div class="form-group">
-            <label for="entry_item_id" class="form-label">
-              <abbr title="required">*</abbr> Name
-            </label>
-            <%= f.select :item_id,
-                options_from_collection_for_select(
-                  entry.persisted? ? entry.item.category.items : [],
-                  :id,
-                  :name,
-                  entry.item_id
-                ),
-                { prompt: "Choose a Category first" },
-                {
-                  data: { app__entry__form_target: "itemSelect" },
-                  class: "form-select #{"form-input-error" if entry.errors[:item].any?}"
-                } %>
-            <% if entry.errors[:item].any? %>
-              <p class="form-error">must be selected</p>
-            <% end %>
-          </div>
+        <div class="form-group">
+          <label for="entry_item_id" class="form-label">
+            <abbr title="required">*</abbr> Name
+          </label>
+          <%= f.select :item_id,
+              options_from_collection_for_select(
+                entry.persisted? ? entry.item.category.items : [],
+                :id,
+                :name,
+                entry.item_id
+              ),
+              { prompt: "Choose a Category first" },
+              {
+                data: { app__entry__form_target: "itemSelect" },
+                class: "form-select #{"form-input-error" if entry.errors[:item].any?}"
+              } %>
+          <% if entry.errors[:item].any? %>
+            <p class="form-error">must be selected</p>
+          <% end %>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5">
@@ -63,7 +70,11 @@
                     placeholder: "0.00",
                     autocomplete: "off",
                     class: "form-input pr-10 #{"form-input-error" if entry.errors[:amount].any?}",
-                    data: { shared__calculator_pad_target: "input" } %>
+                    data: {
+                      shared__calculator_pad_target: "input",
+                      app__entry__impact_target: "amount",
+                      action: "input->app--entry--impact#recompute change->app--entry--impact#recompute"
+                    } %>
                 <%= render "shared/calculator_pad_toggle" %>
               </div>
             <% end %>
@@ -76,11 +87,31 @@
               hint: "When did this transaction occur?",
               input_html: {
                 type: "date",
-                value: entry.date&.strftime("%Y-%m-%d") || Date.current.strftime("%Y-%m-%d")
+                value: entry.date&.strftime("%Y-%m-%d") || current_user.today.strftime("%Y-%m-%d")
               } %>
         </div>
 
-        <%= f.input :description, wrapper_html: { class: "mt-5" },
+        <%# Income is asked where it landed; spending always leaves main, so the field is hidden
+            rather than absent — the category can turn into an income one without a page load. %>
+        <div class="form-group mt-5"
+             data-app--entry--form-target="account"
+             <%= "hidden" unless entry.item&.category&.income? %>>
+          <label for="entry_account_id" class="form-label">Lands in</label>
+          <%= f.select :account_id,
+              options_from_collection_for_select(@accounts, :id, :name, entry.account_id || current_user.main_account_id),
+              {},
+              { id: "entry_account_id", class: "form-select" } %>
+          <p class="form-hint">Which account did this money arrive in?</p>
+        </div>
+
+        <%# The card is replaced by the server whenever the category changes: what a rule holds is
+            derived from the category, never picked. %>
+        <div data-app--entry--impact-target="card">
+          <%= render "entries/impact", impact: entry_impact(entry) %>
+        </div>
+
+        <%= f.input :description,
+            wrapper_html: { class: "mt-5" },
             placeholder: "Add any notes about this transaction",
             hint: "Optional details about this entry",
             input_html: { rows: 3 } %>
@@ -95,8 +126,16 @@
           (@previous_url.presence || entries_path),
           class: "btn btn-secondary" %>
 
+      <%# Both labels come down from the server, so the words on the button are never the browser's
+          invention. Overdrawing warns and never blocks. %>
+      <% default_label = entry.persisted? ? "Update Entry" : "Create Entry" %>
       <%= f.button :submit,
-          entry.persisted? ? "Update Entry" : "Create Entry" %>
+          entry_impact(entry).overdrawn? ? "Save anyway" : default_label,
+          data: {
+            app__entry__impact_target: "submit",
+            default_label: default_label,
+            overdrawn_label: "Save anyway"
+          } %>
     </div>
   </div>
 <% end %>

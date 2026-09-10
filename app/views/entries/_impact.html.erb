@@ -1,0 +1,74 @@
+<%# Local: `impact` — an EntryImpactPresenter, or nil before a category is chosen. Every figure is
+    server-rendered and correct on arrival; the Stimulus controller only rewrites them as the user types. %>
+<% if impact&.render? %>
+  <% if impact.unbudgeted? %>
+    <div class="mt-4 rounded border border-gray-200 bg-gray-50 p-4"
+         data-impact-card="unbudgeted">
+      <p class="text-sm font-medium text-gray-900" data-figure="headline">
+        Nothing claims this yet — this spending isn't budgeted.
+      </p>
+      <p class="mt-1 text-sm text-gray-600">
+        It comes straight out of what's free.
+        <%= link_to "Give it a rule on the Budget page", budget_page_path, class: "text-status-info hover:underline" %>
+      </p>
+    </div>
+  <% else %>
+    <%# `data-balance` and `data-denominator` are undelimited digits because `parseFloat` reads them
+        and stops at the first character it does not understand. %>
+    <div class="mt-4 rounded border border-gray-200 bg-gray-50 p-4"
+         data-impact-card="<%= impact.noun %>"
+         data-app--entry--impact-target="figures"
+         data-balance="<%= impact.balance_param %>"
+         data-denominator="<%= impact.denominator_param %>">
+      <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <p class="text-sm font-medium text-gray-900" data-figure="envelope">
+          <%= impact.category.name %> <%= impact.noun %>
+        </p>
+        <%# Omitted outright for a user who has declared no period: a date invented from the
+            calendar month would state a boundary they never set. %>
+        <% if impact.period_ends_on.present? %>
+          <p class="text-sm text-gray-500" data-figure="period-end">
+            until <%= impact.period_ends_on.strftime("%b %-d") %>
+          </p>
+        <% end %>
+      </div>
+
+      <p class="mt-1 text-base tabular-nums text-gray-900">
+        <span data-figure="balance"><%= number_to_currency(impact.balance) %></span>
+        <span class="text-gray-400" aria-hidden="true">→</span>
+        <span class="font-semibold <%= "text-status-danger" if impact.overdrawn? %>"
+              data-app--entry--impact-target="after"
+              data-figure="balance-after"><%= number_to_currency(impact.balance_after) %></span>
+        <%# A fund says what it is filling; an envelope says what is left in it. A fund beside a
+            sibling rule withholds its target, because the figure is the whole category's claim. %>
+        <% if impact.fund_target.present? %>
+          <span class="text-sm text-gray-600" data-figure="target">of <%= number_to_currency(impact.fund_target) %></span>
+        <% elsif impact.fund? %>
+          <span class="text-sm text-gray-600" data-figure="target">built up</span>
+        <% else %>
+          <span class="text-sm text-gray-600">left</span>
+        <% end %>
+      </p>
+
+      <%# Omitted entirely when nothing claims the category (see #bar?): an empty track beside
+          "$240.00 left" would say "nothing left" an inch under a figure saying otherwise. %>
+      <% if impact.bar? %>
+        <div class="mt-2 h-2 w-full overflow-hidden rounded bg-gray-200">
+          <div class="h-full rounded bg-brand-dark"
+               data-app--entry--impact-target="bar"
+               data-figure="bar"
+               style="width: <%= impact.bar_percent %>%"></div>
+        </div>
+      <% end %>
+
+      <%# Both states are rendered by the server and the browser only toggles `hidden`, so nothing
+          blocks: the button below stays live and changes only its words. %>
+      <p class="mt-2 text-sm text-status-danger"
+         data-app--entry--impact-target="buffer"
+         data-figure="buffer"
+         <%= "hidden" unless impact.overdrawn? %>>
+        This <%= impact.noun %> goes over — the difference comes straight out of what's free.
+      </p>
+    </div>
+  <% end %>
+<% end %>

@@ -40,14 +40,25 @@ RSpec.describe Item do
       expect(rule.reload.item).to eq(target)
     end
 
-    it "refuses when both items carry a rule", :aggregate_failures do
+    it "refuses when both items carry a rule, and says the target has one", :aggregate_failures do
       target = create(:item, category: category)
-      source = create(:item, category: category)
+      source = create(:item, category: category, name: "Bread")
       create(:rule, category: category, item: target)
       create(:rule, category: category, item: source)
 
       expect(described_class.merge(target: target, sources: [source])).to be(false)
       expect(described_class.exists?(source.id)).to be(true)
+      expect(source.errors[:base]).to eq(["Bread #{Item::RULE_ALREADY_THERE}"])
+    end
+
+    it "refuses two ruled sources, and names them both", :aggregate_failures do
+      target = create(:item, category: category)
+      sources = [create(:item, category: category, name: "Bread"), create(:item, category: category, name: "Milk")]
+      sources.each { |source| create(:rule, category: category, item: source) }
+
+      expect(described_class.merge(target: target, sources: sources)).to be(false)
+      expect(sources.map { |source| described_class.exists?(source.id) }).to all(be(true))
+      expect(sources.first.errors[:base]).to eq(["#{Item::RULES_COLLIDE} — Bread and Milk both carry one"])
     end
   end
 

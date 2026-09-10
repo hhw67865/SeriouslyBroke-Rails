@@ -6,10 +6,12 @@ export default class extends Controller {
     "categoryTypeOption", 
     "categoryTypeIcon", 
     "categoryTypeText", 
-    "colorOption", 
+    "colorOption",
     "colorInput",
     "selectedColorPreview",
-    "selectedColorCode"
+    "selectedColorCode",
+    "expenseOnly",
+    "incomeOnly"
   ]
 
   connect() {
@@ -33,14 +35,16 @@ export default class extends Controller {
 
     if (!selectedValue) return
 
+    this.toggleTypeOnlySections(selectedValue)
+
     // Reset all options to default state
     this.categoryTypeOptionTargets.forEach(option => {
-      option.classList.remove('border-brand', 'bg-brand-light')
+      option.classList.remove('border-brand-dark', 'bg-brand-light')
       option.classList.add('border-gray-200')
     })
     
     this.categoryTypeIconTargets.forEach(icon => {
-      icon.classList.remove('bg-brand')
+      icon.classList.remove('bg-brand-dark')
       icon.classList.add('bg-gray-200')
     })
     
@@ -53,12 +57,12 @@ export default class extends Controller {
     const selectedOption = this.element.querySelector(`.category-type-option[data-type="${selectedValue}"]`)
     if (selectedOption) {
       selectedOption.classList.remove('border-gray-200')
-      selectedOption.classList.add('border-brand', 'bg-brand-light')
+      selectedOption.classList.add('border-brand-dark', 'bg-brand-light')
       
       const icon = selectedOption.querySelector('.category-type-icon')
       if (icon) {
         icon.classList.remove('bg-gray-200')
-        icon.classList.add('bg-brand')
+        icon.classList.add('bg-brand-dark')
       }
       
       const text = selectedOption.querySelector('.category-type-text')
@@ -67,6 +71,20 @@ export default class extends Controller {
         text.classList.add('text-gray-900')
       }
     }
+  }
+
+  // Sections that ask a question only one type can answer. Both render, because the type is
+  // switched here rather than by a round trip; the server hides the wrong one on first paint.
+  // The `hidden` ATTRIBUTE, not a class: it is what the server writes for the non-JS first paint,
+  // and toggling the same thing keeps one spelling of "this section is not for this type".
+  toggleTypeOnlySections(selectedValue) {
+    this.expenseOnlyTargets.forEach(section => {
+      section.hidden = selectedValue !== 'expense'
+    })
+
+    this.incomeOnlyTargets.forEach(section => {
+      section.hidden = selectedValue !== 'income'
+    })
   }
 
   // Color Selection

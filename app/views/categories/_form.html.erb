@@ -1,43 +1,57 @@
 <%= simple_form_for(category) do |f| %>
-  <%= f.error_notification %>
-  <%= f.error_notification message: f.object.errors[:base].to_sentence if f.object.errors[:base].present? %>
+  <%# A `:base` error is the only one with no field of its own to print under, so it becomes the
+      summary when there is one; otherwise every error is already printed under its own control. %>
+  <% if category.errors.any? %>
+    <% summary = category.errors[:base].presence&.to_sentence ||
+                 "Please fix the highlighted fields and try again." %>
+    <%= f.error_notification message: summary %>
+  <% end %>
 
   <div data-controller="app--category--form">
     <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 mb-6">
       <div class="p-6">
         <h2 class="text-xl font-semibold mb-4">Basic Information</h2>
-        
-        <%= f.input :name, placeholder: "e.g. Groceries, Salary, Vacation Fund" %>
+
+        <%= f.input :name, placeholder: "e.g. Groceries, Salary, Vacation" %>
 
         <div class="space-y-2 mt-5">
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <%# `category-type-icon` and `category-type-text` are load-bearing: form_controller.js
+              reaches for them by class when a tile is clicked. %>
+          <% type_invalid = category.errors[:category_type].any? %>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <% Category.category_types.keys.each do |type| %>
               <div>
                 <label class="cursor-pointer flex flex-col">
                   <div class="relative">
-                    <%= f.radio_button :category_type, 
-type, 
-                                      class: "sr-only", 
-                                      data: { 
+                    <%# The tile is the input's next sibling — custom.css draws the keyboard ring
+                        on it, so the two must stay adjacent. %>
+                    <%= f.radio_button :category_type,
+                                      type,
+                                      class: "sr-only",
+                                      data: {
                                         action: "change->app--category--form#selectCategoryType"
                                       } %>
                     <div class="w-full border-2 rounded p-4 transition-all flex flex-col items-center category-type-option
-                              <%= f.object.category_type == type ? "border-brand bg-brand-light" : "border-gray-200 hover:border-gray-300" %>"
+                              <%= if f.object.category_type == type
+                                    "border-brand-dark bg-brand-light"
+                                  elsif type_invalid
+                                    "border-status-danger hover:border-gray-300"
+                                  else
+                                    "border-gray-200 hover:border-gray-300"
+                                  end %>"
                         data-type="<%= type %>"
                         data-app--category--form-target="categoryTypeOption">
-                      <div class="w-10 h-10 rounded-md flex items-center justify-center mb-2 
-                                <%= f.object.category_type == type ? "bg-brand" : "bg-gray-200" %>"
+                      <div class="category-type-icon w-10 h-10 rounded flex items-center justify-center mb-2
+                                <%= f.object.category_type == type ? "bg-brand-dark" : "bg-gray-200" %>"
                            data-app--category--form-target="categoryTypeIcon">
                         <% case type %>
                         <% when "expense" %>
                           <%= heroicon "arrow-trending-down", options: { class: "h-5 w-5 text-white" } %>
                         <% when "income" %>
                           <%= heroicon "arrow-trending-up", options: { class: "h-5 w-5 text-white" } %>
-                        <% when "savings" %>
-                          <%= heroicon "banknotes", options: { class: "h-5 w-5 text-white" } %>
                         <% end %>
                       </div>
-                      <span class="text-sm font-medium <%= f.object.category_type == type ? "text-gray-900" : "text-gray-700" %>"
+                      <span class="category-type-text text-sm font-medium <%= f.object.category_type == type ? "text-gray-900" : "text-gray-700" %>"
                             data-app--category--form-target="categoryTypeText">
                         <%= type.capitalize %>
                       </span>
@@ -47,61 +61,102 @@ type,
               </div>
             <% end %>
           </div>
-          <% if category.errors[:category_type].any? %>
-            <p class="form-error"><%= category.errors[:category_type].first %></p>
+          <% if type_invalid %>
+            <p class="form-error">Category type <%= category.errors[:category_type].first %></p>
           <% end %>
         </div>
+
+      </div>
+    </div>
+
+    <%# EXPENSE ONLY. Only an expense category has rules, so only one has a give-way order. The type
+        is switched client-side, so both sections render and form_controller.js toggles them. %>
+    <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 mb-6"
+         <%= "hidden" unless f.object.expense? %>
+         data-app--category--form-target="expenseOnly">
+      <div class="p-6">
+        <h2 class="text-xl font-semibold mb-4">Claiming money</h2>
+
+        <p class="text-sm text-gray-500 mb-5">
+          What an expense category claims is worked out from its rules on the Budget page. Until it
+          has one, nothing claims its spending and that spending comes straight out of what's free
+          to spend.
+        </p>
+
+        <div class="mt-5">
+          <%= f.input :priority,
+              as: :integer,
+              label: "Gives way",
+              input_html: { min: 0, step: 1 },
+              hint: "Lower numbers are filled first; when money is short, the highest number gives way first." %>
+        </div>
+      </div>
+    </div>
+
+    <%# INCOME ONLY, toggled by the same handler. %>
+    <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 mb-6"
+         <%= "hidden" unless f.object.income? %>
+         data-app--category--form-target="incomeOnly">
+      <div class="p-6">
+        <h2 class="text-xl font-semibold mb-4">Income</h2>
+
+        <%= f.input :regular,
+            as: :boolean,
+            label: "Counts as typical income",
+            hint: "Untick for bonuses and gifts." %>
       </div>
     </div>
 
     <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 mb-6">
       <div class="p-6">
         <h2 class="text-xl font-semibold mb-4">Appearance</h2>
-        
+
         <%= f.label :color %>
-        
+
         <div class="mb-4 mt-2">
           <div class="grid grid-cols-8 sm:grid-cols-10 lg:grid-cols-12 gap-3">
             <% ["#C9C78B", "#5F741D", "#4CAF50", "#2EC4B6", "#2196F3", "#03A9F4", "#673AB7", "#9C27B0", "#F44336", "#FF9800", "#FFC107", "#FDCA40", "#455A64", "#212121", "#E2E1C6", "#FDFDFE"].each do |color| %>
               <div>
                 <label class="cursor-pointer">
-                  <%= f.radio_button :color, 
-color, 
-                                    class: "sr-only color-radio", 
-                                    data: { 
+                  <%= f.radio_button :color,
+                                    color,
+                                    class: "sr-only color-radio",
+                                    data: {
                                       action: "change->app--category--form#selectColor"
                                     } %>
-                  <div class="h-10 w-10 rounded-md border-2 transition-all
+                  <%# The swatch is the input's next sibling — custom.css draws the keyboard ring
+                      on it, the same arrangement as the type tiles above. %>
+                  <div class="h-10 w-10 rounded border-2 border-gray-200 transition-all color-option
                             <%= f.object.color == color ? "ring-2 ring-offset-2 ring-gray-700" : "hover:opacity-90" %>"
-                       data-color="<%= color %>" 
+                       data-color="<%= color %>"
                        data-app--category--form-target="colorOption"
                        style="background-color: <%= color %>;"></div>
                 </label>
               </div>
             <% end %>
           </div>
-          
+
           <div class="mt-3 text-center">
             <span class="inline-flex items-center gap-2">
               <span class="text-sm font-medium text-gray-700">Selected:</span>
-              <span 
+              <span
                 class="h-6 w-6 rounded inline-block border"
                 data-app--category--form-target="selectedColorPreview"
-                style="background-color: <%= f.object.color || "#C9C78B" %>;">
+                style="background-color: <%= f.object.display_color %>;">
               </span>
               <code class="text-sm bg-gray-100 px-2 py-1 rounded" data-app--category--form-target="selectedColorCode">
-                <%= f.object.color || "#C9C78B" %>
+                <%= f.object.display_color %>
               </code>
             </span>
           </div>
         </div>
-        
-        <%= f.input :color, 
-                   label: false, 
-                   placeholder: "#C9C78B", 
-                   hint: "Enter a valid hex color code (e.g. #C9C78B)", 
-                   input_html: { 
-                     data: { 
+
+        <%= f.input :color,
+                   label: false,
+                   placeholder: "#C9C78B",
+                   hint: "Enter a valid hex color code (e.g. #C9C78B)",
+                   input_html: {
+                     data: {
                        "app--category--form-target": "colorInput",
                        action: "input->app--category--form#colorInputChanged"
                      }
@@ -109,14 +164,11 @@ color,
       </div>
     </div>
 
-    <%= f.hidden_field :user_id, value: current_user.id if category.new_record? %>
-
-    <%# Form Actions %>
     <div class="flex flex-col sm:flex-row sm:justify-end gap-3">
       <% cancel_path = category.persisted? ? category_path(category) : categories_path %>
       <%= link_to "Cancel",
-cancel_path,
-          class: "btn btn-secondary" %>
+                  cancel_path,
+                  class: "btn btn-secondary" %>
 
       <%= f.button :submit,
           category.persisted? ? "Update Category" : "Create Category" %>

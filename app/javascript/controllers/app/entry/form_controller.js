@@ -1,7 +1,8 @@
 import { Controller } from "@hotwired/stimulus"
 
 export default class extends Controller {
-  static targets = ["itemSelect", "itemNameField", "categorySelect"]
+  static targets = ["itemSelect", "itemNameField", "categorySelect", "account"]
+  static values = { incomeIds: Array }
 
   connect() {
     this.initializeItemSelect()
@@ -28,17 +29,29 @@ export default class extends Controller {
     this.categorySelect = new TomSelect(this.categorySelectTarget, {
       onChange: (value) => {
         if (value === "") {
-          // User created a new category - clear items
-          this.updateItemSelect(null)
+          this.updateItemSelect(null, "")
         } else {
-          // User selected existing category - fetch its items
           this.fetchItemsForCategory(value)
         }
+
+        this.toggleAccount(value)
+
+        // The one category-change hook on this form: a second listener on the select itself would
+        // be free to disagree with this one about when the user picked a category.
+        this.dispatch("categoryChanged", { detail: { categoryId: value }, prefix: "entry" })
       }
     })
   }
 
-  updateItemSelect(items) {
+  // Only income is asked which account it landed in. The ids come down from the server rather than
+  // being read off the optgroup labels, which are display strings.
+  toggleAccount(categoryId) {
+    if (!this.hasAccountTarget) return
+
+    this.accountTarget.hidden = !this.incomeIdsValue.includes(categoryId)
+  }
+
+  updateItemSelect(items, categoryId) {
     if (this.itemSelect) {
       this.itemSelect.destroy()
     }
@@ -51,17 +64,22 @@ export default class extends Controller {
     }
 
     this.initializeItemSelect()
+    // Whose list is on screen. The rebuild replaces this control, so anything that reaches for it
+    // between the category change and the fetch landing reaches for an element about to be thrown
+    // away; this says when that is over.
+    const wrapper = this.itemSelectTarget.closest(".ts-wrapper") || this.itemSelectTarget
+    wrapper.dataset.itemsLoaded = categoryId
   }
 
   fetchItemsForCategory(categoryId) {
     fetch(`/categories/${categoryId}/items.json`)
       .then(response => response.json())
       .then(items => {
-        this.updateItemSelect(items)
+        this.updateItemSelect(items, categoryId)
       })
       .catch(error => {
         console.error("Error fetching items:", error)
-        this.updateItemSelect(null)
+        this.updateItemSelect(null, categoryId)
       })
   }
 }

@@ -5,6 +5,7 @@ class Item < ApplicationRecord
 
   RULE_NEEDS_AN_EXPENSE = "has a rule, and rules only live on expense categories"
   RULE_ALREADY_THERE = "has a rule, and so does the item it would merge into — delete one of them first"
+  RULES_COLLIDE = "only one rule can survive a merge"
 
   belongs_to :category, touch: true
   has_many :entries, dependent: :destroy
@@ -23,10 +24,10 @@ class Item < ApplicationRecord
 
   # A merged source hands the target its entries and its rule, then dies. Entries landing in an
   # expense category leave their account behind: only income sits anywhere but main. Returns the
-  # target, or false when a source's rule would collide with one the target already has.
+  # target, or false when more than one rule would end up on the survivor.
   def self.merge(target:, sources:)
     sources = Array(sources)
-    return false unless sources.all? { |source| free_to_merge_into?(target, source) }
+    return false unless one_rule_between_them?(target, sources)
 
     landed = target.category.income? ? {} : { account_id: nil }
     transaction do
@@ -39,13 +40,26 @@ class Item < ApplicationRecord
     target
   end
 
-  def self.free_to_merge_into?(target, source)
-    return true if source.rule.blank? || target.rule.blank?
+  # The survivor carries one rule at most, so the target's rule and the ruled sources together
+  # may amount to one.
+  def self.one_rule_between_them?(target, sources)
+    ruled = sources.select(&:rule)
+    return true if ruled.size + (target.rule ? 1 : 0) <= 1
 
-    source.errors.add(:base, "#{source.name} #{RULE_ALREADY_THERE}")
+    ruled.first.errors.add(:base, refusal_for(ruled))
     false
   end
-  private_class_method :free_to_merge_into?
+  private_class_method :one_rule_between_them?
+
+  # Which sentence is true depends on where the rule the merge collides with sits: on the target,
+  # or on a second source. The names are sorted so the sentence does not depend on row order.
+  def self.refusal_for(ruled)
+    return "#{ruled.first.name} #{RULE_ALREADY_THERE}" if ruled.one?
+
+    names = ruled.map(&:name).sort
+    "#{RULES_COLLIDE} — #{names.to_sentence} #{names.size == 2 ? "both" : "each"} carry one"
+  end
+  private_class_method :refusal_for
 
   def move_to_category(target_category)
     return false unless keeps_its_rule_in?(target_category)

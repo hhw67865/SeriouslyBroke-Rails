@@ -26,7 +26,9 @@ RSpec.describe "Items Manage - Merge", type: :system do
       expect(page).not_to have_content_matching_checkbox("Groceries")
     end
 
-    it "merges selected items into target", :aggregate_failures do
+    # `:js` because the server renders the merge button disabled and the checkbox handler is what
+    # enables it.
+    it "merges selected items into target", :aggregate_failures, :js do
       check_item("Grocery Store")
       check_item("Supermarket")
       click_button "Merge Items"
@@ -38,6 +40,18 @@ RSpec.describe "Items Manage - Merge", type: :system do
       expect(page).not_to have_content("Supermarket")
 
       expect(target.reload.entries.count).to eq(6)
+    end
+
+    it "refuses when two of the sources carry a rule", :aggregate_failures, :js do
+      create(:rule, category: category, item: grocery_store)
+      create(:rule, category: category, item: supermarket)
+      check_item("Grocery Store")
+      check_item("Supermarket")
+      click_button "Merge Items"
+
+      expect(page).to have_content("#{Item::RULES_COLLIDE} — Grocery Store and Supermarket both carry one")
+      expect(Item.exists?(grocery_store.id)).to be(true)
+      expect(target.reload.entries.count).to eq(2)
     end
 
     it "disables merge button when no items selected" do
