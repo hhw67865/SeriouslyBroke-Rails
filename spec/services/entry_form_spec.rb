@@ -4,10 +4,7 @@ require "rails_helper"
 
 RSpec.describe EntryForm do
   let(:user) { create(:user) }
-  let(:main) { create(:account, user: user) }
-  let(:savings) { create(:account, user: user) }
   let(:groceries) { create(:category, user: user, name: "Groceries") }
-  let(:salary) { create(:category, :income, user: user, name: "Salary") }
   let(:bread) { create(:item, category: groceries, name: "Bread") }
 
   def build_form(params, entry: Entry.new, category_id: nil) = described_class.new(user, entry, params, category_id: category_id)
@@ -16,7 +13,7 @@ RSpec.describe EntryForm do
     form = build_form({ amount: "12.5 * 2", date: "2026-09-05", description: "loaves", item_id: bread.id })
 
     expect(form.save).to be(true)
-    expect(form.entry).to have_attributes(amount: 25, date: Date.new(2026, 9, 5), item: bread, account: nil)
+    expect(form.entry).to have_attributes(amount: 25, date: Date.new(2026, 9, 5), item: bread)
   end
 
   it "creates the item by name in the given category, reusing a same-named one", :aggregate_failures do
@@ -28,18 +25,6 @@ RSpec.describe EntryForm do
     expect(again.save).to be(true)
     expect(again.entry.item).to eq(fresh.entry.item)
     expect(groceries.items.count).to eq(1)
-  end
-
-  it "lands income in the chosen account and spending always in main", :aggregate_failures do
-    main
-    pay = create(:item, category: salary, name: "Pay")
-    income = build_form({ amount: "2000", date: "2026-09-05", item_id: pay.id, account_id: savings.id })
-    expect(income.save).to be(true)
-    expect(income.entry.account).to eq(savings)
-
-    spend = build_form({ amount: "20", date: "2026-09-05", item_id: bread.id, account_id: savings.id })
-    expect(spend.save).to be(true)
-    expect(spend.entry.account).to be_nil
   end
 
   it "keeps a bad formula as typed so the model refuses it", :aggregate_failures do

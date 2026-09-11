@@ -102,15 +102,12 @@ RSpec.describe Account do
       expect(main.errors[:base]).to include("This is your main account — everything flows through it")
     end
 
-    it "deletes another account with its transfers and sends its income entries back to main", :aggregate_failures do
+    it "deletes another account along with its transfers" do
       main = create(:account, user: user)
       other = create(:account, user: user)
       create(:transfer, from_account: main, to_account: other)
-      entry = create(:entry, :income, user: user)
-      entry.item.category.update!(user: user)
 
       expect { other.destroy! }.to change(Transfer, :count).by(-1)
-      expect(entry.reload.landing_account).to eq(main)
     end
   end
 end

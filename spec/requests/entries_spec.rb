@@ -4,7 +4,6 @@ require "rails_helper"
 
 RSpec.describe "Entries" do
   let(:user) { create(:user) }
-  let(:savings) { create(:account, user: user) }
   let(:salary) { create(:category, :income, user: user, name: "Salary") }
   let(:groceries) { create(:category, user: user, name: "Groceries") }
 
@@ -13,21 +12,13 @@ RSpec.describe "Entries" do
     sign_in user, scope: :user
   end
 
-  it "creates a new item by name in the category and lands income in the chosen account", :aggregate_failures do
-    post entries_path, params: { category_id: salary.id, entry: { amount: "1000 + 200", date: "2026-09-05", item_id: "", item_attributes: { name: "Pay" }, account_id: savings.id } }
+  it "creates a new item by name in the category", :aggregate_failures do
+    post entries_path, params: { category_id: salary.id, entry: { amount: "1000 + 200", date: "2026-09-05", item_id: "", item_attributes: { name: "Pay" } } }
 
     expect(response).to redirect_to(entries_path)
     entry = user.entries.sole
-    expect(entry).to have_attributes(amount: 1200, account: savings)
+    expect(entry.amount).to eq(1200)
     expect(entry.item.name).to eq("Pay")
-  end
-
-  it "keeps spending in main whatever account is posted" do
-    bread = create(:item, category: groceries, name: "Bread")
-
-    post entries_path, params: { entry: { amount: "5", date: "2026-09-05", item_id: bread.id, account_id: savings.id } }
-
-    expect(user.entries.sole.account).to be_nil
   end
 
   it "re-renders the form on a refusal" do

@@ -23,20 +23,18 @@ RSpec.describe AccountsPresenter do
     expect(presenter.free).to eq(home.free_to_spend)
   end
 
-  it "builds a set-aside row with its balance, opened, income and moved words", :aggregate_failures do
+  it "builds a set-aside row with its balance, opened and moved words", :aggregate_failures do
     ally = create(:account, user: user, name: "Ally", opening_balance: 500, opened_on: Date.new(2026, 3, 1))
-    create(:entry, :income, user: user, account: ally, amount: 5_038.04, date: Date.new(2026, 9, 7))
     create(:transfer, from_account: main, to_account: ally, amount: 2_000, date: Date.new(2026, 9, 1))
 
     row = presenter.set_aside.find { |r| r.account == ally }
 
     expect(row.balance).to eq(home.balance_of(ally))
     expect(row.opened_words).to eq("opened Mar 2026")
-    expect(row.income_words).to eq("Sep 7 · $5,038.04")
     expect(row.moved_words).to eq("+$2,000.00 in on Sep 1")
   end
 
-  it "prints an outgoing transfer, and dashes where an account has neither", :aggregate_failures do
+  it "prints an outgoing transfer, and a dash where an account has none", :aggregate_failures do
     vanguard = create(:account, user: user, name: "Vanguard", opening_balance: 200)
     create(:transfer, from_account: vanguard, to_account: main, amount: 95, date: Date.new(2026, 6, 18))
     create(:account, user: user, name: "Untouched", opening_balance: 10)
@@ -46,8 +44,6 @@ RSpec.describe AccountsPresenter do
 
     expect(vanguard_row.opened_words).to be_nil
     expect(vanguard_row.moved_words).to eq("−$95.00 out on Jun 18")
-    expect(vanguard_row.income_words).to eq("—")
-    expect(untouched_row.income_words).to eq("—")
     expect(untouched_row.moved_words).to eq("—")
   end
 

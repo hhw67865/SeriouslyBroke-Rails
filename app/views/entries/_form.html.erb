@@ -7,8 +7,7 @@
   <div data-controller="app--entry--impact app--entry--form"
        data-action="entry:categoryChanged->app--entry--impact#categoryChanged"
        data-app--entry--impact-url-value="<%= impact_entries_path %>"
-       data-app--entry--impact-entry-id-value="<%= entry.id %>"
-       data-app--entry--form-income-ids-value="<%= @categories.select(&:income?).map(&:id).to_json %>">
+       data-app--entry--impact-entry-id-value="<%= entry.id %>">
     <%# Transaction Details Section %>
     <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 mb-6">
       <div class="p-6">
@@ -93,19 +92,6 @@
                 type: "date",
                 value: entry.date&.strftime("%Y-%m-%d") || current_user.today.strftime("%Y-%m-%d")
               } %>
-        </div>
-
-        <%# Income is asked where it landed; spending always leaves main, so the field is hidden
-            rather than absent — the category can turn into an income one without a page load. %>
-        <div class="form-group mt-5"
-             data-app--entry--form-target="account"
-             <%= "hidden" unless entry.item&.category&.income? %>>
-          <label for="entry_account_id" class="form-label">Lands in</label>
-          <%= f.select :account_id,
-              options_from_collection_for_select(@accounts, :id, :name, entry.account_id || current_user.main_account_id),
-              {},
-              { id: "entry_account_id", class: "form-select" } %>
-          <p class="form-hint">Which account did this money arrive in?</p>
         </div>
 
         <%# The card is replaced by the server whenever the category changes: what a rule holds is

@@ -4,12 +4,9 @@ class Entry < ApplicationRecord
   include ModelSearchable
 
   belongs_to :item, touch: true
-  belongs_to :account, optional: true
 
   validates :amount, presence: true, numericality: { greater_than: 0 }
   validates :date, presence: true
-  validate :account_is_the_users
-  validate :only_income_lands_in_an_account
 
   delegate :user, :category, to: :item
 
@@ -30,31 +27,9 @@ class Entry < ApplicationRecord
         lambda { |item_ids|
           where(item_id: item_ids).select("DISTINCT ON (entries.item_id) entries.*").order("entries.item_id, entries.date DESC, entries.created_at DESC")
         }
-  # The newest entry landing in each of these accounts, in one query.
-  scope :latest_per_account,
-        lambda { |account_ids|
-          where(account_id: account_ids).select("DISTINCT ON (entries.account_id) entries.*").order("entries.account_id, entries.date DESC, entries.created_at DESC")
-        }
 
   searchable :description, label: "Description"
   searchable :date, type: :date, label: "Date"
   searchable :item, through: :item, column: :name, label: "Item"
   searchable :category, through: [:item, :category], column: :name, label: "Category"
-
-  # No account means main.
-  def landing_account = account || user.main_account
-
-  private
-
-  def account_is_the_users
-    return if account.blank? || item.blank?
-
-    errors.add(:account, "must be one of your accounts") unless account.user_id == user.id
-  end
-
-  def only_income_lands_in_an_account
-    return if account.blank? || item.blank? || category.income?
-
-    errors.add(:account, "only income lands in an account — spending leaves your main account")
-  end
 end

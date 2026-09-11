@@ -310,33 +310,6 @@ RSpec.describe "Entries Forms", type: :system do
     end
   end
 
-  # Spending always leaves main, so the question is asked of income and of nothing else.
-  describe "the account select", :js do
-    let!(:checking) { create(:account, user: user, name: "Checking") }
-    let!(:savings) { create(:account, user: user, name: "Savings") }
-
-    before do
-      create(:item, category: income_category, name: "Paycheck")
-      visit new_entry_path
-    end
-
-    it "shows the account select only for an income category and lands the entry there", :aggregate_failures do
-      select_category("Food")
-      expect(page).to have_no_select("entry[account_id]")
-
-      select_category("Salary")
-      expect(page).to have_select("entry[account_id]", selected: checking.name)
-
-      select_item("Paycheck")
-      fill_in "Amount", with: "1000"
-      select "Savings", from: "entry[account_id]"
-      click_button "Create Entry"
-
-      expect(page).to have_content("Entry was successfully created")
-      expect(Entry.sole.account).to eq(savings)
-    end
-  end
-
   describe "Edit Entry Form" do
     let!(:entry) do
       create(

@@ -26,18 +26,16 @@ class Item < ApplicationRecord
   scope :expenses, -> { joins(:category).where(categories: { category_type: :expense }) }
   scope :incomes, -> { joins(:category).where(categories: { category_type: :income }) }
 
-  # A merged source hands the target its entries and its rule, then dies. Entries landing in an
-  # expense category leave their account behind: only income sits anywhere but main. Returns the
-  # target, or false when more than one rule would end up on the survivor.
+  # A merged source hands the target its entries and its rule, then dies. Returns the target, or
+  # false when more than one rule would end up on the survivor.
   def self.merge(target:, sources:)
     sources = Array(sources)
     return false unless one_rule_between_them?(target, sources)
 
-    landed = target.category.income? ? {} : { account_id: nil }
     transaction do
       sources.each do |source|
         source.rule&.update!(category: target.category, item: target)
-        source.entries.update_all(landed.merge(item_id: target.id)) # rubocop:disable Rails/SkipsModelValidations
+        source.entries.update_all(item_id: target.id) # rubocop:disable Rails/SkipsModelValidations
         source.reload.destroy!
       end
     end
@@ -74,7 +72,6 @@ class Item < ApplicationRecord
     transaction do
       update!(category: target_category)
       rule&.update!(category: target_category)
-      entries.update_all(account_id: nil) unless target_category.income? # rubocop:disable Rails/SkipsModelValidations
     end
     true
   end

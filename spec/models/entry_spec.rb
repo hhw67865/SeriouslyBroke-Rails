@@ -4,30 +4,12 @@ require "rails_helper"
 
 RSpec.describe Entry do
   let(:user) { create(:user) }
-  let(:main) { create(:account, user: user) }
-  let(:savings) { create(:account, user: user) }
 
   describe "validations", :aggregate_failures do
     it "needs a positive amount and a date" do
       expect(build(:entry, amount: 0)).not_to be_valid
       expect(build(:entry, amount: 12.5, date: nil)).not_to be_valid
       expect(build(:entry, amount: 12.5)).to be_valid
-    end
-
-    it "lets income land in one of the user's accounts, and spending only in main" do
-      expect(build(:entry, :income, user: user, account: savings)).to be_valid
-      expect(build(:entry, :income, user: user, account: create(:account))).not_to be_valid
-      expect(build(:entry, :expense, user: user, account: savings)).not_to be_valid
-      expect(build(:entry, :expense, user: user, account: nil)).to be_valid
-    end
-  end
-
-  describe "#landing_account" do
-    it "is the chosen account, else main", :aggregate_failures do
-      main
-
-      expect(create(:entry, :income, user: user, account: savings).landing_account).to eq(savings)
-      expect(create(:entry, :income, user: user).landing_account).to eq(main)
     end
   end
 

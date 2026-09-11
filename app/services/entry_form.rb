@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # The entry form's params onto an entry: a formula in the amount, an item by id or by a new name
-# in the given category, and the landing account, which only income keeps.
+# in the given category.
 class EntryForm
   UUID = /\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/i
 
@@ -24,7 +24,6 @@ class EntryForm
     entry.date = @params[:date] if @params.key?(:date)
     entry.description = @params[:description] if @params.key?(:description)
     assign_item
-    assign_account
   end
 
   def assign_item
@@ -40,14 +39,6 @@ class EntryForm
   def find_or_build_item(name)
     category = user.categories.find(@category_id)
     category.items.find_by("LOWER(name) = ?", name.downcase) || category.items.build(name: name)
-  end
-
-  def assign_account
-    return unless @params.key?(:account_id)
-
-    id = @params[:account_id].presence
-    account = id && user.accounts.find(id)
-    entry.account = entry.item&.category&.income? ? account : nil
   end
 
   def evaluate(raw)

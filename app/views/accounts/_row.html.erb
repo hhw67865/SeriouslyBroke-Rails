@@ -15,9 +15,6 @@
   <td class="hidden sm:table-cell sm:py-2 sm:px-3 text-right tabular-nums <%= row.balance.negative? ? "text-status-danger" : "text-gray-900" %>">
     <%= number_to_currency(row.balance) %>
   </td>
-  <td class="block sm:table-cell sm:py-2 sm:px-3 text-sm text-gray-700" data-account-income="<%= row.account.name %>">
-    <span class="sm:hidden text-xs text-gray-500">Income last landed </span><%= row.income_words %>
-  </td>
   <td class="block sm:table-cell sm:py-2 sm:px-3 text-sm text-gray-700" data-account-moved="<%= row.account.name %>">
     <span class="sm:hidden text-xs text-gray-500">Last moved </span><%= row.moved_words %>
   </td>

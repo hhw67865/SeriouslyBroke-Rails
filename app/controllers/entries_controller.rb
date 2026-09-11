@@ -102,16 +102,15 @@ class EntriesController < ApplicationController
     @prefilled_from = item&.last_entry
     return unless @prefilled_from
 
-    @entry.assign_attributes(amount: @prefilled_from.amount, description: @prefilled_from.description, account: @prefilled_from.account)
+    @entry.assign_attributes(amount: @prefilled_from.amount, description: @prefilled_from.description)
   end
 
   def load_options
     @categories = current_user.categories.order(:category_type, :name)
-    @accounts = current_user.accounts.order(:name)
   end
 
   def entry_params
-    params.expect(entry: [:amount, :date, :description, :item_id, :account_id, { item_attributes: [:name] }])
+    params.expect(entry: [:amount, :date, :description, :item_id, { item_attributes: [:name] }])
   end
 
   def set_previous_url

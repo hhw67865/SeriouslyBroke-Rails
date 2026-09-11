@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
 # Accounts, in two lots: the one you spend from, whose figures are Home's own (read through one
-# HomePresenter, never recomputed), and everything set aside, whose income and transfer facts cost
-# two queries total, whatever the row count.
+# HomePresenter, never recomputed), and everything set aside, whose transfer facts cost one query
+# total, whatever the row count.
 class AccountsPresenter
-  Row = Data.define(:account, :balance, :opened_words, :income_words, :moved_words)
+  Row = Data.define(:account, :balance, :opened_words, :moved_words)
 
   attr_reader :user, :today
 
@@ -33,7 +33,6 @@ class AccountsPresenter
       account: account,
       balance: home.balance_of(account),
       opened_words: opened_words(account),
-      income_words: income_words(account),
       moved_words: moved_words(account)
     )
   end
@@ -44,22 +43,11 @@ class AccountsPresenter
     "opened #{account.opened_on.strftime("%b %Y")}"
   end
 
-  def income_words(account)
-    entry = latest_income[account.id]
-    return "—" if entry.blank?
-
-    "#{entry.date.strftime("%b %-d")} · #{currency(entry.amount)}"
-  end
-
   def moved_words(account)
     touch = latest_transfer[account.id]
     return "—" if touch.blank?
 
     "#{touch.in? ? "+" : "−"}#{currency(touch.amount)} #{touch.in? ? "in" : "out"} on #{touch.date.strftime("%b %-d")}"
-  end
-
-  def latest_income
-    @latest_income ||= Entry.incomes.latest_per_account(other_account_ids).index_by(&:account_id)
   end
 
   def latest_transfer

@@ -3,8 +3,7 @@ import { Controller } from "@hotwired/stimulus"
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 export default class extends Controller {
-  static targets = ["itemSelect", "itemNameField", "categorySelect", "account", "amount", "amountHint"]
-  static values = { incomeIds: Array }
+  static targets = ["itemSelect", "itemNameField", "categorySelect", "amount", "amountHint"]
 
   connect() {
     this.itemsById = new Map()
@@ -58,21 +57,11 @@ export default class extends Controller {
           this.fetchItemsForCategory(value)
         }
 
-        this.toggleAccount(value)
-
         // The one category-change hook on this form: a second listener on the select itself would
         // be free to disagree with this one about when the user picked a category.
         this.dispatch("categoryChanged", { detail: { categoryId: value }, prefix: "entry" })
       }
     })
-  }
-
-  // Only income is asked which account it landed in. The ids come down from the server rather than
-  // being read off the optgroup labels, which are display strings.
-  toggleAccount(categoryId) {
-    if (!this.hasAccountTarget) return
-
-    this.accountTarget.hidden = !this.incomeIdsValue.includes(categoryId)
   }
 
   updateItemSelect(items, categoryId) {

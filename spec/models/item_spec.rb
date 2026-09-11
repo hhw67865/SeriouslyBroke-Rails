@@ -108,14 +108,5 @@ RSpec.describe Item do
       expect(item.errors[:base].first).to include(Item::RULE_NEEDS_AN_EXPENSE)
       expect(item.reload.category).to eq(category)
     end
-
-    it "sends entries back to main when they land in an expense category", :aggregate_failures do
-      income = create(:category, :income, user: category.user)
-      item = create(:item, category: income, name: "Refunds")
-      entry = create(:entry, item: item, account: create(:account, user: category.user))
-
-      expect(item.move_to_category(category)).to be(true)
-      expect(entry.reload.account_id).to be_nil
-    end
   end
 end
