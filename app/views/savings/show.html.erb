@@ -4,12 +4,16 @@
                 subtitle: "Checking is what you spend from. Every other account is savings, and each one can say what it is owed.") %>
 
 <div class="space-y-4 lg:space-y-6" data-controller="shared--drawer">
-  <%= render "savings/checking", presenter: @presenter %>
+  <% if @presenter.checking.present? %>
+    <%= render "savings/checking", presenter: @presenter %>
 
-  <%= render "savings/accounts", presenter: @presenter %>
+    <%= render "savings/accounts", presenter: @presenter %>
 
-  <%= render layout: "savings/drawer", locals: { name: "transfer", title: "Transfer money", open: @open_transfer } do %>
-    <%= render "savings/transfer_form", presenter: @presenter, transfer: @transfer, transfer_to: @transfer_to %>
+    <%= render layout: "savings/drawer", locals: { name: "transfer", title: "Transfer money", open: @open_transfer } do %>
+      <%= render "savings/transfer_form", presenter: @presenter, transfer: @transfer, transfer_to: @transfer_to %>
+    <% end %>
+  <% else %>
+    <%= render "savings/empty_state" %>
   <% end %>
 
   <%= render layout: "savings/drawer", locals: { name: "add", title: "Add an account", open: @open_add_account } do %>
