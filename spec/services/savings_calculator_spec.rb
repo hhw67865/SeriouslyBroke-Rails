@@ -84,4 +84,10 @@ RSpec.describe SavingsCalculator do
   it "raises on an unknown row keyword instead of silently querying" do
     expect { calculator(bogus: []) }.to raise_error(ArgumentError, "unknown keyword: bogus")
   end
+
+  it "caps the period walk at PERIOD_WALK_LIMIT" do
+    create(:savings_target, account: account, amount: 200, starts_on: Date.new(2000, 1, 1))
+
+    expect(calculator.periods.size).to eq(SavingsCalculator::PERIOD_WALK_LIMIT)
+  end
 end

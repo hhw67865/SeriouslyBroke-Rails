@@ -50,4 +50,13 @@ RSpec.describe "Adjustments" do
 
     expect(response).to have_http_status(:unprocessable_content)
   end
+
+  it "never deletes another user's adjustment" do
+    other_rule = create(:rule, :rate, amount: 100, starts_on: Date.new(2026, 1, 1))
+    another_users_adjustment = create(:adjustment, source: other_rule, amount: 10, date: other_rule.user.today)
+
+    delete adjustment_path(another_users_adjustment)
+
+    expect(response).to have_http_status(:not_found)
+  end
 end

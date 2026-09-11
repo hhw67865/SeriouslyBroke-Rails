@@ -117,7 +117,7 @@ RSpec.describe "Budget page tiles", type: :system do
     within(tile("where")) do
       expect(page).to have_css("[data-tile-figure]", text: "$500.00")
       expect(all("[data-type-band]").first["data-type-band"]).to eq("savings")
-      expect(page).to have_css("[data-tile-split]", text: "Savings $100.00 · Budget $400.00")
+      expect(page).to have_css("[data-type-total='savings']", text: "$100.00")
     end
     expect(tile("leftover")).to have_css("[data-tile-figure]", text: "$1,500.00")
   end
