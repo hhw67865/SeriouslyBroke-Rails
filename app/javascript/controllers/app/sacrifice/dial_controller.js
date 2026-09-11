@@ -9,9 +9,16 @@ export default class extends Controller {
 
   // A rule row opens read-only: the input is live only after Edit, and Undo closes it again, so a
   // disabled input is a row the save will not carry. A savings target row has no Edit button — its
-  // checkbox is the toggle instead — so only rows with one are closed here.
+  // checkbox is the toggle instead, and its input is disabled exactly when the checkbox is
+  // unticked, so an edited-but-unticked figure can never reach the server.
   connect() {
-    this.rowTargets.forEach((row) => { if (this.fieldFor(row, "edit")) this.close(row) })
+    this.rowTargets.forEach((row) => {
+      if (this.fieldFor(row, "edit")) {
+        this.close(row)
+      } else if (this.fieldFor(row, "toggle")) {
+        this.syncToggle(row)
+      }
+    })
     this.recompute()
   }
 
@@ -29,6 +36,18 @@ export default class extends Controller {
     const row = this.rowOf(event)
     this.close(row)
     this.recompute()
+  }
+
+  // The savings target row's checkbox: ticking arms the input for submission, unticking disarms
+  // it, exactly as Edit/Undo do for a rule row's input.
+  toggle(event) {
+    this.syncToggle(this.rowOf(event))
+    this.recompute()
+  }
+
+  syncToggle(row) {
+    const toggle = this.fieldFor(row, "toggle")
+    this.fieldFor(row, "amount").disabled = !toggle.checked
   }
 
   close(row) {

@@ -142,10 +142,12 @@
       </div>
     <% end %>
 
-    <div class="px-6 py-4 border-y border-gray-200 mt-2">
-      <h3 class="text-sm font-semibold text-gray-900">Your savings</h3>
-      <p class="mt-1 text-sm text-gray-500">One row per target. Lower a fixed amount, or lower a share's percent. Savings gives way after usage and before bills.</p>
-    </div>
+    <% if @presenter.target_rows.any? %>
+      <div class="px-6 py-4 border-y border-gray-200 mt-2">
+        <h3 class="text-sm font-semibold text-gray-900">Your savings</h3>
+        <p class="mt-1 text-sm text-gray-500">One row per target. Lower a fixed amount, or lower a share's percent. Savings gives way after usage and before bills.</p>
+      </div>
+    <% end %>
     <% @presenter.target_rows.each do |row| %>
       <div class="px-6 py-3 border-b border-gray-100 flex flex-wrap items-center gap-x-4 gap-y-2"
            data-sacrifice-target="<%= row.target.id %>"
@@ -155,13 +157,13 @@
            data-percent="<%= row.percent_param %>"
            data-income="<%= row.income_param %>">
         <input type="checkbox" id="cut-target-<%= row.target.id %>" class="form-checkbox" aria-label="Cut <%= row.name %>"
-               data-app--sacrifice--dial-target="toggle" data-action="change->app--sacrifice--dial#recompute">
+               data-app--sacrifice--dial-target="toggle" data-action="change->app--sacrifice--dial#toggle">
         <label class="flex-1 min-w-40 text-sm font-medium text-gray-900" for="cut-target-amount-<%= row.target.id %>"><%= row.name %></label>
         <span class="text-sm text-gray-600 tabular-nums" data-role="claim"><%= number_to_currency(row.ask) %> a period</span>
         <div class="flex items-center gap-2">
           <span class="text-sm text-gray-500">cut to</span>
           <input type="number" id="cut-target-amount-<%= row.target.id %>" class="form-input w-28 tabular-nums"
-                 step="<%= row.share? ? 1 : 0.01 %>" min="0" <%= 'max="100"' if row.share? %>
+                 step="<%= row.share? ? 1 : 0.01 %>" min="0.01" <%= 'max="100"' if row.share? %>
                  name="target_cuts[<%= row.target.id %>]"
                  value="<%= @typed_targets&.dig(row.target.id.to_s) || (row.share? ? row.percent_param : row.claim_param) %>"
                  aria-label="Cut <%= row.name %> to"

@@ -212,9 +212,10 @@ RSpec.describe "Sacrifice view", type: :system do
   describe "savings targets" do
     let(:emergency) { create(:account, user: user, name: "Emergency") }
     let(:paycheck) { create(:item, :income, category: salary, name: "Paycheck") }
+    let(:fun) { rate_rule("Fun", 300) }
 
     before do
-      rate_rule("Fun", 300)
+      fun
       create(:rule, :rolling, :bill, category: category("Rent"), amount: 2_000, anchor_date: Date.new(2026, 10, 1), interval_months: 1, starts_on: Date.new(2026, 1, 1))
     end
 
@@ -236,6 +237,23 @@ RSpec.describe "Sacrifice view", type: :system do
           expect(page).to have_css("[data-role='row-frees']", text: "frees $20.00")
         end
         expect(page).to have_css("[data-figure='frees']", text: "$20.00 a period")
+      end
+
+      # A row's input is disabled while its checkbox is unticked, so a figure typed in and then
+      # unticked can never reach the server — the dial's freed figure and the write agree.
+      it "keeps an edited-but-unticked target row's figure when the cuts are saved", :aggregate_failures, :js do
+        fixed = SavingsTarget.fixed.sole
+        cut(fun, "Fun", to: "200")
+
+        within("[data-sacrifice-target='#{fixed.id}']") do
+          find("input[type='checkbox']").check
+          find("input[name='target_cuts[#{fixed.id}]']").fill_in(with: "100")
+          find("input[type='checkbox']").uncheck
+        end
+        click_button "Save these cuts"
+
+        expect(page).to have_content("Saved")
+        expect(fixed.reload.amount).to eq(400)
       end
     end
 
