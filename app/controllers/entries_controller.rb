@@ -37,7 +37,7 @@ class EntriesController < ApplicationController
 
   def destroy
     @entry.destroy
-    redirect_to entries_path, notice: "Entry was successfully deleted."
+    redirect_to(params[:return] == "activity" ? activity_path : entries_path, notice: "Entry was successfully deleted.")
   end
 
   def impact

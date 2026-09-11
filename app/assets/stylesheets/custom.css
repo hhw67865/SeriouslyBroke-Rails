@@ -98,6 +98,10 @@
   background-color: var(--color-sage-800);
 }
 
+.bg-savings-light {
+  background-color: var(--color-sage-100);
+}
+
 .text-savings {
   color: var(--color-sage-800);
 }

@@ -1,0 +1,43 @@
+<% if card %>
+  <div class="p-4 hover:bg-gray-50 transition-colors" data-activity-row="<%= row.kind %>">
+    <div class="flex items-center justify-between mb-2">
+      <%= activity_kind_badge(row) %>
+      <span class="text-base font-semibold <%= activity_amount_class(row) %>"><%= activity_amount(row) %></span>
+    </div>
+    <div class="flex justify-between items-start">
+      <div class="flex-1 min-w-0 pr-4">
+        <div class="font-medium text-gray-900"><%= row.words %></div>
+        <div class="text-sm text-gray-500 mt-1"><%= row.date.strftime("%b %-d") %></div>
+      </div>
+      <div class="flex items-center gap-3 text-sm font-medium">
+        <% if row.edit_path %>
+          <%= link_to "Edit", row.edit_path, class: "text-status-info hover:opacity-80 transition-colors duration-200" %>
+        <% end %>
+        <%= button_to "Remove", 
+row.remove_path, 
+method: :delete,
+              class: "text-status-danger hover:opacity-80 transition-colors duration-200",
+              form: { data: { turbo_confirm: row.remove_confirm } } %>
+      </div>
+    </div>
+  </div>
+<% else %>
+  <tr class="hover:bg-gray-50 transition-colors duration-200" data-activity-row="<%= row.kind %>">
+    <td class="px-6 py-4 whitespace-nowrap"><%= activity_kind_badge(row) %></td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><%= row.date.strftime("%b %-d") %></td>
+    <td class="px-6 py-4 text-sm text-gray-900"><%= row.words %></td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-right <%= activity_amount_class(row) %>"><%= activity_amount(row) %></td>
+    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-right">
+      <div class="flex justify-end items-center gap-3">
+        <% if row.edit_path %>
+          <%= link_to "Edit", row.edit_path, class: "text-status-info hover:opacity-80 transition-colors duration-200" %>
+        <% end %>
+        <%= button_to "Remove", 
+row.remove_path, 
+method: :delete,
+              class: "text-status-danger hover:opacity-80 transition-colors duration-200",
+              form: { data: { turbo_confirm: row.remove_confirm } } %>
+      </div>
+    </td>
+  </tr>
+<% end %>

@@ -41,6 +41,7 @@ class AdjustmentsController < ApplicationController
   def name_for(source) = source.is_a?(Rule) ? helpers.rule_name(source) : source.name
 
   def back_to(source)
+    return activity_path if params[:return] == "activity"
     return root_path(anchor: "block-#{source.category_id}") if source.is_a?(Rule)
 
     params[:return] == "home" ? root_path(anchor: "savings-#{source.id}") : savings_path

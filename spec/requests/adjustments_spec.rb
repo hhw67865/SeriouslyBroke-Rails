@@ -91,4 +91,14 @@ RSpec.describe "Adjustments" do
 
     expect(response).to have_http_status(:not_found)
   end
+
+  it "deletes an adjustment and returns to Activity when the form carried return: activity", :aggregate_failures do
+    post adjustments_path, params: { source_type: "Rule", source_id: rule.id, amount: "50" }
+    change = rule.adjustments.sole
+
+    delete adjustment_path(change, return: "activity")
+
+    expect(response).to redirect_to(activity_path)
+    expect(rule.adjustments.reload).to be_empty
+  end
 end

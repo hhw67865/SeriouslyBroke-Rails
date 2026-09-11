@@ -12,6 +12,12 @@ class TransfersController < ApplicationController
     refuse_on_savings(transfer)
   end
 
+  def destroy
+    transfer = Transfer.where(from_account_id: current_user.accounts.select(:id)).find(params[:id])
+    transfer.destroy
+    redirect_to(params[:return] == "activity" ? activity_path : savings_path, notice: removed_notice(transfer))
+  end
+
   private
 
   def move
@@ -35,5 +41,9 @@ class TransfersController < ApplicationController
 
   def moved_notice(transfer)
     "Transferred #{helpers.number_to_currency(transfer.amount)} from #{transfer.from_account.name} to #{transfer.to_account.name}."
+  end
+
+  def removed_notice(transfer)
+    "Removed the transfer of #{helpers.number_to_currency(transfer.amount)} from #{transfer.from_account.name} to #{transfer.to_account.name}."
   end
 end

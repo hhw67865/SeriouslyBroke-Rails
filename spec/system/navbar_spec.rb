@@ -20,6 +20,7 @@ RSpec.describe "Navbar", type: :system do
         "Calendar" => calendar_path,
         "Budget" => budget_page_path,
         "Savings" => savings_path,
+        "Activity" => activity_path,
         "Reports" => reports_path,
         "Categories" => categories_path,
         "Settings" => settings_path

@@ -40,4 +40,31 @@ RSpec.describe "Transfers" do
     expect(response.body).to include("data-tiles")
     expect(Transfer.count).to eq(0)
   end
+
+  it "deletes a transfer and returns to Savings", :aggregate_failures do
+    transfer = create(:transfer, from_account: main, to_account: savings, amount: 40, date: Date.current)
+
+    delete transfer_path(transfer)
+
+    expect(response).to redirect_to(savings_path)
+    expect(Transfer.exists?(transfer.id)).to be(false)
+  end
+
+  it "deletes a transfer and returns to Activity when the form carried return: activity", :aggregate_failures do
+    transfer = create(:transfer, from_account: main, to_account: savings, amount: 40, date: Date.current)
+
+    delete transfer_path(transfer, return: "activity")
+
+    expect(response).to redirect_to(activity_path)
+    follow_redirect!
+    expect(response.body).to include("Removed the transfer of $40.00 from Checking to Savings.")
+  end
+
+  it "never deletes another user's transfer" do
+    foreign_transfer = create(:transfer)
+
+    delete transfer_path(foreign_transfer)
+
+    expect(response).to have_http_status(:not_found)
+  end
 end

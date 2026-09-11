@@ -9,9 +9,11 @@ Rails.application.routes.draw do
 
   get "reports", to: "dashboard#index", as: :reports
 
+  get "activity" => "activity#show", as: :activity
+
   get "savings" => "savings#show", as: :savings
   resources :accounts, only: [:create, :edit, :update, :destroy]
-  resources :transfers, only: [:create]
+  resources :transfers, only: [:create, :destroy]
 
   resources :entries, except: [:show] do
     collection do

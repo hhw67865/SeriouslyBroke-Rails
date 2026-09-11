@@ -40,6 +40,15 @@ RSpec.describe "Entries" do
     expect(response.body).not_to include("Bread")
   end
 
+  it "deletes an entry and returns to Activity when the form carried return: activity", :aggregate_failures do
+    entry = create(:entry, item: create(:item, category: groceries, name: "Bread"), amount: 5, date: "2026-09-05")
+
+    delete entry_path(entry, return: "activity")
+
+    expect(response).to redirect_to(activity_path)
+    expect(Entry.exists?(entry.id)).to be(false)
+  end
+
   it "renders the impact card for an expense category" do
     create(:rule, :rate, amount: 400, category: groceries)
 
