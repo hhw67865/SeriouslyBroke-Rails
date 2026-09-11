@@ -65,7 +65,12 @@ sentence is replaced, not kept.
   The Budget page shows both; the "fits" verdict uses the steady figure.
 - A rule has a **shape**, decided by two columns:
   - **rate**: per period, does not keep unspent. Claims `max(0, amount − spent)` this period only.
-  - **fund**: per period, keeps unspent. Each period adds the amount; what is unspent carries.
+  - **fund**: per period, keeps unspent. Each period adds the amount; what is unspent carries. A
+    fund may carry a **cap**: it adds its amount until the pile reaches the cap, then adds nothing
+    and asks nothing of checking while it sits there. Spending on its lane draws the pile down and
+    the next period it adds again, up to the cap. Spending past the pile costs free money and the
+    pile rebuilds from zero. An emergency fund as a category rule, with the money staying in
+    checking.
   - **dated**: an amount by a date, once or rolling every N months. The claim builds toward the
     next open due date so it is there on the day.
 - A dated bill's due dates are a series: the anchor date stepped by the interval, forward and back,
@@ -78,6 +83,9 @@ sentence is replaced, not kept.
 - A dated rule is a budget, never savings. Saving for a car repair, a holiday or a house is
   budgeting an expense that is coming, and belongs on a category.
 - `starts_on` is the first day whose spending counts.
+- An item-less rule's lane is named on a row as "Everything else in <Category>" when the category
+  also has item rules, and "All of <Category>" when it is the category's only rule. The words
+  "Whole category" do not appear on a screen.
 
 ## 5. Savings targets
 
@@ -156,17 +164,18 @@ sentence is replaced, not kept.
 ## 10. Screens
 
 - **Nav**, in four groups: Today (Home, Entries, Calendar), Plan (Budget, Savings), Look back
-  (Reports), Set up (Categories, Settings). A page is one of three things: an answer to read, a
+  (Activity, Reports), Set up (Categories, Settings). A page is one of three things: an answer to read, a
   thing you do, or a thing you set up, and it is never two of them.
 - **Home** (`/`) is the full picture, headed by the day and where it sits in the period. Four
   tiles: free to spend (after everything claimed is set aside; no per-day pace), checking with what
   was spent this period, claimed with its budget and savings split, and savings with what is owed.
   Then the trouble strip, only when something is wrong. Then "Coming up": every dated rule due in
   the next 30 days with its date, amount and state (ready, short, or still building, with what is
-  set aside so far). Then "This period": one block per ruled category and per savings account with
-  a target, each rule or target as a row with its bar and its Adjust disclosure, under a header
-  that carries the kinds legend in give-way order. An adjustment is the one thing written from
-  Home; everything else links out.
+  set aside so far). Then "This period", two sections with their own totals under a header that
+  carries the kinds legend in give-way order: **Budget**, "$X claimed", one block per ruled
+  category; then **Savings**, "$Y owed", one block per savings account with a target. Each rule or
+  target is a row with its bar and its Adjust disclosure. An adjustment is the one thing written
+  from Home; everything else links out.
 - **Savings** (`/savings`): checking at the top with balance,
   claimed (budget and savings as its two lines) and free; then each savings account with its
   targets in words ("$200 a period, plus 10% of Paycheck"), what it is owed now, a Transfer button that
@@ -190,7 +199,12 @@ sentence is replaced, not kept.
 - **Sacrifice** (`/sacrifice`): what would have to give when the budget and savings need more than
   typical income. Two sections: the budget's rules, then each savings target. Rolling bills are
   fixed. A share is cut by percent, a fixed target by amount.
-- **Entries**: the form has no account picker; income lands in checking.
+- **Entries** (`/entries`) is where an entry is logged and searched; it keeps its New entry
+  button, and Home keeps a Log an entry shortcut. The form has no account picker; income lands in
+  checking.
+- **Activity** (`/activity`) is everything that happened, newest first: entries, transfers and
+  adjustments in one list, each row saying what it was and what it moved, with Edit where the
+  record has a form and Remove where it can be undone. Nothing is created here.
 - **Items, Categories, Calendar, Reports, Settings**: as built.
 
 ## 11. Testing
