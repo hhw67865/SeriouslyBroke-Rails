@@ -127,6 +127,14 @@ module HomeHelper
     "#{number_to_currency(line.rule.ask)} a period once caught up"
   end
 
+  # What a row calls the lane a rule covers. An item names itself; an item-less rule covers the
+  # category's other items, so it is "everything else" beside item rules and "all of" it alone.
+  def lane_words(line, rows)
+    return line.rule.item.name if line.rule.item.present?
+
+    rows.size > 1 ? "Everything else in #{line.category.name}" : "All of #{line.category.name}"
+  end
+
   # What a row calls one of a category's rules. An item names itself; an item-less rule is named by
   # its shape, because the row already prints its amount and its date.
   def rule_label(rule)

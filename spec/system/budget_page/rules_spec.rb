@@ -80,7 +80,7 @@ RSpec.describe "Budget page rules", type: :system do
 
     open_panel(groceries)
 
-    expect(rule_row("Groceries")).to have_content("Whole category")
+    expect(rule_row("Groceries")).to have_content("All of Groceries")
     expect(rule_row("Groceries")).to have_css("[data-rule-figure]", text: "$400.00")
     expect(rule_row("Groceries")).to have_css("[data-rule-steady]", text: "same every period")
     expect(rule_row("Groceries")).to have_css("[data-rule-shape]", text: "usage · a period")
@@ -142,7 +142,7 @@ RSpec.describe "Budget page rules", type: :system do
     open_panel(groceries)
 
     expect(rule_row("Wine")).to have_content("Wine")
-    expect(rule_row("Groceries")).to have_content("Whole category")
+    expect(rule_row("Groceries")).to have_content("Everything else in Groceries")
   end
 
   # Spending past what the rule had is the news, so the When cell wears the danger colour — and the

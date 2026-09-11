@@ -15,8 +15,8 @@
 
       <ul class="divide-y divide-gray-100 border-t border-gray-100">
         <% row.lines.each do |line| %>
-          <%# The hook is `rule_name` and the visible name is `ClaimLine#name`: every item-less rule
-              answers to "Whole category", so a selector needs the item's name or the category's. %>
+          <%# The hook is `rule_name` (an item's name, or its category's); the visible name is
+              `lane_words` — the same item's name, or what an item-less rule covers. %>
           <li class="py-3" data-rule="<%= rule_name(line.rule) %>">
             <%# The whole line is the summary: clicking anywhere on it opens the entries below, full
                 width, and the frame loads once the details is visible, not before. %>
@@ -28,7 +28,7 @@
                         choice, and they give way at opposite ends of the walk. %>
                     <span class="w-1 self-stretch shrink-0 rounded <%= stripe_fill(line) %>" aria-hidden="true"></span>
                     <div class="min-w-0">
-                      <p class="text-sm font-medium text-gray-900 truncate"><%= line.name %></p>
+                      <p class="text-sm font-medium text-gray-900 truncate"><%= lane_words(line, row.lines) %></p>
                       <p class="text-xs <%= type_text_class(line) %>" data-rule-shape><%= shape_words(line) %></p>
                     </div>
                   </div>

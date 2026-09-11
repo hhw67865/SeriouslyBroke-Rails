@@ -24,8 +24,14 @@
     </p>
   </div>
 
-  <%# `items-start` so a two-rule block beside a five-rule one keeps its own height. %>
-  <div class="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:items-start">
+  <section data-budget-section>
+    <div class="flex items-baseline justify-between gap-3 pb-2">
+      <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Budget</h4>
+      <span class="text-sm text-gray-700 tabular-nums" data-section-total><%= number_to_currency(presenter.budget_claim) %> claimed</span>
+    </div>
+
+    <%# `items-start` so a two-rule block beside a five-rule one keeps its own height. %>
+    <div class="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:items-start">
     <% presenter.blocks.each do |block| %>
       <div class="bg-white border border-gray-200 rounded overflow-hidden" data-category-block="<%= block.name %>" id="block-<%= block.category.id %>">
         <%# The header tints when any row is over, short or overdue — CategoryBlock#trouble?, which
@@ -53,7 +59,7 @@
 
                 <div class="min-w-0 flex-1">
                   <div class="flex flex-wrap items-baseline justify-between gap-x-3">
-                    <p class="text-sm font-medium text-gray-900 truncate"><%= row.name %></p>
+                    <p class="text-sm font-medium text-gray-900 truncate"><%= lane_words(row, block.rows) %></p>
                     <%# `over?` is the pre-clamp reader and the only one that can tell "spent it exactly"
                         from "spent more than there was". %>
                     <p class="text-sm tabular-nums <%= row.over? ? "text-status-danger font-medium" : "text-gray-700" %>"
@@ -116,10 +122,6 @@
       </div>
     <% end %>
 
-    <% presenter.savings_blocks.each do |row| %>
-      <%= render "home/savings_block", row: row, presenter: presenter %>
-    <% end %>
-
     <%# A category no rule claims, with spending this period: the fact, no bar, no pressure. Nothing
         claims these receipts, so a denominator would invent the pressure rather than report it. %>
     <% presenter.unbudgeted_rows.each do |row| %>
@@ -129,14 +131,29 @@
         <span class="text-sm text-gray-700 tabular-nums">spent <%= number_to_currency(row.spent) %></span>
       </div>
     <% end %>
-  </div>
+    </div>
 
-  <%# Said plainly rather than left as an empty card: a blank panel on a money screen reads as
-      something that failed to load. %>
-  <% if presenter.blocks.empty? && presenter.unbudgeted_rows.empty? %>
-    <p class="bg-white border border-gray-200 rounded px-4 py-3 text-sm text-gray-500">
-      Nothing is budgeted yet, and nothing has been spent this period.
-      <%= link_to "Give a category a rule on the Budget page", budget_page_path, class: "text-status-info hover:underline" %>
-    </p>
+    <%# Said plainly rather than left as an empty card: a blank panel on a money screen reads as
+        something that failed to load. %>
+    <% if presenter.blocks.empty? && presenter.unbudgeted_rows.empty? %>
+      <p class="bg-white border border-gray-200 rounded px-4 py-3 text-sm text-gray-500">
+        Nothing is budgeted yet, and nothing has been spent this period.
+        <%= link_to "Give a category a rule on the Budget page", budget_page_path, class: "text-status-info hover:underline" %>
+      </p>
+    <% end %>
+  </section>
+
+  <% if presenter.savings_blocks.any? %>
+    <section class="mt-6" data-savings-section>
+      <div class="flex items-baseline justify-between gap-3 pb-2">
+        <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Savings</h4>
+        <span class="text-sm text-gray-700 tabular-nums" data-section-total><%= number_to_currency(presenter.savings_claim) %> owed</span>
+      </div>
+      <div class="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:items-start">
+        <% presenter.savings_blocks.each do |row| %>
+          <%= render "home/savings_block", row: row, presenter: presenter %>
+        <% end %>
+      </div>
+    </section>
   <% end %>
 </section>
