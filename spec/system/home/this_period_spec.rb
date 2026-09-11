@@ -89,6 +89,21 @@ RSpec.describe "Home this period", type: :system do
     end
   end
 
+  # A CAPPED FUND THAT IS FULL: it has a target after all, so the figure names it, and the row says
+  # "full at" rather than a running "+$X a period" it is no longer adding.
+  it "says a capped fund is full, with a target and a bar", :aggregate_failures do
+    # $100 a period from Jul 24: Jul 24, Aug 7, Aug 21, Sep 4 → 100, 200, 250 (capped), 250 — full.
+    create(:rule, :keeps_unspent, amount: 100, cap: 250, starts_on: Date.new(2026, 7, 24), category: category("Pantry"))
+
+    read_home
+
+    within(block("Pantry")) do
+      expect(page).to have_css("[data-rule-figure]", text: "built up $250.00 of $250.00")
+      expect(page).to have_css("[data-rule-when]", text: "full at $250.00")
+      expect(page).to have_css("[data-rule-bar='100'][data-rule-bar-state='full']", visible: :all)
+    end
+  end
+
   # SPENDING PAST THE RATE tints the block's header and reddens the figure — the section's own
   # signal, inches from the strip that says the same thing in a sentence.
   it "tints a block whose rule has been overspent", :aggregate_failures do

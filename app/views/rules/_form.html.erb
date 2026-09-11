@@ -150,6 +150,13 @@
               hint: "an allowance that keeps building — whatever you don't spend stays claimed, " \
                     "with no limit",
               input_html: { disabled: rule_form.schedule == "by_date" } %>
+
+          <%= f.input :cap,
+              as: :decimal,
+              label: "Stop at",
+              required: false,
+              hint: "optional — once the pile reaches this, the rule stops asking until you spend from it",
+              input_html: { step: 0.01, min: 0.01, disabled: rule_form.schedule == "by_date" } %>
         </div>
 
         <div class="space-y-4 pl-3 border-l-2 border-gray-100">

@@ -97,10 +97,17 @@ export default class extends Controller {
     if (!field) return
 
     const box = this.field("keeps")
-    if (!box) return
+    if (box) {
+      box.disabled = !allowed
+      if (!allowed) box.checked = false
+    }
 
-    box.disabled = !allowed
-    if (!allowed) box.checked = false
+    const cap = this.field("cap")
+    if (cap) {
+      cap.disabled = !allowed
+      if (!allowed) cap.value = ""
+    }
+
     field.classList.toggle("opacity-50", !allowed)
   }
 

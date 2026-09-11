@@ -7,7 +7,7 @@ class RuleForm
 
   SCHEDULES = ["per_period", "by_date"].freeze
   DEFAULT_SCHEDULE = "per_period"
-  FIELDS = [:category_id, :item_id, :new_item_name, :rule_type, :amount, :schedule, :repeats, :keeps, :interval_months, :anchor_date, :starts_on].freeze
+  FIELDS = [:category_id, :item_id, :new_item_name, :rule_type, :amount, :schedule, :repeats, :keeps, :cap, :interval_months, :anchor_date, :starts_on].freeze
   RULE_ERROR_FIELDS = {
     interval_months: :schedule,
     anchor_date: :schedule,
@@ -15,11 +15,12 @@ class RuleForm
     rule_type: :rule_type,
     item: :item_id,
     category: :category_id,
-    starts_on: :starts_on
+    starts_on: :starts_on,
+    cap: :cap
   }.freeze
 
   attr_reader :user, :rule, :anchor_date, :starts_on
-  attr_accessor :category_id, :item_id, :new_item_name, :rule_type, :amount, :schedule, :interval_months
+  attr_accessor :category_id, :item_id, :new_item_name, :rule_type, :amount, :schedule, :interval_months, :cap
   attr_writer :repeats, :keeps
 
   def initialize(user, params = {}, rule: nil)
@@ -39,6 +40,7 @@ class RuleForm
       schedule: schedule,
       repeats: schedule == "by_date" && rule.interval_months.present?,
       keeps: rule.keeps_unspent,
+      cap: rule.cap,
       interval_months: rule.interval_months,
       anchor_date: rule.anchor_date,
       starts_on: rule.starts_on
@@ -96,9 +98,9 @@ class RuleForm
   end
 
   def schedule_columns
-    return { anchor_date: nil, interval_months: nil, keeps_unspent: keeps? } unless schedule == "by_date"
+    return { anchor_date: nil, interval_months: nil, keeps_unspent: keeps?, cap: (keeps? ? cap.presence : nil) } unless schedule == "by_date"
 
-    { anchor_date: anchor_date, interval_months: (interval_months.presence if repeats?), keeps_unspent: false }
+    { anchor_date: anchor_date, interval_months: (interval_months.presence if repeats?), keeps_unspent: false, cap: nil }
   end
 
   def rule_type_known? = rule_type.blank? || Rule.rule_types.key?(rule_type)

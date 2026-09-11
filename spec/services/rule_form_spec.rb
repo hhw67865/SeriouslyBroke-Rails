@@ -26,6 +26,22 @@ RSpec.describe RuleForm do
     expect(dated.rule).to have_attributes(keeps_unspent: false, anchor_date: Date.new(2026, 10, 15), interval_months: nil)
   end
 
+  it "writes a cap only on a fund, and clears it for a dated rule", :aggregate_failures do
+    capped = form({ category_id: groceries.id, rule_type: "usage", amount: "100", schedule: "per_period", keeps: "1", cap: "250" })
+    dated = form({ category_id: groceries.id, rule_type: "bill", amount: "600", schedule: "by_date", keeps: "1", cap: "250", anchor_date: "2026-10-15", item_id: bread.id })
+
+    expect(capped.save).to be(true)
+    expect(capped.rule).to have_attributes(keeps_unspent: true, cap: 250)
+    expect(dated.save).to be(true)
+    expect(dated.rule.cap).to be_nil
+  end
+
+  it "reads a fund's cap back into words" do
+    rule = create(:rule, :capped, category: groceries, amount: 100, cap: 250)
+
+    expect(described_class.from(rule)).to include(cap: 250)
+  end
+
   it "writes an interval only when the rule repeats, and a start date when given", :aggregate_failures do
     rolling = form({ category_id: groceries.id, rule_type: "bill", amount: "180", schedule: "by_date", anchor_date: "2026-10-01", repeats: "1", interval_months: "6", starts_on: "2026-01-01" })
 

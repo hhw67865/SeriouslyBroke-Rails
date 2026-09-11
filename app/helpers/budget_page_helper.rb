@@ -98,6 +98,7 @@ module BudgetPageHelper
   # What becomes of the money. The dateless arm is for a user who has declared no period, whose
   # rate rule genuinely has no boundary to name.
   def rule_preview_holding_sentence(preview)
+    return "It builds up to #{number_to_currency(preview.rule.cap)}, then stops asking until some of it is spent." if preview.fund? && preview.rule.capped?
     return "It builds up with no limit." if preview.fund?
     return "Each period sets aside its share so the money is there on the day." unless preview.rate?
     return "Whatever's unspent resets when your next period starts." if preview.line.resets_on.blank?

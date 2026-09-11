@@ -67,6 +67,9 @@ RSpec.describe "Budget page rules", type: :system do
   # $60 a period since the period before this one: two periods in, nothing spent, $120 built up.
   def fund(owner) = create(:rule, :keeps_unspent, category: owner, amount: 60, starts_on: Date.new(2026, 8, 21))
 
+  # $100 a period from Jul 24: Jul 24, Aug 7, Aug 21, Sep 4 → 100, 200, 250 (capped), 250 — full.
+  def capped_fund(owner) = create(:rule, :keeps_unspent, category: owner, amount: 100, cap: 250, starts_on: Date.new(2026, 7, 24))
+
   def spend(owner, amount) = create(:entry, item: create(:item, category: owner), amount: amount, date: today)
 
   def open_panel(owner) = visit budget_page_path(open: owner.id)
@@ -130,6 +133,20 @@ RSpec.describe "Budget page rules", type: :system do
     expect(rule_row("Pet Care")).to have_css("[data-rule-steady]", text: "same every period")
     expect(rule_row("Pet Care")).to have_css("[data-rule-when]", text: "+$60.00 a period · built up $120.00")
     expect(rule_row("Pet Care")).to have_no_css("[data-rule-bar]")
+  end
+
+  # A capped fund that has reached its cap asks nothing and says so, in both the steady line and the
+  # When cell — and its bar, unlike an uncapped fund's, has a target to draw against.
+  it "says a full capped fund is full, and draws its bar against the cap", :aggregate_failures do
+    pantry = category("Pantry")
+    capped_fund(pantry)
+
+    open_panel(pantry)
+
+    expect(rule_row("Pantry")).to have_css("[data-rule-steady]", text: "full at $250.00")
+    expect(rule_row("Pantry")).to have_css("[data-rule-when]", text: "full at $250.00")
+    expect(rule_row("Pantry")).to have_css("[data-rule-when]", text: "built up $250.00 of $250.00")
+    expect(rule_row("Pantry")).to have_css("[data-rule-bar='100'][data-rule-bar-state='full']")
   end
 
   # An item-backed rule names its item; the item-less one beside it is the lane no other rule pays.

@@ -70,6 +70,28 @@ RSpec.describe ClaimCalculator do
       expect(calculator(rule)).to be_over
       expect(calculator(rule).over_by).to eq(60)
     end
+
+    it "stops adding at its cap, asks nothing while full, and rebuilds after spending", :aggregate_failures do
+      capped = create(:rule, :keeps_unspent, amount: 100, cap: 250, category: groceries, item: bread, starts_on: Date.new(2026, 7, 24))
+      # periods: Jul 24, Aug 7, Aug 21, Sep 4 → 100, 200, 250 (capped), 250
+      full = described_class.new(capped, today: today)
+      expect(full.claim).to eq(250)
+      expect(full.planned_this_period).to eq(0)
+      expect(full.target).to eq(250)
+
+      spend(180, on: Date.new(2026, 9, 6))
+      drawn = described_class.new(capped, today: today)
+      expect(drawn.claim).to eq(70)
+      expect(described_class.new(capped, today: Date.new(2026, 9, 20)).planned_this_period).to eq(100)
+      expect(described_class.new(capped, today: Date.new(2026, 9, 20)).claim).to eq(170)
+    end
+
+    it "lets an adjustment top a capped fund up only to its cap" do
+      capped = create(:rule, :keeps_unspent, amount: 100, cap: 250, category: groceries, item: bread, starts_on: Date.new(2026, 8, 21))
+      create(:adjustment, source: capped, amount: 500, date: Date.new(2026, 9, 5))
+
+      expect(described_class.new(capped, today: today).claim).to eq(250)
+    end
   end
 
   describe "a dated one-off rule" do

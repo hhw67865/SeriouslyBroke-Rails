@@ -53,6 +53,13 @@ RSpec.describe Rule do
       expect(build(:rule, :one_off, keeps_unspent: true)).not_to be_valid
       expect(build(:rule, :rate, interval_months: 3)).not_to be_valid
     end
+
+    it "only lets a fund carry a positive cap", :aggregate_failures do
+      expect(build(:rule, :keeps_unspent, cap: 250)).to be_valid
+      expect(build(:rule, :rate, cap: 250)).not_to be_valid
+      expect(build(:rule, :one_off, cap: 250)).not_to be_valid
+      expect(build(:rule, :keeps_unspent, cap: 0)).not_to be_valid
+    end
   end
 
   describe "#ask", :aggregate_failures do

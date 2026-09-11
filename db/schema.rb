@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_11_142039) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_11_231540) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -79,6 +79,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_11_142039) do
   create_table "rules", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.money "amount", scale: 2, null: false
     t.date "anchor_date"
+    t.money "cap", scale: 2
     t.uuid "category_id", null: false
     t.datetime "created_at", null: false
     t.integer "interval_months"
@@ -92,6 +93,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_11_142039) do
     t.index ["item_id"], name: "index_rules_on_item_id_unique", unique: true, where: "(item_id IS NOT NULL)"
     t.check_constraint "NOT (keeps_unspent AND anchor_date IS NOT NULL)", name: "rules_keeping_never_dates"
     t.check_constraint "amount > 0::money", name: "rules_positive_amount"
+    t.check_constraint "cap IS NULL OR keeps_unspent AND cap > 0::money", name: "rules_cap_only_on_a_fund"
     t.check_constraint "interval_months IS NULL OR anchor_date IS NOT NULL", name: "rules_interval_needs_a_date"
     t.check_constraint "interval_months IS NULL OR interval_months > 0", name: "rules_positive_interval"
   end

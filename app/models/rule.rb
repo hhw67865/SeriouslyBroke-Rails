@@ -22,12 +22,14 @@ class Rule < ApplicationRecord
   validates :starts_on, presence: true
   validates :rule_type, presence: true
   validates :interval_months, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
+  validates :cap, numericality: { greater_than: 0 }, allow_nil: true
   validate :category_is_an_expense
   validate :item_is_in_the_category
   validate :one_item_less_rule_per_category
   validate :item_has_one_rule
   validate :keeping_never_dates
   validate :interval_needs_a_date
+  validate :cap_needs_a_fund
 
   delegate :user, to: :category
 
@@ -60,6 +62,8 @@ class Rule < ApplicationRecord
   end
 
   def saving_toward_a_date? = item_id.nil? && anchor_date.present? && interval_months.nil? && !bill?
+
+  def capped? = cap.present?
 
   # What the rule costs each period: its amount, a one-off target spread to its date, or a rolling
   # amount spread over the interval on the user's grid.
@@ -105,5 +109,11 @@ class Rule < ApplicationRecord
     return unless interval_months.present? && anchor_date.blank?
 
     errors.add(:interval_months, "needs a due date to count from")
+  end
+
+  def cap_needs_a_fund
+    return unless cap.present? && !keeps_unspent?
+
+    errors.add(:cap, "only a rule that keeps what it doesn't spend can have a cap")
   end
 end

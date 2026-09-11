@@ -23,6 +23,12 @@ FactoryBot.define do
       keeps_unspent { true }
     end
 
+    trait :capped do
+      keeps_unspent { true }
+      anchor_date { nil }
+      cap { 1_000 }
+    end
+
     trait :one_off do
       anchor_date { Date.current + 20 }
       interval_months { nil }

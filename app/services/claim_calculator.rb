@@ -75,10 +75,10 @@ class ClaimCalculator
   def target
     return @target if defined?(@target)
 
-    @target = if dated?
-                rule.amount.to_d
+    @target = if dated? then rule.amount.to_d
+              elsif fund? then rule.cap&.to_d
               else
-                (fund? ? nil : 0.to_d)
+                0.to_d
               end
   end
 
@@ -122,7 +122,7 @@ class ClaimCalculator
 
   def accrued_in(state, period)
     accrued = state.built_up + state.planned + adjustments_within(period)
-    return accrued if fund?
+    return capped_fund? ? [accrued, target].min : accrued if fund?
 
     [accrued, target].min
   end
@@ -134,7 +134,7 @@ class ClaimCalculator
   end
 
   def planned_for(period, state, due)
-    return rate_per_period if fund?
+    return fund_planned(state) if fund?
     return 0.to_d if settled_by?(state.paid)
 
     gap = target - state.built_up
@@ -142,6 +142,14 @@ class ClaimCalculator
 
     [(gap / periods_left_from(period.first, due)).round(2), gap].min
   end
+
+  def fund_planned(state)
+    return rate_per_period unless capped_fund?
+
+    (target - state.built_up).clamp(0.to_d, rate_per_period)
+  end
+
+  def capped_fund? = fund? && rule.capped?
 
   def settled_by?(paid) = one_time? && paid >= target
   def one_time? = anchor.present? && rule.interval_months.nil?

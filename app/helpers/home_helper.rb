@@ -63,7 +63,7 @@ module HomeHelper
   # `$310.00 of $400.00` — one sentence for both shapes, off ClaimLine#filled and #denominator. A
   # fund aims at nothing, so its sentence stops early and names its noun instead.
   def figure_words(line)
-    return "built up #{number_to_currency(line.filled)}" if line.fund?
+    return "built up #{number_to_currency(line.filled)}#{" of #{number_to_currency(line.target)}" if line.target}" if line.fund?
 
     "#{number_to_currency(line.filled)} of #{number_to_currency(line.denominator)}"
   end
@@ -96,6 +96,7 @@ module HomeHelper
 
   # A fund has no date to be ready or late for, so the one thing left to say is what it adds.
   def fund_when_clause(line)
+    return "full at #{number_to_currency(line.target)}" if line.target && line.per_period.zero?
     return nil unless line.per_period.positive?
 
     "+#{number_to_currency(line.per_period)} a period"
@@ -122,6 +123,7 @@ module HomeHelper
   # steady figure to compare against — it stops after its date — so it names the date instead.
   def steady_words(line)
     return "until #{line.next_due_on.strftime("%b %-d")}" if line.rule.cadence == :one_off
+    return "full at #{number_to_currency(line.target)}" if line.fund? && line.target && line.per_period.zero?
     return "same every period" if line.per_period == line.rule.ask
 
     "#{number_to_currency(line.rule.ask)} a period once caught up"

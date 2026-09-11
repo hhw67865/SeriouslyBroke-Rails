@@ -66,6 +66,29 @@ RSpec.describe "Rule form", type: :system do
     expect(written).to have_attributes(keeps_unspent: true, anchor_date: nil)
   end
 
+  # The cap is optional and lives beside "Keeps what it doesn't spend": once the pile reaches it,
+  # the rule stops asking and the row says so instead of a running "+$X a period".
+  it "offers the cap field, with its label and hint", :aggregate_failures do
+    open_form
+
+    expect(page).to have_field("Stop at")
+    expect(page).to have_content("optional — once the pile reaches this, the rule stops asking until you spend from it")
+  end
+
+  it "writes a fund that stops at a cap", :aggregate_failures do
+    open_form
+
+    fill_in "Amount", with: "100"
+    check "Keeps what it doesn't spend"
+    fill_in "Stop at", with: "2000"
+    choose "Usage"
+    click_button "Create rule"
+
+    expect(page).to have_content("Rule was successfully created.")
+    expect(written).to have_attributes(keeps_unspent: true, cap: 2000)
+    expect(page).to have_css("[data-rule='#{written.category.name}']", text: "built up $100.00 of $2,000.00")
+  end
+
   # "By a date" is money saved up toward a day — a bill or a goal, which are one shape — and it is
   # the schedule that reveals the due date.
   it "writes a dated bill on the schedule that asks for a date", :aggregate_failures do
@@ -201,6 +224,31 @@ RSpec.describe "Rule form", type: :system do
       expect(page).to have_css("[data-preview-sentence]", text: "Groceries gets $400.00 every period")
       expect(page).to have_css("[data-preview-figure='per_period']", text: "$400.00")
       expect(page).to have_css("[data-preview-type]", text: "It's usage, so it gives way after your choices")
+    end
+
+    # A capped fund's holding sentence names the stop rather than "with no limit".
+    it "says a capped fund stops asking once it is full" do
+      open_form
+
+      fill_in "Amount", with: "100"
+      check "Keeps what it doesn't spend"
+      fill_in "Stop at", with: "2000"
+      choose "Usage"
+
+      expect(page).to have_css("[data-preview-holding]", text: "It builds up to $2,000.00, then stops asking until some of it is spent.")
+    end
+
+    # "By a date" disables and clears both halves of the fund detail: a box or an amount left set
+    # under a date would be a 422 about a control the user can no longer reach.
+    it "disables and clears the cap along with keeps under By a date", :aggregate_failures do
+      open_form
+
+      check "Keeps what it doesn't spend"
+      fill_in "Stop at", with: "2000"
+      choose "By a date"
+
+      expect(page).to have_field("Keeps what it doesn't spend", disabled: true, checked: false)
+      expect(page).to have_field("Stop at", disabled: true, with: "")
     end
 
     # Choosing "By a date" reveals the day the money is wanted, and the card re-prices the rule on
