@@ -6,7 +6,9 @@ class Account < ApplicationRecord
   belongs_to :user, touch: true
   has_many :transfers_in, class_name: "Transfer", foreign_key: :to_account_id, dependent: :destroy, inverse_of: :to_account
   has_many :transfers_out, class_name: "Transfer", foreign_key: :from_account_id, dependent: :destroy, inverse_of: :from_account
-  has_many :entries, dependent: :nullify
+  has_many :savings_targets, dependent: :destroy
+  has_many :adjustments, as: :source, dependent: :destroy
+  accepts_nested_attributes_for :savings_targets, allow_destroy: true, reject_if: :all_blank
 
   normalizes :name, with: ->(name) { name.squish }
 
@@ -27,6 +29,10 @@ class Account < ApplicationRecord
   end
 
   def main? = user.main_account_id == id
+
+  def savings? = !main?
+
+  def claim_calculator(today: user.today, **rows) = SavingsCalculator.new(self, today: today, **rows)
 
   def balance = AccountLedger.new(user).balance_of(self)
 

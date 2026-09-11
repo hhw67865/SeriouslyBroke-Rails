@@ -85,15 +85,11 @@ RSpec.describe Category do
   end
 
   describe "changing type" do
-    it "sends an income category's entries back to main when it becomes expense" do
-      account = create(:account, user: user)
-      create(:account, user: user)
+    it "lets an income category with entries become an expense category" do
       category = create(:category, :income, user: user)
-      entry = create(:entry, item: create(:item, category: category), account: account)
+      create(:entry, item: create(:item, category: category))
 
-      category.update!(category_type: :expense)
-
-      expect(entry.reload.account).to be_nil
+      expect { category.update!(category_type: :expense) }.not_to raise_error
     end
 
     it "refuses to become income while it carries rules", :aggregate_failures do

@@ -20,8 +20,6 @@ class Category < ApplicationRecord
   validates :priority, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
   validate :rules_keep_it_an_expense
 
-  after_update :entries_return_to_main_when_no_longer_income
-
   scope :expenses, -> { where(category_type: :expense) }
   scope :incomes, -> { where(category_type: :income) }
   scope :tracked, -> { where(tracked: true) }
@@ -81,11 +79,5 @@ class Category < ApplicationRecord
     return unless category_type_change == ["expense", "income"] && rules.exists?
 
     errors.add(:category_type, RULES_KEEP_IT_AN_EXPENSE)
-  end
-
-  def entries_return_to_main_when_no_longer_income
-    return unless saved_change_to_category_type == ["income", "expense"]
-
-    entries.update_all(account_id: nil) # rubocop:disable Rails/SkipsModelValidations
   end
 end

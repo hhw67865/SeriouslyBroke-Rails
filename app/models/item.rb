@@ -10,6 +10,7 @@ class Item < ApplicationRecord
   belongs_to :category, touch: true
   has_many :entries, dependent: :destroy
   has_one :rule, dependent: :destroy
+  has_many :savings_shares, class_name: "SavingsTarget", dependent: :destroy
 
   normalizes :name, with: ->(name) { name.squish }
 

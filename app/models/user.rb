@@ -8,6 +8,7 @@ class User < ApplicationRecord
   has_many :items, through: :categories
   has_many :entries, through: :items
   has_many :rules, through: :categories
+  has_many :savings_targets, through: :accounts
   belongs_to :main_account, class_name: "Account", optional: true
 
   enum :theme, { light: 0, dark: 1 }

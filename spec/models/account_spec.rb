@@ -20,6 +20,15 @@ RSpec.describe Account do
     end
   end
 
+  it "keeps extra by default and knows it is savings when it is not main", :aggregate_failures do
+    checking = create(:account, user: user)
+    savings = create(:account, user: user)
+
+    expect(savings).to be_keeps_extra
+    expect(savings).to be_savings
+    expect(checking).not_to be_savings
+  end
+
   describe ".open" do
     it "creates the account and makes it main when the user has none", :aggregate_failures do
       account = described_class.open(user, name: "Checking", balance: 120.5)
@@ -97,11 +106,11 @@ RSpec.describe Account do
       main = create(:account, user: user)
       other = create(:account, user: user)
       create(:transfer, from_account: main, to_account: other)
-      entry = create(:entry, :income, user: user, account: other)
+      entry = create(:entry, :income, user: user)
       entry.item.category.update!(user: user)
 
       expect { other.destroy! }.to change(Transfer, :count).by(-1)
-      expect(entry.reload.account).to be_nil
+      expect(entry.reload.landing_account).to eq(main)
     end
   end
 end

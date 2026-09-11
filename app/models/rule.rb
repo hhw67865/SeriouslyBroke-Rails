@@ -3,7 +3,7 @@
 class Rule < ApplicationRecord
   belongs_to :category, touch: true
   belongs_to :item, optional: true
-  has_many :adjustments, dependent: :destroy
+  has_many :adjustments, as: :source, dependent: :destroy
 
   enum :rule_type, { bill: 0, usage: 1, choice: 2 }
 

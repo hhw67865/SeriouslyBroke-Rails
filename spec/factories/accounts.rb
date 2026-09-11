@@ -13,5 +13,9 @@ FactoryBot.define do
         account.user.update_columns(main_account_id: account.id) # rubocop:disable Rails/SkipsModelValidations
       end
     end
+
+    trait :savings do
+      before(:create) { |account| create(:account, user: account.user) if account.user.main_account_id.blank? }
+    end
   end
 end
