@@ -2,7 +2,7 @@
 
 # The figures dialled on the sacrifice page, written to the rules and savings targets they came
 # from. A row left at its own figure is untouched; a cut is refused, and nothing is written, when
-# the rule is fixed, the figure is not a positive number, or it is at or above the row's own figure.
+# the rule is fixed, the figure is not a positive number, or it is above the row's own figure.
 class SacrificeCuts
   include ActiveModel::Model
 

@@ -161,7 +161,7 @@
         <div class="flex items-center gap-2">
           <span class="text-sm text-gray-500">cut to</span>
           <input type="number" id="cut-target-amount-<%= row.target.id %>" class="form-input w-28 tabular-nums"
-                 step="<%= row.share? ? 1 : 0.01 %>" min="0" <%= "max=100" if row.share? %>
+                 step="<%= row.share? ? 1 : 0.01 %>" min="0" <%= 'max="100"' if row.share? %>
                  name="target_cuts[<%= row.target.id %>]"
                  value="<%= @typed_targets&.dig(row.target.id.to_s) || (row.share? ? row.percent_param : row.claim_param) %>"
                  aria-label="Cut <%= row.name %> to"
