@@ -6,7 +6,7 @@ class Account < ApplicationRecord
   belongs_to :user, touch: true
   has_many :transfers_in, class_name: "Transfer", foreign_key: :to_account_id, dependent: :destroy, inverse_of: :to_account
   has_many :transfers_out, class_name: "Transfer", foreign_key: :from_account_id, dependent: :destroy, inverse_of: :from_account
-  has_many :savings_targets, dependent: :destroy
+  has_many :savings_targets, -> { order(:starts_on, :created_at) }, dependent: :destroy, inverse_of: :account
   has_many :adjustments, as: :source, dependent: :destroy
   accepts_nested_attributes_for :savings_targets, allow_destroy: true, reject_if: :all_blank
 

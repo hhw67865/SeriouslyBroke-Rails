@@ -57,6 +57,20 @@ RSpec.describe SavingsTarget do
     expect(unsaved_item_share).to be_valid
   end
 
+  it "defaults starts_on to today when none is given" do
+    target = described_class.create!(account: emergency, amount: 100)
+
+    expect(target.starts_on).to eq(user.today)
+  end
+
+  it "refuses a stale or crafted item_id instead of raising", :aggregate_failures do
+    target = build(:savings_target, :share, account: emergency, item: nil, percent: 10)
+    target.item_id = SecureRandom.uuid
+
+    expect(target).not_to be_valid
+    expect(target.errors[:item]).to include("no longer exists")
+  end
+
   it "asks its amount, or its percent of the item's typical income", :aggregate_failures do
     expect(build(:savings_target, amount: 200).ask).to eq(200)
     expect(build(:savings_target, :share, percent: 10).ask(typical_income: 3_400)).to eq(340)

@@ -72,4 +72,41 @@ RSpec.describe AccountForm do
     expect(emergency.name).to eq("Emergency")
     expect(emergency.balance).to eq(500)
   end
+
+  it "refuses two new fixed rows saved together instead of raising", :aggregate_failures do
+    rows = {
+      "0" => { item_id: "", amount: "200", starts_on: "2026-09-04" },
+      "1" => { item_id: "", amount: "300", starts_on: "2026-09-04" }
+    }
+    saved = nil
+
+    expect { saved = form(emergency, savings_targets_attributes: rows).save }.not_to raise_error
+    expect(saved).to be(false)
+  end
+
+  it "refuses two new share rows on one item saved together instead of raising", :aggregate_failures do
+    rows = {
+      "0" => { item_id: paycheck.id, percent: "10", starts_on: "2026-09-04" },
+      "1" => { item_id: paycheck.id, percent: "20", starts_on: "2026-09-04" }
+    }
+    saved = nil
+
+    expect { saved = form(emergency, savings_targets_attributes: rows).save }.not_to raise_error
+    expect(saved).to be(false)
+  end
+
+  it "replaces a fixed target in one save", :aggregate_failures do
+    target = create(:savings_target, account: emergency, amount: 200)
+
+    saved = form(
+      emergency,
+      savings_targets_attributes: {
+        "0" => { id: target.id, _destroy: "1" },
+        "1" => { item_id: "", amount: "300", starts_on: "2026-09-04" }
+      }
+    ).save
+
+    expect(saved).to be(true)
+    expect(emergency.savings_targets.reload.map(&:words)).to contain_exactly("$300.00 a period")
+  end
 end
