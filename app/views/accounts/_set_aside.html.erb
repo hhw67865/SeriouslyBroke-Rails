@@ -1,7 +1,7 @@
-<%# SET ASIDE ELSEWHERE — every account but the spending one, as a ledger, with Move money beneath
-    it. Locals: `presenter` (AccountsPresenter), `transfer`, `move_to`, `open` (Move money's state). %>
+<%# SET ASIDE ELSEWHERE — every account but the spending one, as a ledger. Move money and Add an
+    account open from the buttons here. Local: `presenter` (AccountsPresenter). %>
 <div class="bg-white border border-gray-200 rounded p-4 lg:p-6" data-set-aside>
-  <div class="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2">
+  <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
     <div>
       <h2 class="text-sm font-semibold text-gray-900">Set aside elsewhere</h2>
       <p class="mt-1 text-sm text-gray-600">
@@ -9,12 +9,24 @@
         budget comes out of it.
       </p>
     </div>
-    <% if presenter.set_aside.any? %>
-      <p class="text-sm text-gray-700 tabular-nums shrink-0" data-set-aside-total>
-        <strong><%= number_to_currency(presenter.set_aside_total) %></strong>
-        across <%= pluralize(presenter.set_aside.size, "account") %>
-      </p>
-    <% end %>
+    <div class="flex flex-col items-stretch sm:items-end gap-2">
+      <% if presenter.set_aside.any? %>
+        <p class="text-sm text-gray-700 tabular-nums shrink-0" data-set-aside-total>
+          <strong><%= number_to_currency(presenter.set_aside_total) %></strong>
+          across <%= pluralize(presenter.set_aside.size, "account") %>
+        </p>
+      <% end %>
+      <div class="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
+        <%= link_to "Move money",
+            accounts_path(open: "move"),
+            class: "btn btn-secondary",
+            data: { drawer: "move", action: "click->shared--drawer#open" } %>
+        <%= link_to "Add an account",
+            accounts_path(open: "add"),
+            class: "btn btn-primary",
+            data: { drawer: "add", action: "click->shared--drawer#open" } %>
+      </div>
+    </div>
   </div>
 
   <% if presenter.set_aside.empty? %>
@@ -50,6 +62,4 @@
       </table>
     </div>
   <% end %>
-
-  <%= render "accounts/move_money", presenter: presenter, transfer: transfer, move_to: move_to, open: open %>
 </div>

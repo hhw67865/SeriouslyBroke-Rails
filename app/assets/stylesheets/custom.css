@@ -334,3 +334,58 @@ select.ts-hidden-accessible {
   outline-offset: 2px;
   box-shadow: 0 0 0 2px #ffffff;
 }
+
+/* Move money / Add an account: a native <dialog> drawer. Below `sm` it is a bottom sheet; from
+   `sm` up, a panel pinned to the right edge. The attribute selector is also the drawer's JS hook. */
+dialog[data-drawer-name] {
+  margin: 0;
+  padding: 0;
+  border: none;
+  max-width: none;
+  max-height: none;
+  position: fixed;
+  inset: auto 0 0 0;
+  width: 100%;
+  max-height: 90vh;
+  border-radius: 12px 12px 0 0;
+  background: #fff;
+  box-shadow: 0 -4px 24px rgba(38, 37, 31, 0.16);
+}
+
+dialog[data-drawer-name][open] {
+  display: flex;
+  flex-direction: column;
+  animation: drawer-sheet-in 0.2s ease-out;
+}
+
+dialog[data-drawer-name]::backdrop {
+  background: rgba(38, 37, 31, 0.45);
+}
+
+@media (min-width: 640px) {
+  dialog[data-drawer-name] {
+    inset: 0 0 0 auto;
+    width: 420px;
+    height: 100%;
+    max-height: 100%;
+    border-radius: 0;
+  }
+
+  dialog[data-drawer-name][open] {
+    animation: drawer-panel-in 0.2s ease-out;
+  }
+}
+
+@keyframes drawer-sheet-in {
+  from { transform: translateY(100%); }
+}
+
+@keyframes drawer-panel-in {
+  from { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  dialog[data-drawer-name][open] {
+    animation: none;
+  }
+}

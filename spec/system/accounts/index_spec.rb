@@ -3,7 +3,7 @@
 require "rails_helper"
 
 # ACCOUNTS: the spending account as a tinted card with Home's own figures, everything else set
-# aside as a ledger, and Move money between them. Edit and delete live on each set-aside row.
+# aside as a ledger. Move money and Add an account open in a drawer from the heading's buttons.
 RSpec.describe "Accounts", type: :system do
   include ActiveSupport::Testing::TimeHelpers
 
@@ -19,18 +19,22 @@ RSpec.describe "Accounts", type: :system do
 
   def row(name) = find("[data-account-row='#{name}']")
 
+  def drawer(name) = find("[data-drawer-name='#{name}']")
+
+  def open_drawer(name) = travel_to(today) { visit accounts_path(open: name) }
+
   def add_account(name, balance: nil)
-    find("[data-add-account] summary").click
-    within("[data-add-account]") do
+    open_drawer("add")
+    within(drawer("add")) do
       fill_in "Account name", with: name
       fill_in "What's in it right now", with: balance if balance
-      click_button "Add an account"
+      click_button "Add account"
     end
   end
 
   def move_money(from:, to:, amount:)
-    find("[data-move-money] summary").click
-    within("[data-move-money]") do
+    open_drawer("move")
+    within(drawer("move")) do
       select from, from: "From"
       select to, from: "To"
       fill_in "Amount", with: amount
@@ -70,8 +74,16 @@ RSpec.describe "Accounts", type: :system do
     expect(page).to have_css("[data-set-aside-empty]", text: "Nothing set aside yet. Add an account below to start.")
   end
 
-  it "adds an account", :aggregate_failures do
+  it "offers Move money and Add an account from the heading, and no row has Move money", :aggregate_failures do
+    elsewhere("Ally", 100)
     read_accounts
+
+    expect(page).to have_link("Move money", href: accounts_path(open: "move"))
+    expect(page).to have_link("Add an account", href: accounts_path(open: "add"))
+    expect(row("Ally")).to have_no_link("Move money")
+  end
+
+  it "adds an account", :aggregate_failures do
     add_account("Ally Savings", balance: "250.50")
 
     expect(page).to have_content("Ally Savings added.")
@@ -80,12 +92,23 @@ RSpec.describe "Accounts", type: :system do
 
   it "moves money and changes both balances", :aggregate_failures do
     elsewhere("Ally", 100)
-    read_accounts
     move_money(from: "Checking", to: "Ally", amount: "50.00")
 
     expect(page).to have_content("Moved $50.00 from Checking to Ally.")
     expect(page).to have_css("[data-spending-balance]", text: "$950.00")
     expect(row("Ally")).to have_content("$150.00")
+  end
+
+  it "keeps the move drawer open with the error after a refused move", :aggregate_failures do
+    open_drawer("move")
+    within(drawer("move")) do
+      select "Checking", from: "To"
+      fill_in "Amount", with: "10.00"
+      click_button "Move"
+    end
+
+    expect(page).to have_css("dialog[data-drawer-name='move'][open]")
+    expect(drawer("move")).to have_content("must differ from the source account")
   end
 
   it "deletes an account and returns its money to the spending account", :aggregate_failures do
@@ -112,5 +135,21 @@ RSpec.describe "Accounts", type: :system do
     read_accounts
 
     expect(page).to have_link("Accounts", href: accounts_path)
+  end
+
+  describe "the drawer, opened and closed", :js do
+    it "opens Move money as a modal dialog, closes on Escape, and opens Add an account", :aggregate_failures do
+      elsewhere("Ally", 100)
+      read_accounts
+
+      click_link "Move money"
+      expect(page).to have_css("dialog[data-drawer-name='move'][open]")
+
+      find("dialog[data-drawer-name='move']").send_keys(:escape)
+      expect(page).to have_no_css("dialog[data-drawer-name='move'][open]")
+
+      click_link "Add an account"
+      expect(page).to have_css("dialog[data-drawer-name='add'][open]")
+    end
   end
 end

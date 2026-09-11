@@ -23,10 +23,6 @@
   </td>
   <td class="block sm:table-cell sm:py-2 sm:pl-3">
     <div class="mt-2 flex flex-wrap items-center gap-4 sm:mt-0">
-      <%= link_to "Move money",
-                  accounts_path(move_to: row.account.id),
-                  class: "text-xs font-medium text-brand hover:text-brand-dark",
-                  data: { account_move: row.account.name } %>
       <%= link_to "Edit",
                   edit_account_path(row.account),
                   class: "text-xs font-medium text-brand hover:text-brand-dark",

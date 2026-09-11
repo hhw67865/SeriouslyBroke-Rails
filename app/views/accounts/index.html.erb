@@ -2,10 +2,16 @@
 
 <%= page_header(title: "Accounts", subtitle: "One account is what you spend from. The rest is set aside.") %>
 
-<div class="space-y-4 lg:space-y-6">
+<div class="space-y-4 lg:space-y-6" data-controller="shared--drawer">
   <%= render "accounts/spending", presenter: @presenter %>
 
-  <%= render "accounts/set_aside", presenter: @presenter, transfer: @transfer, move_to: @move_to, open: @open_move_money %>
+  <%= render "accounts/set_aside", presenter: @presenter %>
 
-  <%= render "accounts/add_account", account: @new_account, balance: @new_account_balance, open: @open_add_account %>
+  <%= render layout: "accounts/drawer", locals: { name: "move", title: "Move money", open: @open_move_money } do %>
+    <%= render "accounts/move_money_form", presenter: @presenter, transfer: @transfer, move_to: @move_to %>
+  <% end %>
+
+  <%= render layout: "accounts/drawer", locals: { name: "add", title: "Add an account", open: @open_add_account } do %>
+    <%= render "accounts/add_account_form", account: @new_account, balance: @new_account_balance %>
+  <% end %>
 </div>

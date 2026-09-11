@@ -37,15 +37,15 @@ class AccountsController < ApplicationController
   def set_account = @account = current_user.accounts.find(params[:id])
 
   # The state `accounts/index` renders with, on a first visit or after a refusal from any of its
-  # three forms — add-account and move-money each carry the details open only when refused.
+  # forms — a drawer opens from `params[:open]`, a preselected move, or (add) a refusal.
   def assign_index_state(new_account: nil, new_account_balance: nil, open_add_account: false)
     @presenter = AccountsPresenter.new(user: current_user, today: current_user.today)
     @new_account = new_account || current_user.accounts.new
     @new_account_balance = new_account_balance
-    @open_add_account = open_add_account
+    @open_add_account = open_add_account || params[:open] == "add"
     @transfer = Transfer.new
     @move_to = params[:move_to]
-    @open_move_money = params[:move_to].present?
+    @open_move_money = params[:move_to].present? || params[:open] == "move"
   end
 
   def deletion_notice(pot_before)
