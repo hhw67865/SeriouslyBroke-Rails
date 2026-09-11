@@ -13,7 +13,9 @@
     <p class="mt-1 text-xl font-semibold tabular-nums <%= tiles.checking.negative? ? "text-status-danger" : "text-gray-900" %>" data-in-checking>
       <%= number_to_currency(tiles.checking) %>
     </p>
-    <p class="mt-1 text-xs text-gray-500" data-spent-this-period>spent <%= number_to_currency(tiles.spent_this_period) %> this period</p>
+    <% unless tiles.spent_this_period.nil? %>
+      <p class="mt-1 text-xs text-gray-500" data-spent-this-period>spent <%= number_to_currency(tiles.spent_this_period) %> this period</p>
+    <% end %>
   </div>
   <div class="bg-white border border-gray-200 rounded p-4 lg:p-5" data-tile="claimed">
     <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Claimed</p>

@@ -106,4 +106,13 @@ RSpec.describe HomePresenter do
 
     expect(presenter.unbudgeted_rows.map(&:spent)).to eq([42])
   end
+
+  it "has no spent-this-period figure for a user who has declared no cadence" do
+    undeclared = create(:user)
+    create(:account, user: undeclared, opening_balance: 1_000)
+
+    presenter = described_class.new(user: undeclared, today: today)
+
+    expect(presenter.spent_this_period).to be_nil
+  end
 end

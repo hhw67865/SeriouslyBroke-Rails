@@ -105,7 +105,11 @@ class HomePresenter
     )
   end
 
+  # nil for a user with no cadence: `User#period_containing` falls back to the calendar month, and
+  # a spent-this-period figure must not state a period as fact when the header says there is none.
   def spent_this_period
+    return nil if period_progress.nil?
+
     @spent_this_period ||= Entry.expenses.where(categories: { user_id: user.id })
       .where(date: user.period_containing(today)).sum(:amount).to_d
   end

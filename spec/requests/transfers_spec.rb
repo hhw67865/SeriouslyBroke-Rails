@@ -32,4 +32,12 @@ RSpec.describe "Transfers" do
     expect(response.body).to include("must differ from the source account")
     expect(Transfer.count).to eq(0)
   end
+
+  it "re-renders Home at 422 on a refusal when the form carried return: home", :aggregate_failures do
+    post transfers_path, params: { transfer: { from_account_id: main.id, to_account_id: main.id, amount: "40.00", date: Date.current }, return: "home" }
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.body).to include("data-tiles")
+    expect(Transfer.count).to eq(0)
+  end
 end

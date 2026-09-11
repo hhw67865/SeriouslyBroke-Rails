@@ -74,4 +74,17 @@ RSpec.describe "Home tiles", type: :system do
     # "a day" in an unrelated sense ("Today unless you pick a day"), so the check is scoped here.
     within("[data-tiles]") { expect(page).to have_no_content("a day") }
   end
+
+  # A user with no cadence has no period, so `spent this period` would state one as fact — the
+  # header already says there is none.
+  it "has no spent-this-period line for a user who has declared no cadence", :aggregate_failures do
+    undeclared = create(:user)
+    create(:account, user: undeclared, name: "Checking", opening_balance: 1_000)
+    sign_in undeclared, scope: :user
+
+    visit root_path
+
+    expect(page).to have_content("No period set yet")
+    expect(page).to have_no_css("[data-spent-this-period]")
+  end
 end
