@@ -150,7 +150,7 @@ The sacrifice dial's JavaScript is unchanged: it reads per-row claims and a gap.
   together or not at all, as now.
 - **AdjustmentForm** takes `source:` instead of `rule:` and asks the source's calculator for
   `accrued_this_period` and `countable_span`. On an account it accepts only `skip` or a negative
-  amount; a positive amount is refused with "you can move more any time — there's nothing to top
+  amount; a positive amount is refused with "<name> can take more any time — there's nothing to top
   up." The date rule is the same: inside `countable_span`.
 - **EntryForm** drops the account parameter. `EntriesController` stops permitting `account_id`
   and prefilling an account.
@@ -202,7 +202,7 @@ becomes `savings_path`.
   transferred, a one-click Transfer button naming the owed amount (hidden when owed is zero), Edit,
   Delete. The Adjust disclosure sits inside the "owed now" cell, under the figure, and opens the
   panel (amount, Reduce, "Skip this period (−$X)") in a full-width row beneath. On the Budget page
-  the rule row's Adjust moves to the same place, under its claim figure. The "income last landed" column is gone. Drawers for
+  it opens directly beneath the rule's row, worded "Adjust what's owed now". The "income last landed" column is gone. Drawers for
   Transfer money and Add an account as now.
 - **Account form** (`/accounts/:id/edit`, and the add drawer for name and balance only): name,
   balance today, the keeps-extra choice as two radios each with one sentence, and the target rows

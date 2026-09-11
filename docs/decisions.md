@@ -111,9 +111,9 @@ sentence is replaced, not kept.
 - On an account: **reduce** and **skip this period** only. Always negative. There is
   no top-up on savings, because with no ceiling, saving more is just moving more.
 - Adjustments are polymorphic over rule and account.
-- On every screen the Adjust control sits beside the claim figure, "owed now" on a savings row and
-  the claim on a rule row, never beside the edit link. An adjustment is a change to what is owed
-  now, and its place on the page says so.
+- On the Savings page the Adjust control sits inside the "owed now" cell. On the Budget page it
+  opens directly beneath the rule's row, worded "Adjust what's owed now". An adjustment is a change
+  to what is owed now, and its place and wording on the page say so.
 
 ## 8. The two problems
 
