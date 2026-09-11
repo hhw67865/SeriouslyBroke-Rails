@@ -52,6 +52,17 @@ sentence is replaced, not kept.
   the category's entries on items that have no rule of their own. One item-less rule per category;
   one rule per item.
 - A rule has a **kind**: bill, usage or choice. The kind sets the give-way order (§9).
+  - **Bill**: a must. A set amount on a date, once or every so many months. You can't spend less
+    on it by using less. Rent, insurance, a loan payment.
+  - **Usage**: something you have to spend on, but how much depends on how you use it. You can
+    bring it down. Utilities, groceries, fuel.
+  - **Choice**: something you choose to get. Not a necessity; you could go without. Eating out,
+    hobbies, clothes.
+  These definitions live on the rule form, where a kind is picked. Home carries only a legend.
+- What a rule **takes this period** is the calculator's planned figure for the current period,
+  which depends on the day: a dated bill that just started has nothing behind it and takes more per
+  period until it is caught up. Its **steady** figure is what it asks per period once caught up.
+  The Budget page shows both; the "fits" verdict uses the steady figure.
 - A rule has a **shape**, decided by two columns:
   - **rate**: per period, does not keep unspent. Claims `max(0, amount − spent)` this period only.
   - **fund**: per period, keeps unspent. Each period adds the amount; what is unspent carries.
@@ -117,9 +128,11 @@ sentence is replaced, not kept.
 - On an account: **reduce** and **skip this period** only. Always negative. There is
   no top-up on savings, because with no ceiling, saving more is just moving more.
 - Adjustments are polymorphic over rule and account.
-- On the Savings page the Adjust control sits inside the "owed now" cell. On the Budget page it
-  opens directly beneath the rule's row, worded "Adjust what's owed now". An adjustment is a change
-  to what is owed now, and its place and wording on the page say so.
+- An adjustment is a change to what is owed right now, made because this period needs it and the
+  underlying rule or target should not change. So it lives where "right now" is shown: on Home,
+  each rule row in "This period" carries Adjust; on the Savings page, the "owed now" cell does. The
+  Budget page is the stable foundation and carries no Adjust; it shows the rules and what they
+  take.
 
 ## 8. The two problems
 
@@ -142,8 +155,17 @@ sentence is replaced, not kept.
 
 ## 10. Screens
 
-- **Home**: free to spend with the budget and savings claims beneath it, this period's progress, the
-  trouble strip, the give-way list, the runway.
+- **Nav**, in four groups: Today (Home, Entries, Calendar), Plan (Budget, Savings), Look back
+  (Reports), Set up (Categories, Settings). A page is one of three things: an answer to read, a
+  thing you do, or a thing you set up, and it is never two of them.
+- **Home** (`/`) is the full picture, headed by the day and where it sits in the period. Four
+  tiles: free to spend (after everything claimed is set aside; no per-day pace), checking with what
+  was spent this period, claimed with its budget and savings split, and savings with what is owed.
+  Then the trouble strip, only when something is wrong. Then "Coming up": every dated rule due in
+  the next 30 days with its date, amount and state (ready, set aside so far, on track). Then "This
+  period": one block per ruled category and per savings account with a target, each rule or target
+  as a row with its bar and its Adjust disclosure, under a header that carries the kinds legend in
+  give-way order. An adjustment is the one thing written from Home; everything else links out.
 - **Savings** (`/savings`): checking at the top with balance,
   claimed (budget and savings as its two lines) and free; then each savings account with its
   targets in words ("$200 a period, plus 10% of Paycheck"), what it is owed now, a Transfer button that
@@ -152,9 +174,18 @@ sentence is replaced, not kept.
   An account with no target reads as such. Account CRUD stays under `resources :accounts`.
 - **Account form**: name, balance today, the keeps-extra choice as two sentences,
   and a list of target rows, each an amount or an item-and-percent, with its start date.
-- **Budget** (`/budget`): the tiles read "You bring in X. Savings take Y. Your budget is Z. That
-  leaves W." The bar shows where income goes: savings first, then the budget by kind. Then every
-  expense category with its rules, adjustments and reorder.
+- **Budget** (`/budget`) is where rules are set up, and keeps its shape: the tiles, then every
+  expense category as a collapsible section with its reorder controls, name, rule count and kind
+  dots, and inside it the rules table and a "New rule in <category>" door. No Adjust here.
+  Three things change. The Adjust disclosures and the list of this period's adjustments move to
+  Home. The rules table's "Now" column becomes "Takes this period", the calculator's
+  planned figure for today, with the steady figure beneath it; a collapsed section shows its
+  categories' total take this period. And no claimed figure appears anywhere on the page; that is
+  Home's. The tiles read "You bring in X. Where it goes: Y this period (Z a period once every bill
+  is caught up). That leaves W." with the verdict on the steady figures. A category with no rule is
+  a plain row with "Give it a rule".
+- **Rule form** (`/rules/new`, `/rules/:id/edit`): as built. Step 3's three options carry the kind
+  definitions from §4 as their help text; nothing else on the form changes.
 - **Sacrifice** (`/sacrifice`): what would have to give when the budget and savings need more than
   typical income. Two sections: the budget's rules, then each savings target. Rolling bills are
   fixed. A share is cut by percent, a fixed target by amount.
