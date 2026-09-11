@@ -8,9 +8,10 @@ This document defines the architecture, patterns, and coding conventions for the
 - **Account** → where money sits; balance is a ledger read, never a stored column
 - **Category** (expense/income types) → has_many Items, has_many Rules
 - **Item** → has_many Entries, has_one Rule
-- **Entry** → the actual transaction record; only income may land in a non-main Account
+- **Entry** → the actual transaction record; income lands in checking, expenses leave it
 - **Rule** → a category or item's claim on main: a period allowance or a dated bill/goal
-- **Adjustment** → a one-off change to a rule's claim (a top-up or a skip)
+- **SavingsTarget** → one promise on a savings Account: a fixed amount a period, or a share of an income Item
+- **Adjustment** → a signed delta on a Rule's or an Account's claim (a top-up, a reduction or a skip)
 - **Transfer** → money moved between two of a user's Accounts
 
 ## Custom Patterns
@@ -33,10 +34,11 @@ Plain service objects, fed a fixed number of queries up front, that compute a fi
 ```ruby
 AccountLedger.new(current_user).balance_of(account)
 ClaimCalculator.new(rule).claim
-ClaimLedger.new(current_user).total_claims
+SavingsCalculator.new(account).claim
+ClaimLedger.new(current_user).claims
 ```
 
-`AccountLedger` totals one user's account balances; `ClaimCalculator` computes a single rule's claim on main; `ClaimLedger` runs every rule's calculator for a user in a fixed number of queries.
+`AccountLedger` totals one user's account balances; `ClaimCalculator` computes a single rule's claim on main; `SavingsCalculator` computes a single savings Account's claim on main, the same way for a fixed amount or a share of an item; `ClaimLedger` runs every rule's and every savings account's calculator for a user in a fixed number of queries. `ClaimLedger#claims` is the one list every screen reads — Home, the Savings page, the sacrifice page and the Budget tiles never ask what record is behind a claim.
 
 ### Form Object Pattern (`app/services/`)
 

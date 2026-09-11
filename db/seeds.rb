@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-# A demo household on a fortnightly grid: four accounts, income landing in two of them, every
-# rule shape, a transfer, and adjustments. Log in as demo@example.com / password123. Split into
-# one method per step so each stays small enough for rubocop's size cops without a disable.
+# A demo household on a fortnightly grid: four accounts, income landing in checking, every
+# rule shape, savings targets, transfers, and adjustments. Log in as demo@example.com / password123.
+# Split into one method per step so each stays small enough for rubocop's size cops without a disable.
 class DemoHousehold
   def initialize(timezone)
     @timezone = timezone
@@ -16,6 +16,7 @@ class DemoHousehold
       create_categories!
       create_items!
       create_rules!
+      create_savings_targets!
       log_entries!
       create_transfers_and_adjustments!
       report
@@ -25,7 +26,7 @@ class DemoHousehold
   private
 
   def reset!
-    [Adjustment, Rule, Transfer, Entry, Item, Category, Account, User].each(&:delete_all)
+    [Adjustment, SavingsTarget, Rule, Transfer, Entry, Item, Category, Account, User].each(&:delete_all)
   end
 
   def create_user!
@@ -38,8 +39,9 @@ class DemoHousehold
   def create_accounts!
     @checking = Account.open(@user, name: "Checking", balance: 1_800)
     @ally = Account.open(@user, name: "Ally Savings", balance: 4_200)
-    @side_gig = Account.open(@user, name: "Side Gig Checking", balance: 350)
+    @brokerage = Account.open(@user, name: "Brokerage", balance: 12_750)
     Account.open(@user, name: "Health Savings", balance: 900)
+    @brokerage.update!(keeps_extra: false)
   end
 
   def create_categories!
@@ -84,6 +86,12 @@ class DemoHousehold
     rule(@vacation, amount: 5_000, anchor_date: @demo_start + (14 * 78) - 1, rule_type: :choice)
   end
 
+  def create_savings_targets!
+    @ally.savings_targets.create!(amount: 150, starts_on: @demo_start)
+    @ally.savings_targets.create!(item: @paycheck, percent: 5, starts_on: @demo_start)
+    @brokerage.savings_targets.create!(item: @paycheck, percent: 15, starts_on: periods_ago(4))
+  end
+
   def log_entries!
     (0..13).each do |cycle|
       payday = log_regular_entries(cycle)
@@ -106,7 +114,7 @@ class DemoHousehold
     payday
   end
 
-  # The things that land every other period: the side gig on even cycles, the bills on odd ones.
+  # The things that land every other period: the contract invoice on even cycles, the bills on odd ones.
   def log_biweekly_entries(cycle, payday)
     log(@contract, 400, payday + 3, "Invoice") if cycle.even?
     log(@electric, 118, payday + 1) if cycle.odd?
@@ -115,14 +123,17 @@ class DemoHousehold
   end
 
   def create_transfers_and_adjustments!
-    Transfer.create!(from_account: @checking, to_account: @ally, amount: 300, date: @today - 7)
+    (1..13).each { |cycle| Transfer.create!(from_account: @checking, to_account: @ally, amount: 250, date: periods_ago(13 - cycle) + 1) }
+    Transfer.create!(from_account: @checking, to_account: @brokerage, amount: 300, date: @today - 7)
     Adjustment.create!(source: Rule.find_by!(category: @vacation, item_id: nil), amount: 250, date: @today - 3)
     Adjustment.create!(source: Rule.find_by!(category: @dining, item_id: nil), amount: -20, date: @today - 1)
+    Adjustment.create!(source: @ally, amount: -50, date: @today - 2)
   end
 
   def report
     Rails.logger.debug do
-      "Seeded #{@user.email}: #{Account.count} accounts, #{Category.count} categories, #{Entry.count} entries, #{Rule.count} rules"
+      "Seeded #{@user.email}: #{Account.count} accounts, #{Category.count} categories, #{Entry.count} entries, " \
+        "#{Rule.count} rules, #{SavingsTarget.count} savings targets"
     end
   end
 

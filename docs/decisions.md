@@ -4,8 +4,6 @@ How the app works and what has been decided. This file states the current direct
 records what used to be true or what was considered and dropped. When a decision changes, the old
 sentence is replaced, not kept.
 
-Sections marked **(planned)** are decided but not yet in code.
-
 ## 1. Vocabulary
 
 - **Checking** is the user's main account. Every claim is on checking. Expenses leave it. Income
@@ -31,8 +29,7 @@ Sections marked **(planned)** are decided but not yet in code.
 - The only reason money leaves checking for another account is savings, and that transfer is what
   fulfils a savings claim.
 - Income always lands in checking. Money reaches a savings account only by a transfer the user
-  makes. An entry has no account. **(planned: drop the entry's account column and the "Lands in"
-  picker)**
+  makes. An entry has no account.
 - Balances: an account's balance is its opening balance, plus income and minus expenses (checking
   only), plus transfers in, minus transfers out.
 - Saved over a range, per account, is transfers in minus transfers out dated in that range. Across
@@ -65,7 +62,7 @@ Sections marked **(planned)** are decided but not yet in code.
   budgeting an expense that is coming, and belongs on a category.
 - `starts_on` is the first day whose spending counts.
 
-## 5. Savings targets (planned)
+## 5. Savings targets
 
 - A savings target is a promise that an account is owed money from checking. It is not a rule. It
   has no date, no ceiling and no end. You always want savings.
@@ -101,9 +98,8 @@ Sections marked **(planned)** are decided but not yet in code.
   and returns a claim and an ask.
 - One ledger produces one list of claims for a user, each with its source, name, kind, claim, ask
   and whether it can be cut. Home, the Savings page, the sacrifice page and the Budget tiles read
-  that list and never ask what record is behind a claim. **(planned)**
-- Claimed is the budget claim plus the savings claim. Free is checking minus claimed. **(planned:
-  savings in the sum)**
+  that list and never ask what record is behind a claim.
+- Claimed is the budget claim plus the savings claim. Free is checking minus claimed.
 
 ## 7. Adjustments
 
@@ -112,12 +108,12 @@ Sections marked **(planned)** are decided but not yet in code.
 - An adjustment's date must fall inside what its source counts, up to today.
 - On a rule: **top up** / **reduce** on a per-period rule, **set aside** / **take back** on a dated
   rule, and **skip this period**, which is minus exactly what accrued this period.
-- On an account **(planned)**: **reduce** and **skip this period** only. Always negative. There is
+- On an account: **reduce** and **skip this period** only. Always negative. There is
   no top-up on savings, because with no ceiling, saving more is just moving more.
-- Adjustments are polymorphic over rule and account. **(planned)**
+- Adjustments are polymorphic over rule and account.
 - On every screen the Adjust control sits beside the claim figure, "owed now" on a savings row and
   the claim on a rule row, never beside the edit link. An adjustment is a change to what is owed
-  now, and its place on the page says so. **(planned)**
+  now, and its place on the page says so.
 
 ## 8. The two problems
 
@@ -135,27 +131,27 @@ Sections marked **(planned)** are decided but not yet in code.
   **savings**, then **bill**. A bill is what it is.
 - Savings is filled first and cut late, but it is cuttable. The sacrifice page lists savings in its
   own section, one row per target: a fixed target can be cut to a lower amount, a share to a lower
-  percent. **(planned)**
+  percent.
 - Within categories, `priority` is the fill order: 0 fills first, the highest number gives way first.
 
 ## 10. Screens
 
 - **Home**: free to spend, this period's progress, the trouble strip, the give-way list, the runway.
-- **Savings** (`/savings`) **(planned rename of Accounts)**: checking at the top with balance,
+- **Savings** (`/savings`): checking at the top with balance,
   claimed (budget and savings as its two lines) and free; then each savings account with its
   targets in words ("$200 a period, plus 10% of Paycheck"), what it is owed now, a Transfer button that
   writes a transfer from checking for exactly that amount, dated today, in one click, and its
   adjust panel. The Transfer money drawer stays for any other amount.
   An account with no target reads as such. Account CRUD stays under `resources :accounts`.
-- **Account form** **(planned)**: name, balance today, the keeps-extra choice as two sentences,
+- **Account form**: name, balance today, the keeps-extra choice as two sentences,
   and a list of target rows, each an amount or an item-and-percent, with its start date.
 - **Budget** (`/budget`): the tiles read "You bring in X. Savings take Y. Your budget is Z. That
   leaves W." The bar shows where income goes: savings first, then the budget by kind. Then every
-  expense category with its rules, adjustments and reorder. **(planned: the savings parts)**
+  expense category with its rules, adjustments and reorder.
 - **Sacrifice** (`/sacrifice`): what would have to give when the budget and savings need more than
   typical income. Two sections: the budget's rules, then each savings target. Rolling bills are
   fixed. A share is cut by percent, a fixed target by amount.
-- **Entries**: the form has no account picker; income lands in checking. **(planned)**
+- **Entries**: the form has no account picker; income lands in checking.
 - **Items, Categories, Calendar, Reports, Settings**: as built.
 
 ## 11. Testing

@@ -11,6 +11,7 @@ RSpec.describe "db/seeds.rb", type: :task do
     expect(user.accounts.count).to eq(4)
     expect(user.main_account.name).to eq("Checking")
     expect(user.rules.count).to eq(9)
+    expect(SavingsTarget.count).to eq(3)
     expect(ledger.claimed).to be > 0
     expect(ledger.account_ledger.typical_income).to be > 2_000
     expect(HomePresenter.new(user: user).troubles.map(&:kind)).not_to include(:structural)
