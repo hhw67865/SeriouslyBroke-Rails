@@ -78,7 +78,7 @@ RSpec.describe "Rules" do
   # back with the category the rule belonged to still open.
   it "deletes a rule and its adjustments, and reopens its category", :aggregate_failures do
     rule = create(:rule, category: groceries, amount: 400)
-    adjustment = create(:adjustment, rule: rule)
+    adjustment = create(:adjustment, source: rule)
 
     delete rule_path(rule)
 

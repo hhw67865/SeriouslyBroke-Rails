@@ -1,7 +1,7 @@
 <%# One rule's period, changed. Local: `line` (ClaimLine). The direction rides on the button that
     was pressed, and `open` on both actions so a refusal returns with this panel still open. %>
 <details class="mt-2" data-adjust="<%= rule_name(line.rule) %>">
-  <summary class="<%= rule_action_classes("cursor-pointer text-sm sm:text-left") %>">Adjust</summary>
+  <summary class="<%= rule_action_classes("cursor-pointer text-sm sm:text-left") %>">Adjust what's owed now</summary>
 
   <div class="mt-2 max-w-xl rounded border border-gray-200 bg-gray-50 px-3 py-3 space-y-3">
     <%# The planned figure, always said before it is changed — and it is also exactly what Skip
@@ -12,7 +12,8 @@
     </p>
 
     <%= form_with url: adjustments_path(open: line.category.id), method: :post, class: "space-y-2" do %>
-      <%= hidden_field_tag :rule_id, line.rule.id %>
+      <%= hidden_field_tag :source_type, "Rule" %>
+      <%= hidden_field_tag :source_id, line.rule.id %>
 
       <div class="flex flex-wrap items-end gap-2">
         <%# Ids are keyed on the rule, because this partial renders once per row and a repeated `id`
@@ -71,7 +72,8 @@
 
     <% if line.skippable? %>
       <%= form_with url: adjustments_path(open: line.category.id), method: :post do %>
-        <%= hidden_field_tag :rule_id, line.rule.id %>
+        <%= hidden_field_tag :source_type, "Rule" %>
+        <%= hidden_field_tag :source_id, line.rule.id %>
         <%= hidden_field_tag :skip, "1" %>
         <%# It names what it will write, which is −accrued and not −planned: a period already
             topped up by $50 has $200 to take back. %>

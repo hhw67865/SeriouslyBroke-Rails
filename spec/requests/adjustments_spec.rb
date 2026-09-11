@@ -13,7 +13,7 @@ RSpec.describe "Adjustments" do
   end
 
   it "tops up and takes back", :aggregate_failures do
-    post adjustments_path, params: { rule_id: rule.id, amount: "50" }
+    post adjustments_path, params: { source_type: "Rule", source_id: rule.id, amount: "50" }
     expect(response).to redirect_to(budget_page_path(open: groceries.id))
     expect(rule.adjustments.sole.amount).to eq(50)
 
@@ -22,7 +22,7 @@ RSpec.describe "Adjustments" do
   end
 
   it "refuses a date outside the period with the reason", :aggregate_failures do
-    post adjustments_path, params: { rule_id: rule.id, amount: "50", date: (user.period_containing(user.today).first - 1).to_s }
+    post adjustments_path, params: { source_type: "Rule", source_id: rule.id, amount: "50", date: (user.period_containing(user.today).first - 1).to_s }
 
     expect(response).to have_http_status(:unprocessable_content)
     expect(response.body).to include("pick a date between")
@@ -30,8 +30,24 @@ RSpec.describe "Adjustments" do
 
   # 404 rather than a raise: this app's test environment rescues, so the refusal is the response.
   it "never adjusts another user's rule" do
-    post adjustments_path, params: { rule_id: create(:rule).id, amount: "50" }
+    post adjustments_path, params: { source_type: "Rule", source_id: create(:rule).id, amount: "50" }
 
     expect(response).to have_http_status(:not_found)
+  end
+
+  it "reduces a savings account and comes back to the savings page", :aggregate_failures do
+    emergency = create(:account, user: user, name: "Emergency")
+    create(:savings_target, account: emergency, amount: 200, starts_on: user.period_containing(user.today).first)
+
+    post adjustments_path, params: { source_type: "Account", source_id: emergency.id, amount: "50", amount_sign: "-1" }
+
+    expect(response).to redirect_to(savings_path)
+    expect(emergency.adjustments.sole.amount).to eq(-50)
+  end
+
+  it "refuses an unknown source type" do
+    post adjustments_path, params: { source_type: "User", source_id: user.id, amount: "50" }
+
+    expect(response).to have_http_status(:unprocessable_content)
   end
 end

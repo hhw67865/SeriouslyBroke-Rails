@@ -2,34 +2,55 @@
 
 class AdjustmentsController < ApplicationController
   include BudgetPageState
+  include SavingsPageState
+
+  # Where each source is found, through current_user: a foreign id is not found rather than refused.
+  SOURCE_SCOPES = {
+    "Rule" => ->(user) { Rule.for_user(user) },
+    "Account" => ->(user) { user.accounts }
+  }.freeze
 
   def create
-    rule = scoped_rule
-    form = AdjustmentForm.new(rule: rule, params: params, name: helpers.rule_name(rule), today: current_user.today)
+    source = scoped_source
+    return head :unprocessable_content if source.nil?
+
+    form = AdjustmentForm.new(source: source, params: params, name: name_for(source), today: current_user.today)
     if form.save
-      redirect_to back_to(rule), notice: confirmation(form)
+      redirect_to back_to(source), notice: confirmation(form)
     else
-      refuse_on_budget_page(form.error_sentence)
+      refuse(source, form.error_sentence)
     end
   end
 
   def destroy
-    adjustment = Adjustment.where(rule_id: Rule.for_user(current_user).select(:id)).find(params[:id])
-    rule = adjustment.rule
+    adjustment = Adjustment.find(params[:id])
+    raise ActiveRecord::RecordNotFound unless adjustment.user == current_user
+
+    source = adjustment.source
     adjustment.destroy
-    redirect_to back_to(rule), notice: removal(adjustment, rule)
+    redirect_to back_to(source), notice: removal(adjustment, source)
   end
 
   private
 
-  def back_to(rule) = budget_page_path(open: rule.category_id)
-  def scoped_rule = Rule.for_user(current_user).find(params[:rule_id])
+  def scoped_source
+    scope = SOURCE_SCOPES[params[:source_type]]
+    scope&.call(current_user)&.find(params[:source_id])
+  end
+
+  def name_for(source) = source.is_a?(Rule) ? helpers.rule_name(source) : source.name
+  def back_to(source) = source.is_a?(Rule) ? budget_page_path(open: source.category_id) : savings_path
+
+  def refuse(source, message)
+    source.is_a?(Rule) ? refuse_on_budget_page(message) : refuse_on_savings_page(message)
+  end
 
   def confirmation(form)
     money = helpers.number_to_currency(form.adjustment.amount.abs)
     name = form.name
     negative = form.adjustment.amount.negative?
-    return "Skipped this period for #{name} — #{money} less set aside." if form.skip?
+    return "Skipped this period for #{name} — #{money} less #{form.savings? ? "owed" : "set aside"}." if form.skip?
+    return "Reduced what #{name} is owed by #{money} this period." if form.savings?
 
     if form.allowance?
       negative ? "Reduced #{name} by #{money} this period." : "Topped up #{name} by #{money} this period."
@@ -38,11 +59,13 @@ class AdjustmentsController < ApplicationController
     end
   end
 
-  def removal(adjustment, rule)
+  def removal(adjustment, source)
     money = helpers.number_to_currency(adjustment.amount.abs)
-    name = helpers.rule_name(rule)
+    name = name_for(source)
     negative = adjustment.amount.negative?
-    if rule.claim_calculator(today: current_user.today).allowance?
+    return "Removed the #{money} reduction on #{name}." if source.is_a?(Account)
+
+    if source.claim_calculator(today: current_user.today).allowance?
       negative ? "Removed the #{money} reduction on #{name}." : "Removed the #{money} top-up on #{name}."
     else
       negative ? "Removed the #{money} taken back from #{name}." : "Removed the #{money} set aside for #{name}."

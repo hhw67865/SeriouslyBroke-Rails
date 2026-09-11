@@ -16,7 +16,7 @@ class AccountsController < ApplicationController
   end
 
   def update
-    if @account.revise(name: account_params[:name], balance: account_params[:balance])
+    if AccountForm.new(@account, account_params).save
       redirect_to accounts_path, notice: "#{@account.name} updated."
     else
       render :edit, status: :unprocessable_content
@@ -55,5 +55,7 @@ class AccountsController < ApplicationController
     "#{@account.name} deleted — #{helpers.number_to_currency(returned)} is back in checking."
   end
 
-  def account_params = params.expect(account: [:name, :balance])
+  def account_params
+    params.expect(account: [:name, :balance, :keeps_extra, { savings_targets_attributes: [[:id, :item_id, :amount, :percent, :starts_on, :_destroy]] }])
+  end
 end
