@@ -3,7 +3,7 @@
 require "rails_helper"
 
 # The three tiles: what the rules need of a period, what the entries say comes in, and the
-# subtraction. Every figure is `standing_ask` — a constant of the rules and the grid — never Σ
+# subtraction. Every figure is `ask` — a constant of the rules and the grid — never Σ
 # claims, which is this afternoon's answer and would report a different split tomorrow with nothing
 # edited.
 #

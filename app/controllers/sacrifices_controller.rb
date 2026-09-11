@@ -37,6 +37,6 @@ class SacrificesController < ApplicationController
     saved = "Saved — #{helpers.pluralize(cuts.count, "rule")} cut."
     return [sacrifice_path, { notice: "#{saved} Still #{helpers.number_to_currency(fresh.gap)} underwater a period." }] if fresh.underwater?
 
-    [budget_page_path, { notice: "#{saved} Your rules now need #{helpers.number_to_currency(fresh.rules_need)} a period." }]
+    [budget_page_path, { notice: "#{saved} Your rules now need #{helpers.number_to_currency(fresh.budget)} a period." }]
   end
 end

@@ -19,11 +19,24 @@ RSpec.describe ClaimLedger do
     expect(ledger.claim_of(bread_rule)).to eq(70).and eq(ClaimCalculator.new(bread_rule, today: today).claim)
     expect(ledger.claim_of(whole_rule)).to eq(150).and eq(ClaimCalculator.new(whole_rule, today: today).claim)
     expect(ledger.claim_of_category(groceries)).to eq(220)
-    expect(ledger.rules_of(groceries)).to contain_exactly(bread_rule, whole_rule)
-    expect(ledger.total_claims).to eq(220)
+    expect(ledger.budget_claim).to eq(220)
+    expect(ledger.claimed).to eq(220)
     expect(ledger.pot).to eq(870)
     expect(ledger.free).to eq(650)
-    expect(ledger.total_money).to eq(870)
+    expect(ledger.budget).to eq(160)
+  end
+
+  it "lists savings claims beside rule claims, in give-way order, and sums both", :aggregate_failures do
+    seed_grocery_rules
+    emergency = seed_savings_claims
+
+    expect(ledger.savings_accounts).to eq([emergency])
+    expect(ledger.claims.map { |claim| [claim.name, claim.kind, claim.claim] })
+      .to eq([["Groceries", :usage, 150], ["Bread", :usage, 70], ["Emergency", :savings, 200], ["Rent", :bill, 50]])
+    expect(ledger).to have_attributes(savings: 200, savings_claim: 200, claimed: 470, free: 400)
+    expect(ledger.calculator_for(emergency)).to be_a(SavingsCalculator)
+    expect(ledger.claims.find(&:account?).cuttable).to be(true)
+    expect(ledger.claims.find { |c| c.name == "Rent" }.cuttable).to be(true)
   end
 
   it "loads its rows in a fixed number of queries" do
@@ -31,13 +44,13 @@ RSpec.describe ClaimLedger do
     queries = 0
     counter = ->(_name, _start, _finish, _id, payload) { queries += 1 unless ["SCHEMA", "CACHE"].include?(payload[:name]) }
 
-    ActiveSupport::Notifications.subscribed(counter, "sql.active_record") { ledger.total_claims }
+    ActiveSupport::Notifications.subscribed(counter, "sql.active_record") { ledger.claimed }
 
-    expect(queries).to be <= 5
+    expect(queries).to be <= 8
   end
 
   it "refuses a rule it does not hold" do
-    expect { ledger.calculator_for(create(:rule)) }.to raise_error(ClaimLedger::UnknownRule)
+    expect { ledger.calculator_for(create(:rule)) }.to raise_error(ClaimLedger::UnknownSource)
   end
 
   # The rate rule's item and the fund rule's category, with their spending and an adjustment,
@@ -47,7 +60,16 @@ RSpec.describe ClaimLedger do
     whole_rule = create(:rule, :keeps_unspent, amount: 60, category: groceries, starts_on: Date.new(2026, 8, 1))
     create(:entry, item: bread, amount: 30, date: Date.new(2026, 9, 5))
     create(:entry, item: milk, amount: 100, date: Date.new(2026, 8, 25))
-    create(:adjustment, rule: whole_rule, amount: 10, date: Date.new(2026, 9, 6))
+    create(:adjustment, source: whole_rule, amount: 10, date: Date.new(2026, 9, 6))
     [bread_rule, whole_rule]
+  end
+
+  # An Emergency account with a $200 target and a Rent bill, so the savings claim example stays
+  # within RSpec/ExampleLength.
+  def seed_savings_claims
+    emergency = create(:account, user: user, name: "Emergency")
+    create(:savings_target, account: emergency, amount: 200, starts_on: Date.new(2026, 9, 4))
+    create(:rule, :rate, :bill, amount: 50, category: create(:category, user: user, name: "Rent"), starts_on: Date.new(2026, 1, 1))
+    emergency
   end
 end

@@ -1,7 +1,7 @@
 import { Controller } from "@hotwired/stimulus"
 
 // The what-if dial: arithmetic over figures the server already printed, in per-period units
-// throughout (`Rule#steady_ask`, never `rule.amount`) and in integer cents, never float dollars.
+// throughout (`Rule#ask`, never `rule.amount`) and in integer cents, never float dollars.
 export default class extends Controller {
   static targets = ["row", "amount", "rowFrees", "freed", "verdict", "save", "edit", "undo"]
   // Dollars on the attribute (that is what the server prints), cents inside — see #cents.

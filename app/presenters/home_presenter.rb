@@ -43,14 +43,14 @@ class HomePresenter
 
   def in_checking = claim_ledger.pot
   def free_to_spend = claim_ledger.free
-  delegate :total_claims, to: :claim_ledger
+  delegate :claimed, :budget, to: :claim_ledger
   def money_parked_elsewhere? = other_accounts_total.positive?
-  def anything_claimed? = total_claims.positive?
+  def anything_claimed? = claimed.positive?
 
   def claimed_percent
     return nil unless in_checking.positive?
 
-    ((total_claims / in_checking) * 100).round.clamp(0, 100)
+    ((claimed / in_checking) * 100).round.clamp(0, 100)
   end
 
   def categories = @categories ||= user.categories.in_fill_order.includes(:rules).to_a
@@ -124,11 +124,10 @@ class HomePresenter
     return @structurally_underwater if defined?(@structurally_underwater)
 
     income = typical_income
-    @structurally_underwater = user.period_cadence.present? && income.present? && rules_need > income
+    @structurally_underwater = user.period_cadence.present? && income.present? && budget > income
   end
 
   def typical_income = @typical_income ||= account_ledger.typical_income
-  def rules_need = @rules_need ||= Rule.steady_need(user, today: today, ledger: claim_ledger)
 
   # Spending this period in expense categories no rule claims.
   def unbudgeted_rows

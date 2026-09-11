@@ -16,7 +16,7 @@ class AccountsPresenter
   delegate :accounts, to: :home
   def spending = user.main_account
   def spending_balance = home.in_checking
-  def claimed = home.total_claims
+  delegate :claimed, to: :home
   def free = home.free_to_spend
 
   def set_aside = @set_aside ||= other_accounts.map { |account| row_for(account) }

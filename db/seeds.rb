@@ -108,7 +108,7 @@ class DemoHousehold
 
   # The things that land every other period: the side gig on even cycles, the bills on odd ones.
   def log_biweekly_entries(cycle, payday)
-    log(@contract, 400, payday + 3, "Invoice", account: @side_gig) if cycle.even?
+    log(@contract, 400, payday + 3, "Invoice") if cycle.even?
     log(@electric, 118, payday + 1) if cycle.odd?
     log(@internet, 60, payday + 1) if cycle.odd?
     log(@rent_item, 1_500, payday + 1) if cycle.odd?
@@ -116,8 +116,8 @@ class DemoHousehold
 
   def create_transfers_and_adjustments!
     Transfer.create!(from_account: @checking, to_account: @ally, amount: 300, date: @today - 7)
-    Adjustment.create!(rule: Rule.find_by!(category: @vacation, item_id: nil), amount: 250, date: @today - 3)
-    Adjustment.create!(rule: Rule.find_by!(category: @dining, item_id: nil), amount: -20, date: @today - 1)
+    Adjustment.create!(source: Rule.find_by!(category: @vacation, item_id: nil), amount: 250, date: @today - 3)
+    Adjustment.create!(source: Rule.find_by!(category: @dining, item_id: nil), amount: -20, date: @today - 1)
   end
 
   def report
@@ -130,7 +130,7 @@ class DemoHousehold
   def category(name, type, color, **attributes) = @user.categories.create!(name: name, category_type: type, color: color, **attributes)
   def item(cat, name) = cat.items.create!(name: name)
   def rule(cat, **attributes) = Rule.create!(category: cat, starts_on: @demo_start, rule_type: :usage, **attributes)
-  def log(holder, amount, on, description = nil, account: nil) = holder.entries.create!(amount: amount, date: on, description: description, account: account)
+  def log(holder, amount, on, description = nil) = holder.entries.create!(amount: amount, date: on, description: description)
 end
 
 DemoHousehold.new("America/New_York").plant

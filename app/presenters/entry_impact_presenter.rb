@@ -73,7 +73,7 @@ class EntryImpactPresenter
 
   private
 
-  def steady_claim = calculators.sum(0.to_d, &:standing_ask)
+  def steady_claim = calculators.sum(0.to_d, &:ask)
   def claim = @claim ||= calculators.sum(0.to_d, &:claim).to_d
 
   def calculators

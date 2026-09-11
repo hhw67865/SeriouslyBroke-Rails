@@ -19,7 +19,7 @@
            aria-valuenow="<%= claimed %>"
            aria-valuemin="0"
            aria-valuemax="100"
-           aria-label="<%= number_to_currency(presenter.total_claims) %> of <%= main_name %> claimed by your rules"
+           aria-label="<%= number_to_currency(presenter.claimed) %> of <%= main_name %> claimed by your rules"
            data-claimed-bar="<%= claimed %>">
         <div class="h-2 <%= presenter.short? ? "bg-status-danger" : "bg-brand-dark" %>"
              style="width: <%= claimed %>%;"
@@ -41,7 +41,7 @@
           You have spent past what you had.
         <% end %>
       <% else %>
-        <%= number_to_currency(presenter.total_claims) %> claimed by your rules
+        <%= number_to_currency(presenter.claimed) %> claimed by your rules
       <% end %>
     </p>
   </div>

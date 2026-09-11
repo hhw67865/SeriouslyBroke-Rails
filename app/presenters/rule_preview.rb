@@ -53,7 +53,7 @@ class RulePreview
 
   def repeating? = line.dated? && rule.interval_months.present?
 
-  delegate :standing_ask, :periods_left, :built_up, to: :calculator
+  delegate :ask, :periods_left, :built_up, to: :calculator
 
   delegate :next_due_on, to: :line
 

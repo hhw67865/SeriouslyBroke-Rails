@@ -55,22 +55,22 @@ RSpec.describe Rule do
     end
   end
 
-  describe "#steady_ask", :aggregate_failures do
+  describe "#ask", :aggregate_failures do
     let(:today) { Date.new(2026, 9, 9) }
 
     it "is the amount for a per-period rule and the per-period share for a rolling one" do
-      expect(build(:rule, :rate, amount: 300, category: groceries).steady_ask(today: today)).to eq(300)
-      expect(build(:rule, :keeps_unspent, amount: 60, category: groceries).steady_ask(today: today)).to eq(60)
+      expect(build(:rule, :rate, amount: 300, category: groceries).ask(today: today)).to eq(300)
+      expect(build(:rule, :keeps_unspent, amount: 60, category: groceries).ask(today: today)).to eq(60)
       # $600 every 6 months on a biweekly grid: 600 × 12 / (26 × 6)
-      expect(build(:rule, :rolling, amount: 600, interval_months: 6, category: groceries).steady_ask(today: today)).to eq(46.15)
+      expect(build(:rule, :rolling, amount: 600, interval_months: 6, category: groceries).ask(today: today)).to eq(46.15)
     end
 
     it "hands a one-off to the calculator, which spreads it over the periods to its date" do
       # $600 due Oct 15, started Aug 1: six biweekly periods from Jul 24, so $100 each.
       one_off = create(:rule, :bill, amount: 600, anchor_date: Date.new(2026, 10, 15), category: groceries, starts_on: Date.new(2026, 8, 1))
 
-      expect(one_off.steady_ask(today: today))
-        .to eq(one_off.claim_calculator(today: today).standing_ask).and eq(100)
+      expect(one_off.ask(today: today))
+        .to eq(one_off.claim_calculator(today: today).ask).and eq(100)
     end
   end
 

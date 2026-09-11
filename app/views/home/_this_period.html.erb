@@ -10,7 +10,7 @@
         <%= pluralize(presenter.blocks.sum(&:rule_count), "rule") %></span>
     </h3>
     <p class="text-sm text-gray-700 tabular-nums" data-this-period-claimed>
-      <span class="sm:hidden" aria-hidden="true">· </span><%= number_to_currency(presenter.total_claims) %> claimed
+      <span class="sm:hidden" aria-hidden="true">· </span><%= number_to_currency(presenter.claimed) %> claimed
     </p>
     <p class="basis-full text-xs text-gray-500 sm:hidden" data-this-period-counts>
       <%= pluralize(presenter.blocks.size, "category") %> ·

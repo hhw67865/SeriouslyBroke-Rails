@@ -36,12 +36,6 @@ class Rule < ApplicationRecord
     [next_due_on.present? ? 0 : 1, next_due_on || NEVER_DUE, -amount.to_d, id]
   end
 
-  # What every rule costs per period, summed.
-  def self.steady_need(user, today: user.today, ledger: nil)
-    rules = (ledger || ClaimLedger.new(user, today: today)).rules
-    rules.sum(0.to_d) { |rule| rule.steady_ask(today: today) }
-  end
-
   delegate :today, to: :user
 
   def type_rank = TYPE_RANK.fetch(rule_type.to_sym)
@@ -69,10 +63,10 @@ class Rule < ApplicationRecord
 
   # What the rule costs each period: its amount, a one-off target spread to its date, or a rolling
   # amount spread over the interval on the user's grid.
-  def steady_ask(today: self.today)
+  def ask(today: self.today)
     case cadence
     when :per_period then amount.to_d
-    when :one_off then claim_calculator(today: today).standing_ask
+    when :one_off then claim_calculator(today: today).ask
     else (amount.to_d * 12 / (user.periods_per_year * interval_months)).round(2)
     end
   end

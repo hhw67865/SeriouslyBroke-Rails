@@ -24,13 +24,13 @@ RSpec.describe SacrificeCuts do
 
   it "scales a one-off's target so its per-period claim becomes what was typed", :aggregate_failures do
     rule = rule_on("Vacation", :one_off, amount: 1_200, anchor_date: Date.new(2026, 12, 1))
-    claim = rule.steady_ask(today: today)
+    claim = rule.ask(today: today)
     typed = (claim - 10).to_s("F")
 
     service = cuts_for(rule.id => typed)
 
     expect(service.apply).to be(true)
-    expect(rule.reload.steady_ask(today: today)).to be_within(0.01).of(claim - 10)
+    expect(rule.reload.ask(today: today)).to be_within(0.01).of(claim - 10)
   end
 
   it "refuses a fixed rolling bill", :aggregate_failures do
@@ -57,7 +57,7 @@ RSpec.describe SacrificeCuts do
 
   it "reads a one-off's claim as the page prints it, so the same two-decimal figure is untouched", :aggregate_failures do
     rule = rule_on("Vacation", :one_off, amount: 1_000, anchor_date: Date.new(2026, 12, 1))
-    printed = rule.steady_ask(today: today).round(2).to_s("F")
+    printed = rule.ask(today: today).round(2).to_s("F")
 
     service = cuts_for(rule.id => printed)
 

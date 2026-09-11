@@ -45,7 +45,7 @@ RSpec.describe BudgetPagePresenter do
     rule_on("Rent", :bill, amount: 900)
     a_period_of_income(2_000)
 
-    expect(presenter.rules_need).to eq(900)
+    expect(presenter.budget).to eq(900)
     expect(presenter.typical_income).to eq(2_000)
     expect(presenter.leftover).to eq(1_100)
     expect(presenter).to be_declared

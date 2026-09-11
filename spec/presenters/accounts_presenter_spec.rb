@@ -19,7 +19,7 @@ RSpec.describe AccountsPresenter do
 
     expect(presenter.spending).to eq(main)
     expect(presenter.spending_balance).to eq(home.in_checking)
-    expect(presenter.claimed).to eq(home.total_claims)
+    expect(presenter.claimed).to eq(home.claimed)
     expect(presenter.free).to eq(home.free_to_spend)
   end
 

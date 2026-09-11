@@ -31,7 +31,7 @@ RSpec.describe AdjustmentForm do
   end
 
   it "refuses a skip with nothing accrued", :aggregate_failures do
-    create(:adjustment, rule: rate, amount: -400, date: Date.new(2026, 9, 5))
+    create(:adjustment, source: rate, amount: -400, date: Date.new(2026, 9, 5))
     skip = form(rate, { skip: "1" })
 
     expect(skip.save).to be(false)

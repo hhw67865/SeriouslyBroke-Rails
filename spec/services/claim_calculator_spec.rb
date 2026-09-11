@@ -25,13 +25,13 @@ RSpec.describe ClaimCalculator do
       expect(calculator(rule).spent_this_period).to eq(310)
       expect(calculator(rule).accrued_this_period).to eq(400)
       expect(calculator(rule).planned_this_period).to eq(400)
-      expect(calculator(rule).standing_ask).to eq(400)
+      expect(calculator(rule).ask).to eq(400)
       expect(calculator(rule)).not_to be_over
     end
 
     it "takes adjustments this period and reports overspending", :aggregate_failures do
       spend(310, on: Date.new(2026, 9, 5))
-      create(:adjustment, rule: rule, amount: -100, date: Date.new(2026, 9, 6))
+      create(:adjustment, source: rule, amount: -100, date: Date.new(2026, 9, 6))
 
       expect(calculator(rule).claim).to eq(0)
       expect(calculator(rule).raw_rate).to eq(-10)
@@ -55,7 +55,7 @@ RSpec.describe ClaimCalculator do
       expect(calculator(rule).claim).to eq(240)
       expect(calculator(rule).built_up).to eq(240)
       expect(calculator(rule).planned_this_period).to eq(60)
-      expect(calculator(rule).standing_ask).to eq(60)
+      expect(calculator(rule).ask).to eq(60)
       expect(calculator(rule).target).to be_nil
 
       spend(100, on: Date.new(2026, 8, 25))
@@ -77,7 +77,7 @@ RSpec.describe ClaimCalculator do
 
     it "plans an even share per period toward the target", :aggregate_failures do
       # Six boundaries from Jul 24 to Oct 15 (Jul 24, Aug 7, Aug 21, Sep 4, Sep 18, Oct 2): $100 a period.
-      expect(calculator(rule).standing_ask).to eq(100)
+      expect(calculator(rule).ask).to eq(100)
       expect(calculator(rule).claim).to eq(400)
       expect(calculator(rule).built_up).to eq(400)
       expect(calculator(rule).planned_this_period).to eq(100)
@@ -103,10 +103,10 @@ RSpec.describe ClaimCalculator do
     end
 
     it "caps a set-aside at the target and takes it back with a negative adjustment", :aggregate_failures do
-      create(:adjustment, rule: rule, amount: 500, date: Date.new(2026, 9, 5))
+      create(:adjustment, source: rule, amount: 500, date: Date.new(2026, 9, 5))
       expect(calculator(rule).claim).to eq(600)
 
-      create(:adjustment, rule: rule, amount: -500, date: Date.new(2026, 9, 6))
+      create(:adjustment, source: rule, amount: -500, date: Date.new(2026, 9, 6))
       expect(calculator(rule).claim).to eq(400)
     end
   end
@@ -127,7 +127,7 @@ RSpec.describe ClaimCalculator do
     end
 
     it "asks per period what the rule asks" do
-      expect(calculator(rule).standing_ask).to eq(rule.steady_ask(today: today)).and eq(13.85)
+      expect(calculator(rule).ask).to eq(rule.ask(today: today)).and eq(13.85)
     end
 
     # One cycle paid, the next saved for in full. The walk, period by period:
@@ -160,7 +160,7 @@ RSpec.describe ClaimCalculator do
 
     it "spreads a one-off over the calendar months to its date", :aggregate_failures do
       # Month firsts from Sep 1 2026 to Mar 15 2027 are seven, so 1200 / 7 = 171.43 a month.
-      expect(calculator(rule).standing_ask).to eq(171.43)
+      expect(calculator(rule).ask).to eq(171.43)
       expect(calculator(rule).claim).to eq(171.43)
       expect(calculator(rule).planned_this_period).to eq(171.43)
     end

@@ -28,7 +28,7 @@ class BudgetPagePresenter
 
   def tiles
     @tiles ||= Tiles.new(
-      need: rules_need,
+      need: budget,
       segments: segments,
       income: typical_income,
       cadence: user.period_cadence,
@@ -48,12 +48,12 @@ class BudgetPagePresenter
       asks = claim_ledger.rules.group_by { |rule| rule.rule_type.to_sym }
       TYPE_OVERVIEW_ORDER.filter_map do |type|
         group = asks[type]
-        [type, group.sum(0.to_d) { |rule| claim_ledger.calculator_for(rule).standing_ask }] if group
+        [type, group.sum(0.to_d) { |rule| claim_ledger.calculator_for(rule).ask }] if group
       end
     end
   end
 
-  def rules_need = @rules_need ||= Rule.steady_need(user, today: today, ledger: claim_ledger)
+  delegate :budget, to: :claim_ledger
 
   # Memoised with defined?, because nil is a real answer and the common one for a new user.
   def typical_income
@@ -62,10 +62,10 @@ class BudgetPagePresenter
     @typical_income = claim_ledger.account_ledger.typical_income
   end
 
-  def leftover = typical_income && (typical_income - rules_need)
+  def leftover = typical_income && (typical_income - budget)
   def declared? = user.period_cadence.present?
   def history? = typical_income.present?
-  def underwater? = declared? && history? && rules_need > typical_income
+  def underwater? = declared? && history? && budget > typical_income
 
   private
 
@@ -107,7 +107,7 @@ class BudgetPagePresenter
   def claim_ledger = @claim_ledger ||= ClaimLedger.new(user, today: today)
 
   def adjustments_this_period
-    @adjustments_this_period ||= Adjustment.where(rule_id: claim_ledger.rules.map(&:id))
-      .dated_within(user.period_containing(today)).order(:date, :created_at).group_by(&:rule_id)
+    @adjustments_this_period ||= Adjustment.on_rules(claim_ledger.rules.map(&:id))
+      .dated_within(user.period_containing(today)).order(:date, :created_at).group_by(&:source_id)
   end
 end

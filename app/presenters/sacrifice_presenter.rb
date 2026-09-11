@@ -14,7 +14,7 @@ class SacrificePresenter
     @today = today
   end
 
-  def rules_need = @rules_need ||= Rule.steady_need(user, today: today, ledger: ledger)
+  delegate :budget, to: :ledger
 
   # Memoised with defined?, because nil is a real answer and the common one for a new user.
   def typical_income
@@ -23,7 +23,7 @@ class SacrificePresenter
     @typical_income = ledger.account_ledger.typical_income
   end
 
-  def gap = @gap ||= rules_need - typical_income.to_d
+  def gap = @gap ||= budget - typical_income.to_d
   def gap_param = DigitsHelper.digits(gap)
   def declared? = user.period_cadence.present? && typical_income.present?
   def underwater? = declared? && gap.positive?
@@ -39,7 +39,7 @@ class SacrificePresenter
   # A rolling bill is fixed; an allowance or a one-off can be cut.
   def rows
     @rows ||= ledger.rules
-      .map { |rule| Row.new(rule: rule, claim: rule.steady_ask(today: today), reason: reason_for(rule)) }
+      .map { |rule| Row.new(rule: rule, claim: rule.ask(today: today), reason: reason_for(rule)) }
       .sort_by { |row| [-row.claim, row.rule.category.name, row.rule.id] }
   end
 
