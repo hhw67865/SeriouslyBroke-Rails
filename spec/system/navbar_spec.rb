@@ -13,15 +13,24 @@ RSpec.describe "Navbar", type: :system do
   end
 
   describe "main navigation", :aggregate_failures do
-    it "links to every section of the app" do
+    let(:sidebar_links) do
+      {
+        "Home" => root_path,
+        "Entries" => entries_path,
+        "Calendar" => calendar_path,
+        "Budget" => budget_page_path,
+        "Savings" => savings_path,
+        "Reports" => reports_path,
+        "Categories" => categories_path,
+        "Settings" => settings_path
+      }
+    end
+
+    it "links to every section of the app, in four groups" do
       within_sidebar do
-        expect(page).to have_link("Home", href: root_path)
-        expect(page).to have_link("Budget", href: budget_page_path)
-        expect(page).to have_link("Entries", href: entries_path)
-        expect(page).to have_link("Savings", href: savings_path)
-        expect(page).to have_link("Categories", href: categories_path)
-        expect(page).to have_link("Calendar", href: calendar_path)
-        expect(page).to have_link("Reports", href: reports_path)
+        sidebar_links.each { |name, path| expect(page).to have_link(name, href: path) }
+        expect(all("nav h3, nav [data-nav-title]").map(&:text)).to eq(["Today", "Plan", "Look back", "Set up"])
+        expect(all("nav a").map { |link| link.text.strip }.reject(&:empty?)).to eq(sidebar_links.keys)
       end
     end
 
