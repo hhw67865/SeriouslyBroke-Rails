@@ -18,6 +18,7 @@ RSpec.describe "Navbar", type: :system do
         expect(page).to have_link("Home", href: root_path)
         expect(page).to have_link("Budget", href: budget_page_path)
         expect(page).to have_link("Entries", href: entries_path)
+        expect(page).to have_link("Savings", href: savings_path)
         expect(page).to have_link("Categories", href: categories_path)
         expect(page).to have_link("Calendar", href: calendar_path)
         expect(page).to have_link("Reports", href: reports_path)
@@ -29,7 +30,7 @@ RSpec.describe "Navbar", type: :system do
     it "names no screen this app no longer has" do
       within_sidebar do
         expect(page).to have_no_link("Dashboard")
-        expect(page).to have_no_link("Savings")
+        expect(page).to have_no_link("Accounts")
         expect(page).to have_no_link("Statistics")
       end
     end

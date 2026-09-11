@@ -335,7 +335,7 @@ select.ts-hidden-accessible {
   box-shadow: 0 0 0 2px #ffffff;
 }
 
-/* Move money / Add an account: a native <dialog> drawer. Below `sm` it is a bottom sheet; from
+/* Transfer money / Add an account: a native <dialog> drawer. Below `sm` it is a bottom sheet; from
    `sm` up, a panel pinned to the right edge. The attribute selector is also the drawer's JS hook. */
 dialog[data-drawer-name] {
   margin: 0;

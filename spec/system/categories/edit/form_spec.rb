@@ -22,9 +22,11 @@ RSpec.describe "Categories Edit - Form", type: :system do
 
     # Two tiles, not three — `Category.category_types` drives the loop.
     it "shows category type options", :aggregate_failures do
-      expect(page).to have_content("Expense")
-      expect(page).to have_content("Income")
-      expect(page).to have_no_content("Savings")
+      within("main") do
+        expect(page).to have_content("Expense")
+        expect(page).to have_content("Income")
+        expect(page).to have_no_content("Savings")
+      end
     end
 
     it "shows color selection options" do

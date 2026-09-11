@@ -143,7 +143,7 @@ RSpec.describe "Dashboard Index - Savings strip", type: :system do
     it "is still reached by a stale ?tab=savings bookmark, which lands on All" do
       visit reports_path(tab: "savings")
 
-      expect(page).to have_no_link("Savings")
+      within("nav[aria-label='Tabs']") { expect(page).to have_no_link("Savings") }
       expect(find("nav[aria-label='Tabs'] a", text: "All")[:class]).to include("border-brand")
       expect(page).to have_css("[data-savings-strip]")
     end

@@ -1,0 +1,66 @@
+<%# SAVINGS ACCOUNTS — every account but checking, each with what it is owed. Transfer money and
+    Add an account open in drawers from the heading's buttons. Local: `presenter`. %>
+<div class="bg-white border border-gray-200 rounded p-4 lg:p-6" data-savings-accounts>
+  <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+    <div>
+      <h2 class="text-sm font-semibold text-gray-900">Savings accounts</h2>
+      <p class="mt-1 text-sm text-gray-600">
+        Each account can be owed a fixed amount a period, a share of an income item, or both. A
+        transfer from checking pays what it is owed.
+      </p>
+    </div>
+    <div class="flex flex-col items-stretch sm:items-end gap-2">
+      <% if presenter.rows.any? %>
+        <p class="text-sm text-gray-700 tabular-nums shrink-0" data-savings-total>
+          <strong><%= number_to_currency(presenter.savings_total) %></strong>
+          across <%= pluralize(presenter.rows.size, "account") %>
+        </p>
+      <% end %>
+      <div class="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
+        <%= link_to(
+              "Transfer money", 
+savings_path(open: "transfer"),
+              class: "btn btn-secondary",
+              data: { drawer: "transfer", action: "click->shared--drawer#open" }
+            ) %>
+        <%= link_to(
+              "Add an account", 
+savings_path(open: "add"),
+              class: "btn btn-primary",
+              data: { drawer: "add", action: "click->shared--drawer#open" }
+            ) %>
+      </div>
+    </div>
+  </div>
+
+  <% if presenter.rows.empty? %>
+    <p class="mt-4 text-sm text-gray-600" data-savings-empty>No savings accounts yet. Add one to start.</p>
+  <% else %>
+    <div class="mt-4 overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="hidden sm:table-header-group">
+          <tr class="border-b border-gray-200 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+            <th class="py-2 pr-3">Account</th>
+            <th class="py-2 px-3 text-right">Balance</th>
+            <th class="py-2 px-3 text-right">Owed now</th>
+            <th class="py-2 px-3">Last transfer</th>
+            <th class="py-2 pl-3"><span class="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody class="block sm:table-row-group divide-y divide-gray-100">
+          <% presenter.rows.each do |row| %>
+            <%= render "savings/row", row: row, presenter: presenter %>
+          <% end %>
+        </tbody>
+        <tfoot class="block sm:table-footer-group">
+          <tr class="block sm:table-row border-t border-gray-200 font-semibold text-gray-900">
+            <td class="block sm:table-cell sm:py-2 sm:pr-3">Total</td>
+            <td class="block sm:table-cell sm:py-2 sm:px-3 sm:text-right tabular-nums" data-savings-footer><%= number_to_currency(presenter.savings_total) %></td>
+            <td class="block sm:table-cell sm:py-2 sm:px-3 sm:text-right tabular-nums" data-owed-footer><%= number_to_currency(presenter.owed_total) %></td>
+            <td class="hidden sm:table-cell" colspan="2"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  <% end %>
+</div>

@@ -34,8 +34,10 @@ RSpec.describe "Categories Index - Filtering", type: :system do
     before { visit categories_path(type: "income") }
 
     it "shows navigation links to other category types", :aggregate_failures do
-      expect(page).to have_link("Expense").or have_link("Expense Categories")
-      expect(page).to have_no_link("Savings")
+      within("nav[aria-label='Tabs']") do
+        expect(page).to have_link("Expense").or have_link("Expense Categories")
+        expect(page).to have_no_link("Savings")
+      end
     end
 
     it "switches to expense categories when expense link clicked" do

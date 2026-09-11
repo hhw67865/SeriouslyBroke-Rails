@@ -1,7 +1,7 @@
-<%# ADD AN ACCOUNT — every new one is set aside, not spending: `Account.open` only makes an account
+<%# ADD AN ACCOUNT — every new one is savings, not spending: `Account.open` only makes an account
     main when the user has none yet. Locals: `account` (unsaved, or refused and carrying its
     errors), `balance` (what was typed when a refusal happened). %>
-<p class="text-xs text-gray-600">New accounts are set aside, not spending.</p>
+<p class="text-xs text-gray-600">New accounts are savings, not spending.</p>
 
 <%= simple_form_for account, as: :account, url: accounts_path, html: { class: "mt-3 space-y-3" } do |f| %>
   <%= f.input :name, label: "Account name", placeholder: "e.g., Ally Savings" %>

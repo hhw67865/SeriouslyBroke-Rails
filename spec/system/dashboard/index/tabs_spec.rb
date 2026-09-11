@@ -14,10 +14,12 @@ RSpec.describe "Dashboard Index - Tabs", type: :system do
   # absent.
   describe "tab display", :aggregate_failures do
     it "shows all three tabs" do
-      expect(page).to have_link("All")
-      expect(page).to have_link("Expenses")
-      expect(page).to have_link("Income")
-      expect(page).to have_no_link("Savings")
+      within("nav[aria-label='Tabs']") do
+        expect(page).to have_link("All")
+        expect(page).to have_link("Expenses")
+        expect(page).to have_link("Income")
+        expect(page).to have_no_link("Savings")
+      end
     end
 
     it "defaults to All tab" do

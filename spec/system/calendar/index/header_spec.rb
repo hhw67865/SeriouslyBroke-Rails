@@ -17,9 +17,11 @@ RSpec.describe "Calendar Index - Header", type: :system do
 
     # Two types in the legend: it is `CategoryTypeHelper::CATEGORY_TYPES`, and there is no third.
     it "displays legend with all entry types", :aggregate_failures do
-      expect(page).to have_content("Expense")
-      expect(page).to have_content("Income")
-      expect(page).to have_no_content("Savings")
+      within(".calendar-legend") do
+        expect(page).to have_content("Expense")
+        expect(page).to have_content("Income")
+        expect(page).to have_no_content("Savings")
+      end
     end
   end
 

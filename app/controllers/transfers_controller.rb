@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class TransfersController < ApplicationController
+  include SavingsPageState
+
   def create
     attrs = transfer_params
     transfer = Transfer.move(
@@ -10,29 +12,18 @@ class TransfersController < ApplicationController
       amount: attrs[:amount],
       date: attrs[:date]
     )
-    return redirect_to accounts_path, notice: moved_notice(transfer) if transfer.persisted?
+    return redirect_to savings_path, notice: moved_notice(transfer) if transfer.persisted?
 
-    render_refused(transfer)
+    assign_savings_state(transfer: transfer, open_transfer: true)
+    @transfer_to = transfer.to_account_id
+    render "savings/show", status: :unprocessable_content
   end
 
   private
 
-  def transfer_params
-    params.expect(transfer: [:from_account_id, :to_account_id, :amount, :date])
-  end
+  def transfer_params = params.expect(transfer: [:from_account_id, :to_account_id, :amount, :date])
 
   def moved_notice(transfer)
-    "Moved #{helpers.number_to_currency(transfer.amount)} from #{transfer.from_account.name} to #{transfer.to_account.name}."
-  end
-
-  def render_refused(transfer)
-    @presenter = AccountsPresenter.new(user: current_user, today: current_user.today)
-    @new_account = current_user.accounts.new
-    @new_account_balance = nil
-    @open_add_account = false
-    @transfer = transfer
-    @move_to = transfer.to_account_id
-    @open_move_money = true
-    render "accounts/index", status: :unprocessable_content
+    "Transferred #{helpers.number_to_currency(transfer.amount)} from #{transfer.from_account.name} to #{transfer.to_account.name}."
   end
 end

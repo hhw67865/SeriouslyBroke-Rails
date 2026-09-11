@@ -12,13 +12,13 @@ RSpec.describe "Transfers" do
   it "moves money and redirects with a notice", :aggregate_failures do
     post transfers_path, params: { transfer: { from_account_id: main.id, to_account_id: savings.id, amount: "40.00", date: Date.current } }
 
-    expect(response).to redirect_to(accounts_path)
+    expect(response).to redirect_to(savings_path)
     follow_redirect!
-    expect(response.body).to include("Moved $40.00 from Checking to Savings.")
+    expect(response.body).to include("Transferred $40.00 from Checking to Savings.")
     expect(Transfer.count).to eq(1)
   end
 
-  it "re-renders the accounts page at 422 on a refusal", :aggregate_failures do
+  it "re-renders the savings page at 422 on a refusal", :aggregate_failures do
     post transfers_path, params: { transfer: { from_account_id: main.id, to_account_id: main.id, amount: "40.00", date: Date.current } }
 
     expect(response).to have_http_status(:unprocessable_content)

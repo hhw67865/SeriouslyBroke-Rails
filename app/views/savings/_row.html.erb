@@ -1,0 +1,75 @@
+<%# ONE SAVINGS ACCOUNT. Locals: `row` (SavingsLine), `presenter`. The Adjust disclosure lives in
+    the owed cell, because an adjustment is a change to what is owed now; its panel opens beneath
+    the Adjust link, inside the same cell. %>
+<tr class="block sm:table-row py-3 sm:py-2" data-account-row="<%= row.name %>">
+  <td class="block sm:table-cell sm:py-2 sm:pr-3 sm:align-top">
+    <div class="flex items-baseline justify-between gap-3 sm:block">
+      <span class="font-medium text-gray-900"><%= row.name %></span>
+      <span class="tabular-nums sm:hidden"><%= number_to_currency(row.balance) %></span>
+    </div>
+    <% if row.targeted? %>
+      <div class="text-xs text-gray-600" data-account-targets><%= row.target_words %></div>
+      <div class="text-xs text-gray-400"><%= row.mode_words %> · since <%= row.since.strftime("%b %-d") %></div>
+    <% else %>
+      <div class="text-xs text-gray-400" data-account-untargeted>
+        No savings target · <%= link_to "set one", edit_account_path(row.account), class: "text-brand-dark hover:text-brand underline" %>
+      </div>
+    <% end %>
+  </td>
+  <td class="hidden sm:table-cell sm:py-2 sm:px-3 sm:align-top text-right tabular-nums <%= row.balance.negative? ? "text-status-danger" : "text-gray-900" %>">
+    <%= number_to_currency(row.balance) %>
+  </td>
+  <td class="block sm:table-cell sm:py-2 sm:px-3 sm:align-top sm:text-right" data-account-owed="<%= row.name %>">
+    <span class="sm:hidden text-xs text-gray-500">Owed now </span>
+    <% if !row.targeted? %>
+      <span class="text-gray-400">—</span>
+    <% elsif row.transferable? %>
+      <span class="font-semibold tabular-nums text-gray-900"><%= number_to_currency(row.claim) %></span>
+    <% else %>
+      <span class="font-medium text-status-success">On pace</span>
+    <% end %>
+    <% if row.targeted? %>
+      <details class="mt-1 text-left" data-adjust="<%= row.name %>">
+        <summary class="cursor-pointer text-xs font-medium text-brand-dark hover:text-brand sm:text-right">Adjust</summary>
+        <%= render "savings/adjust", row: row %>
+      </details>
+    <% end %>
+  </td>
+  <td class="block sm:table-cell sm:py-2 sm:px-3 sm:align-top text-gray-700" data-account-moved="<%= row.name %>">
+    <span class="sm:hidden text-xs text-gray-500">Last transfer </span><%= row.moved_words %>
+  </td>
+  <td class="block sm:table-cell sm:py-2 sm:pl-3 sm:align-top">
+    <div class="mt-2 flex flex-wrap items-center gap-3 sm:mt-0">
+      <% if row.transferable? %>
+        <%= button_to(
+              "Transfer #{number_to_currency(row.claim)}",
+              transfers_path,
+              params: {
+                transfer: {
+                  from_account_id: presenter.checking.id, to_account_id: row.account.id, amount: row.claim, date: presenter.today
+                }
+              },
+              class: "btn btn-primary h-8 px-3 text-xs",
+              form: { class: "inline-block" },
+              data: { transfer_owed: row.name }
+            ) %>
+      <% end %>
+      <%= link_to(
+            "Edit", 
+edit_account_path(row.account),
+            class: "text-xs font-medium text-brand hover:text-brand-dark",
+            data: { account_edit: row.name }
+          ) %>
+      <% confirm = "Delete #{row.name}? Its targets, adjustments and transfers are deleted with it, so the money " \
+                   "they moved goes back to checking — and whatever it was opened with goes with it. This cannot be undone." %>
+      <%= button_to(
+            "Delete", 
+account_path(row.account), 
+method: :delete,
+            class: "text-xs font-medium text-gray-500 hover:text-status-danger transition-colors",
+            form: { class: "inline-block leading-none", data: { turbo_confirm: confirm } },
+            data: { account_delete: row.name }
+          ) %>
+    </div>
+  </td>
+</tr>

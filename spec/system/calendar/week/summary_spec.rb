@@ -21,9 +21,11 @@ RSpec.describe "Calendar Week - Summary", type: :system do
 
     # Two cards, not three: the breakdown is keyed on `CategoryTypeHelper::CATEGORY_TYPES`.
     it "shows both summary cards", :aggregate_failures do
-      expect(page).to have_content("Expenses")
-      expect(page).to have_content("Income")
-      expect(page).to have_no_content("Savings")
+      within("main") do
+        expect(page).to have_content("Expenses")
+        expect(page).to have_content("Income")
+        expect(page).to have_no_content("Savings")
+      end
     end
   end
 

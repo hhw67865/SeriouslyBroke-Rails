@@ -1,0 +1,18 @@
+<% content_for :title, "Savings" %>
+
+<%= page_header(title: "Savings",
+                subtitle: "Checking is what you spend from. Every other account is savings, and each one can say what it is owed.") %>
+
+<div class="space-y-4 lg:space-y-6" data-controller="shared--drawer">
+  <%= render "savings/checking", presenter: @presenter %>
+
+  <%= render "savings/accounts", presenter: @presenter %>
+
+  <%= render layout: "savings/drawer", locals: { name: "transfer", title: "Transfer money", open: @open_transfer } do %>
+    <%= render "savings/transfer_form", presenter: @presenter, transfer: @transfer, transfer_to: @transfer_to %>
+  <% end %>
+
+  <%= render layout: "savings/drawer", locals: { name: "add", title: "Add an account", open: @open_add_account } do %>
+    <%= render "savings/add_account_form", account: @new_account, balance: @new_account_balance %>
+  <% end %>
+</div>

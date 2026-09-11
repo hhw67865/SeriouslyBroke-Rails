@@ -1,0 +1,72 @@
+<%# One savings account's period, reduced. Local: `row` (SavingsLine). Reduce and Skip only: with
+    no ceiling, saving more is just transferring more. %>
+<div class="mt-2 w-full max-w-xl rounded border border-gray-200 bg-gray-50 px-3 py-3 space-y-3 text-left">
+  <p class="text-xs text-gray-600" data-adjust-owed>
+    <%= number_to_currency(row.accrued) %> owed this period
+  </p>
+
+  <%= form_with url: adjustments_path, method: :post, class: "space-y-2" do %>
+    <%= hidden_field_tag :source_type, "Account" %>
+    <%= hidden_field_tag :source_id, row.account.id %>
+    <%= hidden_field_tag :amount_sign, "-1" %>
+
+    <div class="flex flex-wrap items-end gap-2">
+      <div>
+        <%= label_tag "adjust-amount-#{row.account.id}", "Reduce by", class: "block text-xs text-gray-600 mb-1" %>
+        <%= number_field_tag(
+              :amount,
+              nil,
+              id: "adjust-amount-#{row.account.id}",
+              step: 0.01,
+              min: 0.01,
+              required: true,
+              placeholder: "0.00",
+              class: "form-input w-28"
+            ) %>
+      </div>
+      <div>
+        <%= label_tag "adjust-date-#{row.account.id}", "On", class: "block text-xs text-gray-600 mb-1" %>
+        <%= date_field_tag(
+              :date,
+              nil,
+              id: "adjust-date-#{row.account.id}",
+              min: row.countable_span.first,
+              max: row.countable_span.last,
+              class: "form-input"
+            ) %>
+      </div>
+      <%= button_tag "Reduce this period", type: :submit, class: "btn btn-secondary" %>
+    </div>
+
+    <p class="text-xs text-gray-500" data-adjust-hint>
+      Today unless you pick a day. Counts from <%= row.countable_span.first.strftime("%b %-d") %> to today.
+      You can always transfer more; there is nothing to top up.
+    </p>
+  <% end %>
+
+  <% if row.skippable? %>
+    <%= form_with url: adjustments_path, method: :post do %>
+      <%= hidden_field_tag :source_type, "Account" %>
+      <%= hidden_field_tag :source_id, row.account.id %>
+      <%= hidden_field_tag :skip, "1" %>
+      <%= button_tag(
+            "Skip this period (−#{number_to_currency(row.accrued)})",
+            type: :submit,
+            class: "btn btn-secondary w-full sm:w-auto",
+            data: { adjust_skip: true }
+          ) %>
+    <% end %>
+  <% end %>
+
+  <% if row.adjustments.any? %>
+    <ul class="space-y-1" data-account-changes>
+      <% row.adjustments.each do |change| %>
+        <li class="flex items-baseline gap-2 text-xs text-gray-600" data-change="<%= change.id %>">
+          <span class="text-gray-500"><%= change.date.strftime("%b %-d") %></span>
+          <span class="text-status-danger" data-change-amount><%= number_to_currency(change.amount) %></span>
+          <%= button_to "Remove", adjustment_path(change), method: :delete, class: "text-brand-dark hover:text-brand underline" %>
+        </li>
+      <% end %>
+    </ul>
+  <% end %>
+</div>

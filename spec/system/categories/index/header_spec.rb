@@ -33,9 +33,11 @@ RSpec.describe "Categories Index - Header", type: :system do
     it "sends a stale savings bookmark to the expense page", :aggregate_failures do
       visit categories_path(type: "savings")
 
-      expect(page).to have_content("Expense Categories")
-      expect(page).to have_no_content("Savings Categories")
-      expect(page).to have_link("New Expense Category")
+      within("main") do
+        expect(page).to have_content("Expense Categories")
+        expect(page).to have_no_content("Savings Categories")
+        expect(page).to have_link("New Expense Category")
+      end
     end
   end
 

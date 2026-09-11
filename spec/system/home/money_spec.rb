@@ -92,13 +92,13 @@ RSpec.describe "Home money row", type: :system do
     read_home
 
     expect(page).to have_content("Only your spending account so far")
-    expect(page).to have_link("Manage accounts", href: accounts_path)
+    expect(page).to have_link("Manage savings", href: savings_path)
 
     elsewhere("Ally", 400)
     read_home
 
     expect(page).to have_css("[data-manage-accounts-line]", text: "$400.00 across 1 other account")
-    expect(page).to have_link("Manage accounts", href: accounts_path)
+    expect(page).to have_link("Manage savings", href: savings_path)
   end
 
   # Both halves of the negative arm, on two fixtures: money elsewhere is a thing to move, and a

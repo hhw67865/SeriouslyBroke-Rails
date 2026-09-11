@@ -4,10 +4,10 @@
 
 <%= page_header(
     title: "Edit #{@account.name}",
-    subtitle: "Account",
+    subtitle: @account.main? ? "Spending account" : "Savings account",
     breadcrumbs: [
       { label: "Home", url: root_path },
-      { label: "Accounts", url: accounts_path },
+      { label: "Savings", url: savings_path },
       { label: @account.name }
     ]
 ) %>
@@ -36,7 +36,7 @@
             hint: "Correcting the balance moves the opening balance; nothing else changes." %>
 
         <div class="flex flex-col sm:flex-row sm:justify-end gap-3 mt-6">
-          <%= link_to "Cancel", accounts_path, class: "btn btn-secondary" %>
+          <%= link_to "Cancel", savings_path, class: "btn btn-secondary" %>
           <%= f.button :submit, "Save account" %>
         </div>
       <% end %>

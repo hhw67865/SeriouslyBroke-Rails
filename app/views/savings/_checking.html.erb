@@ -1,0 +1,44 @@
+<%# CHECKING — tinted apart from everything else: income lands here, and the budget and savings
+    both claim from it. Local: `presenter` (SavingsPresenter). %>
+<div class="bg-[#FBFBF3] border border-brand rounded p-4 lg:p-6" data-checking>
+  <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+    <h2 class="text-lg font-semibold text-gray-900"><%= presenter.checking.name %></h2>
+    <span class="bg-brand-dark text-white text-[11px] uppercase tracking-wide font-semibold px-2 py-0.5 rounded">
+      Spending account
+    </span>
+  </div>
+
+  <p class="mt-1 text-sm text-gray-700">
+    Income lands here. Your budget and your savings both claim from it.
+  </p>
+
+  <div class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div>
+      <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Balance</p>
+      <p class="mt-1 text-3xl font-semibold tabular-nums text-gray-900" data-checking-balance>
+        <%= number_to_currency(presenter.checking_balance) %>
+      </p>
+    </div>
+    <div>
+      <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Claimed</p>
+      <p class="mt-1 text-xl font-semibold tabular-nums text-gray-900" data-checking-claimed>
+        <%= number_to_currency(presenter.claimed) %>
+      </p>
+      <dl class="mt-1.5 max-w-52 space-y-0.5 text-xs text-gray-600">
+        <div class="flex justify-between"><dt>Budget</dt><dd class="tabular-nums font-medium text-gray-900" data-checking-budget-claim><%= number_to_currency(presenter.budget_claim) %></dd></div>
+        <div class="flex justify-between"><dt>Savings</dt><dd class="tabular-nums font-medium text-gray-900" data-checking-savings-claim><%= number_to_currency(presenter.savings_claim) %></dd></div>
+      </dl>
+    </div>
+    <div>
+      <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Free to spend</p>
+      <p class="mt-1 text-xl font-semibold tabular-nums <%= presenter.free.negative? ? "text-status-danger" : "text-gray-900" %>"
+         data-checking-free>
+        <%= number_to_currency(presenter.free) %>
+      </p>
+    </div>
+  </div>
+
+  <div class="mt-4">
+    <%= link_to "Edit name or balance", edit_account_path(presenter.checking), class: "btn btn-secondary" %>
+  </div>
+</div>

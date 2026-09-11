@@ -42,9 +42,11 @@ RSpec.describe "Calendar Week - Entries", type: :system do
     end
 
     it "groups entries by type with labels", :aggregate_failures do
-      expect(page).to have_content("Expense")
-      expect(page).to have_content("Income")
-      expect(page).to have_no_content("Savings")
+      within("main") do
+        expect(page).to have_content("Expense")
+        expect(page).to have_content("Income")
+        expect(page).to have_no_content("Savings")
+      end
     end
   end
 

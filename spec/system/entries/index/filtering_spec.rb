@@ -48,7 +48,7 @@ RSpec.describe "Entries Index - Filtering", type: :system do
     it "has no savings tab, and a stale savings link shows everything", :aggregate_failures do
       visit entries_path
 
-      expect(page).to have_no_link("Savings")
+      within("nav[aria-label='Tabs']") { expect(page).to have_no_link("Savings") }
 
       visit entries_path(type: "savings")
 
