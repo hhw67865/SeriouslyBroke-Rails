@@ -27,6 +27,12 @@ Uses Ruby `Data.define` for immutable value objects. Controllers instantiate pre
 @presenter.troubles
 ```
 
+`HomePresenter#tiles`, `#upcoming` and `#savings_blocks` are the Home page's readers — the four
+tiles, the "Coming up" rows and the per-account savings blocks. The Budget page prints
+`ClaimLine#per_period` beside `Rule#ask`: what the rule takes this period, and its steady figure
+once caught up. Adjustments are written from Home and the Savings page only; the Budget page is
+the plan, not a place to adjust it.
+
 ### Calculator Pattern (`app/services/`)
 
 Plain service objects, fed a fixed number of queries up front, that compute a figure without touching the database again per call:
@@ -46,7 +52,7 @@ Plain `ActiveModel::Model` (or plain Ruby) objects that turn form params into a 
 
 ```ruby
 RuleForm.new(current_user, rule_params, rule: @rule).save
-AdjustmentForm.new(rule: @rule, params: adjustment_params, name: current_user.name).save
+AdjustmentForm.new(source: @rule, params: adjustment_params, name: rule_name(@rule)).save
 EntryForm.new(current_user, @entry, entry_params)
 CadenceChange.new(user: current_user, declaration: declaration_params)
 ```
