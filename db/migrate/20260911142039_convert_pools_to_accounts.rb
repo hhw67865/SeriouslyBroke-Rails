@@ -5,7 +5,7 @@
 # schema does not. Runs inside the Migrator's transaction: any refused assertion rolls the whole
 # run back. Migration-local table classes, so today's models never read yesterday's columns.
 # `down` keeps the accounts it minted, so a second `up` refuses a user who already has a main one.
-class AccountsAndRulesData < ActiveRecord::Migration[8.1]
+class ConvertPoolsToAccounts < ActiveRecord::Migration[8.1]
   class Refused < StandardError; end
 
   EXPENSE = 0

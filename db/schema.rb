@@ -10,13 +10,14 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_10_000001) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_11_142039) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
 
   create_table "accounts", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
+    t.boolean "keeps_extra", default: true, null: false
     t.string "name", null: false
     t.date "opened_on"
     t.money "opening_balance", scale: 2, default: "0.0", null: false
@@ -30,11 +31,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_10_000001) do
     t.money "amount", scale: 2, null: false
     t.datetime "created_at", null: false
     t.date "date", null: false
-    t.uuid "rule_id", null: false
+    t.uuid "source_id", null: false
+    t.string "source_type", null: false
     t.datetime "updated_at", null: false
     t.index ["date"], name: "index_adjustments_on_date"
-    t.index ["rule_id"], name: "index_adjustments_on_rule_id"
+    t.index ["source_type", "source_id"], name: "index_adjustments_on_source_type_and_source_id"
     t.check_constraint "amount <> 0::money", name: "adjustments_non_zero_amount"
+    t.check_constraint "source_type::text <> 'Account'::text OR amount < 0::money", name: "adjustments_accounts_only_reduce"
   end
 
   create_table "categories", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -54,14 +57,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_10_000001) do
   end
 
   create_table "entries", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.uuid "account_id"
     t.money "amount", scale: 2, null: false
     t.datetime "created_at", null: false
     t.date "date", null: false
     t.text "description"
     t.uuid "item_id", null: false
     t.datetime "updated_at", null: false
-    t.index ["account_id"], name: "index_entries_on_account_id"
     t.index ["item_id"], name: "index_entries_on_item_id"
     t.check_constraint "amount > 0::money", name: "entries_positive_amount"
   end
@@ -93,6 +94,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_10_000001) do
     t.check_constraint "amount > 0::money", name: "rules_positive_amount"
     t.check_constraint "interval_months IS NULL OR anchor_date IS NOT NULL", name: "rules_interval_needs_a_date"
     t.check_constraint "interval_months IS NULL OR interval_months > 0", name: "rules_positive_interval"
+  end
+
+  create_table "savings_targets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "account_id", null: false
+    t.money "amount", scale: 2
+    t.datetime "created_at", null: false
+    t.uuid "item_id"
+    t.decimal "percent", precision: 5, scale: 2
+    t.date "starts_on", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "item_id"], name: "index_savings_targets_one_share_per_item", unique: true, where: "(item_id IS NOT NULL)"
+    t.index ["account_id"], name: "index_savings_targets_on_account_id"
+    t.index ["account_id"], name: "index_savings_targets_one_fixed_per_account", unique: true, where: "(item_id IS NULL)"
+    t.check_constraint "amount IS NULL OR amount > 0::money", name: "savings_targets_positive_amount"
+    t.check_constraint "item_id IS NULL AND amount IS NOT NULL AND percent IS NULL OR item_id IS NOT NULL AND percent IS NOT NULL AND amount IS NULL", name: "savings_targets_one_figure"
+    t.check_constraint "percent IS NULL OR percent > 0::numeric AND percent <= 100::numeric", name: "savings_targets_percent_range"
   end
 
   create_table "transfers", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -135,13 +152,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_10_000001) do
   end
 
   add_foreign_key "accounts", "users"
-  add_foreign_key "adjustments", "rules"
   add_foreign_key "categories", "users"
-  add_foreign_key "entries", "accounts"
   add_foreign_key "entries", "items"
   add_foreign_key "items", "categories"
   add_foreign_key "rules", "categories"
   add_foreign_key "rules", "items"
+  add_foreign_key "savings_targets", "accounts"
+  add_foreign_key "savings_targets", "items"
   add_foreign_key "transfers", "accounts", column: "from_account_id"
   add_foreign_key "transfers", "accounts", column: "to_account_id"
   add_foreign_key "users", "accounts", column: "main_account_id", on_delete: :nullify

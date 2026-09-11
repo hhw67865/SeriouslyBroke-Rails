@@ -1,12 +1,12 @@
 # frozen_string_literal: true
 
 require "rails_helper"
-require Rails.root.join("db/migrate/20260910000001_accounts_and_rules_data")
+require Rails.root.glob("db/migrate/*_convert_pools_to_accounts.rb").sole
 
 # Every example rewinds the data migration (which restores main's shape without data), plants
 # main-shaped rows through anonymous table classes, runs the migration forward, and reads the
 # result through today's models. The example transaction rolls the DDL back afterwards.
-RSpec.describe AccountsAndRulesData do
+RSpec.describe ConvertPoolsToAccounts do
   let(:migration) { described_class.new }
   let(:pools) { legacy("savings_pools") }
   let(:categories) { legacy("categories") }
