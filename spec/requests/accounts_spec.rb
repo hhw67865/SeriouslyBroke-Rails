@@ -12,13 +12,13 @@ RSpec.describe "Accounts" do
   it "opens an account with its balance and makes the first one main", :aggregate_failures do
     post accounts_path, params: { account: { name: "Checking", balance: "250.00" } }
 
-    expect(response).to redirect_to(root_path)
+    expect(response).to redirect_to(accounts_path)
     account = user.reload.main_account
     expect(account.name).to eq("Checking")
     expect(account.balance).to eq(250)
   end
 
-  it "re-renders home with the refusal", :aggregate_failures do
+  it "re-renders the accounts page with the refusal", :aggregate_failures do
     create(:account, user: user, name: "Checking")
 
     post accounts_path, params: { account: { name: "checking", balance: "" } }
@@ -32,7 +32,7 @@ RSpec.describe "Accounts" do
 
     patch account_path(account), params: { account: { name: "New", balance: "99.5" } }
 
-    expect(response).to redirect_to(root_path)
+    expect(response).to redirect_to(accounts_path)
     expect(account.reload).to have_attributes(name: "New", opening_balance: 99.5)
   end
 

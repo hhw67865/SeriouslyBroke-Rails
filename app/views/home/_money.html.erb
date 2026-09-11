@@ -1,5 +1,6 @@
 <%# THE MONEY ROW — Home's first two answers as three stat tiles. Local: `presenter` (HomePresenter).
     The tiles are the cards; `index.html.erb` owns the grid that lays them out. %>
+<% main_name = presenter.user.main_account&.name || "checking" %>
 
 <%# TILE 1 — the one derived number: `pot − Σ claims`. Never clamped: a negative free renders
     negative, in red, because it is a signal rather than a refusal. %>
@@ -18,7 +19,7 @@
            aria-valuenow="<%= claimed %>"
            aria-valuemin="0"
            aria-valuemax="100"
-           aria-label="<%= number_to_currency(presenter.total_claims) %> of checking claimed by your rules"
+           aria-label="<%= number_to_currency(presenter.total_claims) %> of <%= main_name %> claimed by your rules"
            data-claimed-bar="<%= claimed %>">
         <div class="h-2 <%= presenter.short? ? "bg-status-danger" : "bg-brand-dark" %>"
              style="width: <%= claimed %>%;"
@@ -49,7 +50,7 @@
 <%# TILE 2 — main's balance, not the user's money everywhere. One type step smaller below `sm`,
     where a six-figure balance at `text-2xl` is wider than this tile's half of 375px. %>
 <div class="bg-white border border-gray-200 rounded p-4 lg:p-5" data-tile="checking">
-  <p class="text-xs font-medium uppercase tracking-wide text-gray-500">In checking</p>
+  <p class="text-xs font-medium uppercase tracking-wide text-gray-500">In <%= main_name %></p>
   <p class="mt-1 text-xl sm:text-2xl font-semibold tabular-nums <%= presenter.in_checking.negative? ? "text-status-danger" : "text-gray-900" %>"
      data-in-checking>
     <%= number_to_currency(presenter.in_checking) %>
@@ -57,7 +58,7 @@
   <%# The fact alone: which negative-pot state it is belongs to the free tile's subline. %>
   <% if presenter.in_checking.negative? %>
     <p class="mt-1 text-sm text-status-danger" data-checking-overdrawn>
-      Your checking account is already spent past zero.
+      Your <%= main_name %> account is already spent past zero.
     </p>
   <% end %>
 </div>

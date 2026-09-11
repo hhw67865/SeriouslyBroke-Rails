@@ -1,0 +1,11 @@
+<% content_for :title, "Accounts" %>
+
+<%= page_header(title: "Accounts", subtitle: "One account is what you spend from. The rest is set aside.") %>
+
+<div class="space-y-4 lg:space-y-6">
+  <%= render "accounts/spending", presenter: @presenter %>
+
+  <%= render "accounts/set_aside", presenter: @presenter, transfer: @transfer, move_to: @move_to, open: @open_move_money %>
+
+  <%= render "accounts/add_account", account: @new_account, balance: @new_account_balance, open: @open_add_account %>
+</div>

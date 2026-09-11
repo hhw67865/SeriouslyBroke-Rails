@@ -6,9 +6,7 @@ module HomeState
 
   private
 
-  def assign_home_state(new_account: nil, new_account_balance: nil)
+  def assign_home_state
     @presenter = HomePresenter.new(user: current_user, today: current_user.today)
-    @new_account = new_account || current_user.accounts.new
-    @new_account_balance = new_account_balance
   end
 end

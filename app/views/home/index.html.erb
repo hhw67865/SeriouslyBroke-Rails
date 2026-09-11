@@ -11,6 +11,8 @@
     <%= render "home/money", presenter: @presenter %>
   </div>
 
+  <%= render "home/manage_accounts", presenter: @presenter %>
+
   <%= render "home/runway", presenter: @presenter %>
 
   <% if @presenter.trouble? %>
@@ -27,9 +29,4 @@
         tag onto a raw newline mid-argument-list on every run. %>
     <%= link_to "Change what a category asks for on the Budget page", budget_page_path, class: "text-status-info hover:underline" %>
   </p>
-
-  <%= render "home/accounts_line", presenter: @presenter %>
-  <%# The add-account door stays top-level: a door behind a chevron is one a first-time user does
-      not find. %>
-  <%= render "home/your_accounts", account: @new_account, balance: @new_account_balance %>
 </div>

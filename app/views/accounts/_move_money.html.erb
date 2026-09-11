@@ -1,0 +1,49 @@
+<%# MOVE MONEY — a hand move between two of the user's own accounts, never spending or income.
+    Locals: `presenter` (AccountsPresenter), `transfer` (new, or refused and carrying its errors),
+    `move_to` (a preselected destination id), `open`. %>
+<details class="mt-4" data-move-money <%= "open" if open %>>
+  <summary class="btn btn-secondary list-none inline-flex cursor-pointer">Move money</summary>
+
+  <div class="mt-3 max-w-xl space-y-3 rounded border border-gray-200 bg-gray-50 p-4">
+    <p class="text-sm text-gray-600">
+      Between your own accounts. A move is not spending and not income; it changes two balances and
+      nothing else.
+    </p>
+
+    <%= form_with model: transfer, url: transfers_path, class: "space-y-3" do |f| %>
+      <% if transfer.errors.any? %>
+        <p class="form-error"><%= transfer.errors.full_messages.to_sentence %></p>
+      <% end %>
+
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div class="form-group">
+          <%= f.label :from_account_id, "From", class: "form-label" %>
+          <%= f.select :from_account_id,
+              options_from_collection_for_select(presenter.accounts, :id, :name, transfer.from_account_id || presenter.spending.id),
+              {},
+              class: "form-select" %>
+        </div>
+        <div class="form-group">
+          <%= f.label :to_account_id, "To", class: "form-label" %>
+          <%= f.select :to_account_id,
+              options_from_collection_for_select(presenter.accounts, :id, :name, transfer.to_account_id || move_to || presenter.set_aside.first&.account&.id),
+              {},
+              class: "form-select" %>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div class="form-group">
+          <%= f.label :amount, class: "form-label" %>
+          <%= f.number_field :amount, step: 0.01, min: 0.01, value: transfer.amount, class: "form-input" %>
+        </div>
+        <div class="form-group">
+          <%= f.label :date, "Date", class: "form-label" %>
+          <%= f.date_field :date, value: transfer.date || presenter.today, class: "form-input" %>
+        </div>
+      </div>
+
+      <%= f.submit "Move", class: "btn btn-primary" %>
+    <% end %>
+  </div>
+</details>

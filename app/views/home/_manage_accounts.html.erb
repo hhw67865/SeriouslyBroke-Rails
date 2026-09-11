@@ -1,0 +1,11 @@
+<%# ACCOUNTS, IN ONE LINE — the accounts page carries every account now; this line only points at
+    it. Local: `presenter` (HomePresenter). %>
+<p class="text-sm text-gray-600" data-manage-accounts-line>
+  <% if presenter.other_accounts.any? %>
+    <strong class="tabular-nums text-gray-900"><%= number_to_currency(presenter.other_accounts_total) %></strong>
+    across <%= pluralize(presenter.other_accounts.size, "other account") %> ·
+  <% else %>
+    Only your spending account so far ·
+  <% end %>
+  <%= link_to "Manage accounts", accounts_path, class: "text-status-info hover:underline" %>
+</p>

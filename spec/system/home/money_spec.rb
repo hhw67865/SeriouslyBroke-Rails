@@ -43,6 +43,7 @@ RSpec.describe "Home money row", type: :system do
 
     read_home
 
+    expect(page).to have_css("[data-tile='checking']", text: "In Checking")
     expect(page).to have_css("[data-in-checking]", text: "$1,000.00")
     expect(page).to have_css("[data-free]", text: "$600.00")
     expect(page).to have_css("[data-free-subline]", text: "$400.00 claimed by your rules")
@@ -83,6 +84,21 @@ RSpec.describe "Home money row", type: :system do
     read_home
 
     expect(page).to have_no_css("[data-other-accounts]")
+  end
+
+  # Home no longer carries the accounts index itself — one line points at it, its wording carrying
+  # the same total as the tile above.
+  it "points at Accounts for the rest of the balances", :aggregate_failures do
+    read_home
+
+    expect(page).to have_content("Only your spending account so far")
+    expect(page).to have_link("Manage accounts", href: accounts_path)
+
+    elsewhere("Ally", 400)
+    read_home
+
+    expect(page).to have_css("[data-manage-accounts-line]", text: "$400.00 across 1 other account")
+    expect(page).to have_link("Manage accounts", href: accounts_path)
   end
 
   # Both halves of the negative arm, on two fixtures: money elsewhere is a thing to move, and a

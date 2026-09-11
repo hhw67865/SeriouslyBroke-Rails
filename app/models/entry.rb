@@ -30,6 +30,11 @@ class Entry < ApplicationRecord
         lambda { |item_ids|
           where(item_id: item_ids).select("DISTINCT ON (entries.item_id) entries.*").order("entries.item_id, entries.date DESC, entries.created_at DESC")
         }
+  # The newest entry landing in each of these accounts, in one query.
+  scope :latest_per_account,
+        lambda { |account_ids|
+          where(account_id: account_ids).select("DISTINCT ON (entries.account_id) entries.*").order("entries.account_id, entries.date DESC, entries.created_at DESC")
+        }
 
   searchable :description, label: "Description"
   searchable :date, type: :date, label: "Date"

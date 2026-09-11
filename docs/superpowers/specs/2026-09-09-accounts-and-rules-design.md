@@ -216,8 +216,11 @@ day. Stored dates are days already.
 The views, Stimulus controllers and helpers are taken from the reference branch at commit
 `4ee68de` and adapted to the names above. They are not redesigned. The pages:
 
-- **Home**: accounts with balances and an add-account form, free to spend, this period's progress,
-  the trouble strip, the give-way list, the runway.
+- **Home**: free to spend, this period's progress, the trouble strip, the give-way list, the
+  runway, and one line pointing at Accounts for balances and detail.
+- **Accounts** (`/accounts`): the spending account as a tinted card with its balance, claimed and
+  free figures; every other account as a ledger with its balance and latest income and transfer;
+  Move money and Add an account.
 - **Budget** (`/budget`): tiles, category rows with their rules and adjustments, reorder; the
   income tile's "change" links to Your income (`/budget/income`), which holds the period and the
   income categories in one form.

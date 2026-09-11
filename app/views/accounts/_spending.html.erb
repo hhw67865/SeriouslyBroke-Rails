@@ -1,0 +1,42 @@
+<%# THE SPENDING ACCOUNT — tinted apart from everything else: every rule claims from here, and
+    income lands here unless an entry says otherwise. Local: `presenter` (AccountsPresenter). %>
+<div class="bg-[#FBFBF3] border border-brand rounded p-4 lg:p-6" data-spending-account>
+  <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+    <h2 class="text-lg font-semibold text-gray-900"><%= presenter.spending.name %></h2>
+    <span class="bg-brand-dark text-white text-[11px] uppercase tracking-wide font-semibold px-2 py-0.5 rounded">
+      Spending account
+    </span>
+  </div>
+
+  <p class="mt-1 text-sm text-gray-700">
+    Everything you budget comes out of here. Income lands here unless an entry says otherwise, and
+    every rule claims from it.
+  </p>
+
+  <%# The same three figures Home's tiles print, read through the same presenter methods. %>
+  <div class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div>
+      <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Balance</p>
+      <p class="mt-1 text-3xl font-semibold tabular-nums text-gray-900" data-spending-balance>
+        <%= number_to_currency(presenter.spending_balance) %>
+      </p>
+    </div>
+    <div>
+      <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Claimed by rules</p>
+      <p class="mt-1 text-xl font-semibold tabular-nums text-gray-900" data-spending-claimed>
+        <%= number_to_currency(presenter.claimed) %>
+      </p>
+    </div>
+    <div>
+      <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Free to spend</p>
+      <p class="mt-1 text-xl font-semibold tabular-nums <%= presenter.free.negative? ? "text-status-danger" : "text-gray-900" %>"
+         data-spending-free>
+        <%= number_to_currency(presenter.free) %>
+      </p>
+    </div>
+  </div>
+
+  <div class="mt-4">
+    <%= link_to "Edit name or balance", edit_account_path(presenter.spending), class: "btn btn-secondary" %>
+  </div>
+</div>
