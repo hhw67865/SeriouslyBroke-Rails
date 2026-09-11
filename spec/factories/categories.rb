@@ -2,14 +2,14 @@
 
 FactoryBot.define do
   factory :category do
-    name { Faker::Commerce.department + Faker::Number.number(digits: 2).to_s }
+    sequence(:name) { |n| "#{Faker::Commerce.department} #{n}" }
     color { Faker::Color.hex_color }
     category_type { :expense }
     association :user
 
     trait :income do
       category_type { :income }
-      name { Faker::Job.field + Faker::Number.number(digits: 2).to_s }
+      sequence(:name) { |n| "#{Faker::Job.field} #{n}" }
     end
 
     trait :expense do

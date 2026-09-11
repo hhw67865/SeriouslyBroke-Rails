@@ -16,7 +16,7 @@ RSpec.describe "Home navigation", type: :system do
   it "lands on Home at the root", :aggregate_failures do
     visit root_path
 
-    expect(page).to have_css("h1")
+    expect(page).to have_css("[data-tiles] [data-tile='free']")
     expect(page).to have_link("Home", href: root_path)
   end
 end

@@ -4,7 +4,7 @@ require "rails_helper"
 
 # The Budget page is the list of every expense category. One row each: a drag handle where the
 # reorder can take it, the name, how many rules it carries, a dot per rule in its type's colour,
-# what it claims, and a chevron.
+# what it takes this period, and a chevron.
 #
 # `Capybara.exact` is unset in this suite, so every row assertion is scoped — an unscoped
 # `have_content("Groceries")` matches the row, the rule inside it and the nav at once.

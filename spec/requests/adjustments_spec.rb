@@ -21,11 +21,12 @@ RSpec.describe "Adjustments" do
     expect(rule.adjustments.reload).to be_empty
   end
 
-  it "refuses a date outside the period with the reason", :aggregate_failures do
+  it "refuses a date outside the period with the reason, back on Home", :aggregate_failures do
     post adjustments_path, params: { source_type: "Rule", source_id: rule.id, amount: "50", date: (user.period_containing(user.today).first - 1).to_s }
 
     expect(response).to have_http_status(:unprocessable_content)
     expect(response.body).to include("pick a date between")
+    expect(response.body).to include("data-tiles")
   end
 
   # 404 rather than a raise: this app's test environment rescues, so the refusal is the response.
@@ -55,10 +56,31 @@ RSpec.describe "Adjustments" do
     expect(emergency.adjustments.sole.amount).to eq(-50)
   end
 
+  it "refuses an account adjustment with nothing to top up, back on Home", :aggregate_failures do
+    emergency = create(:account, user: user, name: "Emergency")
+    create(:savings_target, account: emergency, amount: 200, starts_on: user.period_containing(user.today).first)
+
+    post adjustments_path, params: { source_type: "Account", source_id: emergency.id, amount: "50", amount_sign: "1", return: "home" }
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.body).to include("data-tiles")
+  end
+
   it "refuses an unknown source type" do
     post adjustments_path, params: { source_type: "User", source_id: user.id, amount: "50" }
 
     expect(response).to have_http_status(:unprocessable_content)
+  end
+
+  it "deletes an account adjustment and returns to Home when the form carried return: home", :aggregate_failures do
+    emergency = create(:account, user: user, name: "Emergency")
+    create(:savings_target, account: emergency, amount: 200, starts_on: user.period_containing(user.today).first)
+    change = create(:adjustment, source: emergency, amount: -50, date: user.today)
+
+    delete adjustment_path(change, return: "home")
+
+    expect(response).to redirect_to(root_path(anchor: "savings-#{emergency.id}"))
+    expect(emergency.adjustments.reload).to be_empty
   end
 
   it "never deletes another user's adjustment" do
