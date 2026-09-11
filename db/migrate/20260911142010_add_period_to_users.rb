@@ -2,7 +2,9 @@
 
 class AddPeriodToUsers < ActiveRecord::Migration[8.1]
   def change
-    add_column :users, :period_cadence, :integer
-    add_column :users, :period_anchor_date, :date
+    change_table :users, bulk: true do |t|
+      t.integer :period_cadence
+      t.date :period_anchor_date
+    end
   end
 end

@@ -11,8 +11,8 @@ RSpec.describe AccountLedger do
   let(:today) { Date.new(2026, 9, 9) }
   let(:ledger) { described_class.new(user, today: today) }
 
-  def earn(amount, on:, account: nil, category: salary)
-    create(:entry, item: create(:item, category: category), amount: amount, date: on, account: account)
+  def earn(amount, on:, category: salary)
+    create(:entry, item: create(:item, category: category), amount: amount, date: on)
   end
 
   def spend(amount, on:)
@@ -23,13 +23,13 @@ RSpec.describe AccountLedger do
     it "is opening plus what landed, minus what left, plus transfers in, minus transfers out" do
       main
       earn(50, on: today)
-      earn(20, on: today, account: savings)
+      earn(20, on: today)
       spend(30, on: today)
       create(:transfer, from_account: main, to_account: savings, amount: 40, date: today)
 
-      expect(ledger.balance_of(main)).to eq(80)
-      expect(ledger.balance_of(savings)).to eq(60)
-      expect(ledger.pot).to eq(80)
+      expect(ledger.balance_of(main)).to eq(100)
+      expect(ledger.balance_of(savings)).to eq(40)
+      expect(ledger.pot).to eq(100)
       expect(ledger.total_money).to eq(140)
     end
 
@@ -67,6 +67,16 @@ RSpec.describe AccountLedger do
       earn(2000, on: Date.new(2026, 9, 5))
       expect(ledger.typical_income).to be_nil
     end
+  end
+
+  it "answers typical income per item, zero for an item with no history", :aggregate_failures do
+    salary = create(:category, :income, user: user)
+    paycheck = create(:item, category: salary)
+    [Date.new(2026, 8, 7), Date.new(2026, 8, 25)].each { |on| create(:entry, item: paycheck, amount: 1_000, date: on) }
+    quiet = create(:item, category: salary)
+
+    expect(ledger.typical_income_of_item(paycheck.id)).to eq(1_000)
+    expect(ledger.typical_income_of_items([paycheck.id, quiet.id])).to eq(paycheck.id => 1_000, quiet.id => 0)
   end
 
   describe "Account#balance and #correct_balance", :aggregate_failures do

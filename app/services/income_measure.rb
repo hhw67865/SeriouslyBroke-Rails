@@ -6,11 +6,12 @@ class IncomeMeasure
   PERIODS = 2
   Period = Data.define(:range, :income)
 
-  attr_reader :user, :category_ids, :today
+  attr_reader :user, :category_ids, :item_ids, :today
 
-  def initialize(user, category_ids:, today: user.today)
+  def initialize(user, category_ids: nil, item_ids: nil, today: user.today)
     @user = user
     @category_ids = category_ids
+    @item_ids = item_ids
     @today = today
   end
 
@@ -29,6 +30,9 @@ class IncomeMeasure
   private
 
   def income_within(range)
-    Entry.incomes.where(categories: { id: category_ids, user_id: user.id }, date: range).sum(:amount).to_d
+    scope = Entry.incomes.where(categories: { user_id: user.id }, date: range)
+    scope = scope.where(categories: { id: category_ids }) if category_ids
+    scope = scope.where(item_id: item_ids) if item_ids
+    scope.sum(:amount).to_d
   end
 end

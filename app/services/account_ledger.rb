@@ -33,26 +33,30 @@ class AccountLedger
     @typical_income = IncomeMeasure.new(user, category_ids: user.categories.incomes.regular.ids, today: today).typical
   end
 
+  # Typical income of one item over the same two complete periods, zero with no history.
+  def typical_income_of_item(item_id)
+    typical_by_item[item_id] ||= IncomeMeasure.new(user, item_ids: [item_id], today: today).typical.to_d
+  end
+
+  def typical_income_of_items(item_ids) = item_ids.index_with { |id| typical_income_of_item(id) }
+
   private
 
   def main = user.main_account
 
   def main?(account) = main.present? && account.id == main.id
 
-  def income_into(account)
-    landed = income_by_account.fetch(account.id, 0.to_d)
-    main?(account) ? landed + income_by_account.fetch(nil, 0.to_d) : landed
-  end
+  def income_into(account) = main?(account) ? total_income : 0.to_d
+
+  def total_income = @total_income ||= user_entries(Entry.incomes).sum(:amount).to_d
+
+  def typical_by_item = @typical_by_item ||= {}
 
   def expenses_from(account) = main?(account) ? total_expenses : 0.to_d
 
   def transfers_in(account) = transfer_totals(:to_account_id).fetch(account.id, 0.to_d)
 
   def transfers_out(account) = transfer_totals(:from_account_id).fetch(account.id, 0.to_d)
-
-  def income_by_account
-    @income_by_account ||= user_entries(Entry.incomes).group("entries.account_id").sum(:amount).transform_values(&:to_d)
-  end
 
   def total_expenses = @total_expenses ||= user_entries(Entry.expenses).sum(:amount).to_d
 

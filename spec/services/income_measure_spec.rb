@@ -57,4 +57,17 @@ RSpec.describe IncomeMeasure do
     )
     expect(measure.periods.map(&:income)).to eq([2_000, 2_400])
   end
+
+  it "measures one item over the same two periods", :aggregate_failures do
+    salary = create(:category, :income, user: user)
+    paycheck = create(:item, category: salary, name: "Paycheck")
+    bonus = create(:item, category: salary, name: "Bonus")
+    [Date.new(2026, 8, 7), Date.new(2026, 8, 25)].each do |on|
+      create(:entry, item: paycheck, amount: 1_000, date: on)
+      create(:entry, item: bonus, amount: 500, date: on)
+    end
+
+    expect(described_class.new(user, item_ids: [paycheck.id], today: today).typical).to eq(1_000)
+    expect(described_class.new(user, category_ids: [salary.id], today: today).typical).to eq(1_500)
+  end
 end
