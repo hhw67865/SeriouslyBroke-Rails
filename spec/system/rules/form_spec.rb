@@ -29,6 +29,14 @@ RSpec.describe "Rule form", type: :system do
   # Step 1 and step 3 are the whole of a per-period rule: how much, and what kind. The date the rule
   # starts counting from is offered beside the amount, because spending before it belongs to whatever
   # the user was doing before they wrote the rule.
+  it "explains the three kinds where one is picked", :aggregate_failures do
+    visit new_rule_path(category_id: groceries.id)
+
+    expect(page).to have_content("A must. A set amount on a date, once or every so many months. Rent, insurance, a loan payment. Gives way last.")
+    expect(page).to have_content("Something you have to spend on, but how much depends on how you use it. Utilities, groceries, fuel. Gives way after choice.")
+    expect(page).to have_content("Something you choose to get. Not a necessity; you could go without. Eating out, hobbies, clothes. Gives way first.")
+  end
+
   it "writes a per-period allowance and opens its category", :aggregate_failures do
     open_form
 

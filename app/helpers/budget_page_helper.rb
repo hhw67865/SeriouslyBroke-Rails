@@ -8,6 +8,15 @@ module BudgetPageHelper
 
   def rule_type_heading(type) = TYPE_HEADINGS.fetch(type.to_s)
 
+  # The three kinds, in the user's words, read by the rule form. `fetch`, so a fourth type fails loudly.
+  KIND_DEFINITIONS = {
+    "bill" => "A must. A set amount on a date, once or every so many months. Rent, insurance, a loan payment. Gives way last.",
+    "usage" => "Something you have to spend on, but how much depends on how you use it. Utilities, groceries, fuel. Gives way after choice.",
+    "choice" => "Something you choose to get. Not a necessity; you could go without. Eating out, hobbies, clothes. Gives way first."
+  }.freeze
+
+  def kind_definition(type) = KIND_DEFINITIONS.fetch(type.to_s)
+
   # What a rule is called. The item it pays is the truest name; where there is none the rule is the
   # category's own, and the owner is the subject.
   def rule_name(rule)

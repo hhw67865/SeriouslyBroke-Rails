@@ -190,18 +190,13 @@
       <section class="bg-white shadow-sm rounded border border-gray-100 p-4 space-y-3 sm:p-6" data-step="3">
         <h2 class="text-sm font-semibold text-gray-900">3. What kind of rule is this?</h2>
 
-        <% type_help = {
-             "bill" => "must be paid — gives way last",
-             "usage" => "a need you can trim",
-             "choice" => "up to you — gives way first"
-           } %>
         <div class="space-y-2">
           <% Rule.rule_types.keys.each do |type| %>
             <label class="flex items-start gap-3 rounded border border-gray-200 p-3 cursor-pointer hover:border-gray-300">
               <%= f.radio_button :rule_type, type, class: "form-radio mt-1" %>
               <span class="flex-1">
                 <span class="block text-sm font-medium text-gray-900"><%= type.capitalize %></span>
-                <span class="block text-xs text-gray-500"><%= type_help[type] %></span>
+                <span class="block text-xs text-gray-500"><%= kind_definition(type) %></span>
               </span>
             </label>
           <% end %>
