@@ -118,6 +118,15 @@ module HomeHelper
     "#{number_to_currency(row.set_aside)} set aside · +#{number_to_currency(row.line.per_period)} a period"
   end
 
+  # What the Budget page's rule row says beneath its this-period figure. A one-off bill has no
+  # steady figure to compare against — it stops after its date — so it names the date instead.
+  def steady_words(line)
+    return "until #{line.next_due_on.strftime("%b %-d")}" if line.rule.cadence == :one_off
+    return "same every period" if line.per_period == line.rule.ask
+
+    "#{number_to_currency(line.rule.ask)} a period once caught up"
+  end
+
   # What a row calls one of a category's rules. An item names itself; an item-less rule is named by
   # its shape, because the row already prints its amount and its date.
   def rule_label(rule)

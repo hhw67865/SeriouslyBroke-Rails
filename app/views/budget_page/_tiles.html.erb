@@ -68,6 +68,7 @@
     <p class="mt-2 text-xs text-gray-500" data-tile-split>
       Savings <span class="tabular-nums text-gray-900"><%= number_to_currency(presenter.tiles.savings) %></span> ·
       Budget <span class="tabular-nums text-gray-900"><%= number_to_currency(presenter.tiles.budget) %></span>
+      <%= "once caught up" if presenter.tiles.catching_up? %>
     </p>
 
     <% if presenter.tiles.catching_up? %>
@@ -88,7 +89,7 @@
         <%= presenter.tiles.fits? ? "Your savings and your budget fit what you bring in." : "Your savings and your budget ask for more than you bring in." %>
       </p>
 
-      <% if presenter.tiles.catching_up? && presenter.history? %>
+      <% if presenter.tiles.catching_up? %>
         <p class="mt-1 text-xs text-gray-500" data-tile-leftover-now>This period leaves <%= number_to_currency(presenter.tiles.leftover_now) %></p>
       <% end %>
 

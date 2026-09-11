@@ -145,7 +145,8 @@ RSpec.describe "Budget page tiles", type: :system do
     visit budget_page_path
 
     within(tile("where")) do
-      expect(page).to have_css("[data-tile-figure]", text: "$100.00")
+      expect(page).to have_css("[data-tile-figure]", text: "$100.00 this period")
+      expect(page).to have_css("[data-tile-split]", text: "once caught up")
       expect(page).to have_css("[data-tile-steady]", text: "$46.15 a period once every bill is caught up")
     end
     expect(tile("leftover")).to have_css("[data-tile-leftover-now]", text: "This period leaves $1,900.00")

@@ -37,7 +37,7 @@
                       a second line and a steady one says so once instead of always. %>
                   <div class="sm:w-40 sm:text-right" data-rule-figure>
                     <p class="text-sm tabular-nums font-medium text-gray-900"><%= number_to_currency(line.per_period) %></p>
-                    <p class="text-xs text-gray-500" data-rule-steady><%= line.per_period == line.rule.ask ? "same every period" : "#{number_to_currency(line.rule.ask)} a period once caught up" %></p>
+                    <p class="text-xs text-gray-500" data-rule-steady><%= steady_words(line) %></p>
                   </div>
 
                   <%# The percent rides on the TRACK: a 0% fill has no width, so a hook there would be

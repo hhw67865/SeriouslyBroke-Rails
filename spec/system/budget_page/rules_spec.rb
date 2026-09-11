@@ -97,6 +97,7 @@ RSpec.describe "Budget page rules", type: :system do
 
     expect(rule_row("Rent")).to have_css("[data-rule-shape]", text: "bill · once, Oct 16")
     expect(rule_row("Rent")).to have_css("[data-rule-figure]", text: "$225.00")
+    expect(rule_row("Rent")).to have_css("[data-rule-steady]", text: "until Oct 16")
     expect(rule_row("Rent")).to have_css("[data-rule-when]", text: "Oct 16")
     expect(rule_row("Rent")).to have_css("[data-rule-when]", text: "$225.00 of $900.00")
   end
