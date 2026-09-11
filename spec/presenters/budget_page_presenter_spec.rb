@@ -44,13 +44,14 @@ RSpec.describe BudgetPagePresenter do
   it "compares what the rules need with typical income", :aggregate_failures do
     rule_on("Rent", :bill, amount: 900)
     a_period_of_income(2_000)
+    create(:savings_target, account: create(:account, user: user, name: "Emergency"), amount: 300, starts_on: Date.new(2026, 9, 4))
+    presenter = described_class.new(user: user, today: today)
 
-    expect(presenter.budget).to eq(900)
-    expect(presenter.typical_income).to eq(2_000)
-    expect(presenter.leftover).to eq(1_100)
-    expect(presenter).to be_declared
-    expect(presenter).to be_history
-    expect(presenter.tiles).to have_attributes(need: 900, income: 2_000, fits: true, declared: true)
+    expect(presenter.savings).to eq(300)
+    expect(presenter.leftover).to eq(800)
+    expect(presenter).to be_declared.and be_history
+    expect(presenter.tiles).to have_attributes(budget: 900, savings: 300, where: 1_200, income: 2_000, fits: true, declared: true)
+    expect(presenter.tiles.segments.first).to have_attributes(type: :savings, amount: 300, percent: 25)
     expect(presenter.type_overview).to eq([[:bill, 900]])
   end
 

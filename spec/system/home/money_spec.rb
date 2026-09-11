@@ -46,7 +46,7 @@ RSpec.describe "Home money row", type: :system do
     expect(page).to have_css("[data-tile='checking']", text: "In Checking")
     expect(page).to have_css("[data-in-checking]", text: "$1,000.00")
     expect(page).to have_css("[data-free]", text: "$600.00")
-    expect(page).to have_css("[data-free-subline]", text: "$400.00 claimed by your rules")
+    expect(page).to have_css("[data-free-subline]", text: "$400.00 claimed by your budget and savings")
     # The words this row does not say. Case-insensitive, because a substring match would pass over
     # the app's own capitalised spelling — which is the spelling that could slip in.
     within("[data-money]") do
@@ -111,7 +111,7 @@ RSpec.describe "Home money row", type: :system do
 
     expect(page).to have_css("[data-free]", text: "-$200.00")
     expect(page).to have_css("[data-free].text-status-danger")
-    expect(page).to have_css("[data-free-subline]", text: "Your rules claim $200.00 more than checking holds")
+    expect(page).to have_css("[data-free-subline]", text: "Your budget and savings claim $200.00 more than checking holds")
     expect(page).to have_css("[data-free-subline]", text: "Move some in from your other accounts")
   end
 

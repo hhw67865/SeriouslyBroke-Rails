@@ -15,6 +15,7 @@ class SacrificePresenter
   end
 
   delegate :budget, to: :ledger
+  delegate :savings, to: :ledger
 
   # Memoised with defined?, because nil is a real answer and the common one for a new user.
   def typical_income

@@ -1,41 +1,7 @@
 <%# The three tiles. Local: `presenter`. Every figure is `ask` — a constant of the rules
     and the grid — and never Σ claims, which would report a different split tomorrow. %>
 <section class="grid grid-cols-2 gap-3 sm:grid-cols-3" data-tiles>
-  <%# TILE 1 — what the rules ask of a period, and what kind of rules they are. %>
-  <div class="col-span-2 bg-white border border-gray-200 rounded p-4 sm:col-span-1 sm:px-5 sm:py-4" data-tile="need">
-    <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Your rules need</h2>
-    <p class="mt-1 text-xl font-semibold text-gray-900 tabular-nums" data-tile-figure>
-      <%= number_to_currency(presenter.tiles.need) %> <span class="block text-sm font-normal text-gray-500 md:inline">a period</span>
-    </p>
-
-    <% if presenter.tiles.segments.any? %>
-      <%# The percentages are the presenter's, so the bar and the figures under it are two readings
-          of one number rather than two derivations of it. %>
-      <div class="mt-3 flex h-2 overflow-hidden rounded bg-gray-100" data-type-bar>
-        <% presenter.tiles.segments.each do |segment| %>
-          <div class="<%= type_fill(segment.type) %>"
-               style="width: <%= segment.percent %>%;"
-               data-type-band="<%= segment.type %>"></div>
-        <% end %>
-      </div>
-
-      <%# The separator is `aria-hidden`, so a reader hears three figures and not three interpuncts.
-          A type with no rules is absent: $0.00 is true and reports nothing. %>
-      <p class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-gray-700">
-        <% presenter.tiles.segments.each_with_index do |segment, index| %>
-          <% unless index.zero? %>
-            <span class="text-gray-400" aria-hidden="true">·</span>
-          <% end %>
-          <span data-type-total="<%= segment.type %>">
-            <span class="text-gray-500"><%= rule_type_heading(segment.type) %></span>
-            <span class="font-medium text-gray-900 tabular-nums"><%= number_to_currency(segment.amount) %></span>
-          </span>
-        <% end %>
-      </p>
-    <% end %>
-  </div>
-
-  <%# TILE 2 — what the entries say comes in, measured rather than typed. %>
+  <%# TILE 1 — what the entries say comes in, measured rather than typed. %>
   <div class="bg-white border border-gray-200 rounded p-4 sm:px-5 sm:py-4" data-tile="income">
     <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">You bring in</h2>
     <% if presenter.tiles.declared? %>
@@ -66,17 +32,56 @@
     <% end %>
   </div>
 
+  <%# TILE 2 — where a period's income goes: savings first, then what the rules ask for, by type. %>
+  <div class="col-span-2 bg-white border border-gray-200 rounded p-4 sm:col-span-1 sm:px-5 sm:py-4" data-tile="where">
+    <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Where it goes</h2>
+    <p class="mt-1 text-xl font-semibold text-gray-900 tabular-nums" data-tile-figure>
+      <%= number_to_currency(presenter.tiles.where) %> <span class="block text-sm font-normal text-gray-500 md:inline">a period</span>
+    </p>
+
+    <% if presenter.tiles.segments.any? %>
+      <%# The percentages are the presenter's, so the bar and the figures under it are two readings
+          of one number rather than two derivations of it. Savings is the first segment. %>
+      <div class="mt-3 flex h-2 overflow-hidden rounded bg-gray-100" data-type-bar>
+        <% presenter.tiles.segments.each do |segment| %>
+          <div class="<%= type_fill(segment.type) %>"
+               style="width: <%= segment.percent %>%;"
+               data-type-band="<%= segment.type %>"></div>
+        <% end %>
+      </div>
+
+      <%# The separator is `aria-hidden`, so a reader hears three figures and not three interpuncts.
+          A type with no rules — or no savings target — is absent: $0.00 is true and reports nothing. %>
+      <p class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-gray-700">
+        <% presenter.tiles.segments.each_with_index do |segment, index| %>
+          <% unless index.zero? %>
+            <span class="text-gray-400" aria-hidden="true">·</span>
+          <% end %>
+          <span data-type-total="<%= segment.type %>">
+            <span class="text-gray-500"><%= rule_type_heading(segment.type) %></span>
+            <span class="font-medium text-gray-900 tabular-nums"><%= number_to_currency(segment.amount) %></span>
+          </span>
+        <% end %>
+      </p>
+    <% end %>
+
+    <p class="mt-2 text-xs text-gray-500" data-tile-split>
+      Savings <span class="tabular-nums text-gray-900"><%= number_to_currency(presenter.tiles.savings) %></span> ·
+      Budget <span class="tabular-nums text-gray-900"><%= number_to_currency(presenter.tiles.budget) %></span>
+    </p>
+  </div>
+
   <%# TILE 3 — the subtraction, green when it fits and red when it does not. %>
   <div class="bg-white border rounded p-4 sm:px-5 sm:py-4 <%= presenter.declared? && presenter.history? && !presenter.tiles.fits? ? "border-status-danger" : "border-gray-200" %>"
        data-tile="leftover">
-    <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Left over</h2>
+    <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">That leaves</h2>
     <% if presenter.tiles.declared? && presenter.history? %>
       <p class="mt-1 text-xl font-semibold tabular-nums <%= presenter.tiles.fits? ? "text-status-success" : "text-status-danger" %>"
          data-tile-figure>
         <%= number_to_currency(presenter.tiles.leftover) %>
       </p>
       <p class="mt-2 text-xs text-gray-500" data-tile-verdict>
-        <%= presenter.tiles.fits? ? "Your rules fit what you bring in." : "Your rules ask for more than you bring in." %>
+        <%= presenter.tiles.fits? ? "Your savings and your budget fit what you bring in." : "Your savings and your budget ask for more than you bring in." %>
       </p>
 
       <%# Reallocation cannot fix a budget that does not fit an income, and `sacrifice_path` refuses
@@ -91,7 +96,7 @@
       <% end %>
     <% else %>
       <p class="mt-1 text-sm text-gray-500" data-tile-figure>
-        Once your period is set and a full one has passed, this will say whether your rules fit.
+        Once your period is set and a full one has passed, this will say whether your savings and budget fit.
       </p>
     <% end %>
   </div>

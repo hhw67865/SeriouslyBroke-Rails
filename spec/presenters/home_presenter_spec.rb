@@ -33,10 +33,24 @@ RSpec.describe HomePresenter do
 
     expect(presenter).to be_short
     expect(presenter.shortfall).to eq(200)
-    expect(presenter.uncovered_claims.map { |u| [u.category.name, u.amount] }).to eq([["Fun", 200]])
+    expect(presenter.uncovered_claims.map { |u| [u.name, u.amount] }).to eq([["Fun", 200]])
     expect(presenter.troubles.map(&:kind)).to eq([:shortfall])
     # Sep 4 – Sep 17 on this user's grid, so eight days are left after today. See #period_progress.
     expect(presenter.per_day_pace).to eq((200.to_d / 8).round(2))
+  end
+
+  it "counts savings in claimed and free, and puts a savings claim in the give-way list between usage and bills", :aggregate_failures do
+    # `main` is the top-level `let!`, with a $1,000 opening balance — a plain overspend drains the
+    # pot below the sum of the three claims (340 excluding the bill), so all three give way.
+    create(:entry, item: create(:item, category: create(:category, user: user, name: "Repairs")), amount: 970, date: today)
+    emergency = create(:account, user: user, name: "Emergency")
+    create(:savings_target, account: emergency, amount: 300, starts_on: user.period_containing(today).first)
+    create(:rule, :rate, :bill, amount: 50, category: create(:category, user: user, name: "Rent"), starts_on: Date.new(2026, 1, 1))
+    create(:rule, :rate, :choice, amount: 40, category: create(:category, user: user, name: "Fun"), starts_on: Date.new(2026, 1, 1))
+    presenter = described_class.new(user: user, today: today)
+
+    expect(presenter.claimed).to eq(390)
+    expect(presenter.uncovered_claims.map { |u| [u.name, u.kind] }).to eq([["Fun", :choice], ["Emergency", :savings], ["Rent", :bill]])
   end
 
   it "flags an overdrawn other account and a structural gap", :aggregate_failures do

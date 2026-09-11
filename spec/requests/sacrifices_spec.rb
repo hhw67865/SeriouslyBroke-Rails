@@ -33,7 +33,7 @@ RSpec.describe "Sacrifices" do
     )
 
     expect(response).to redirect_to(budget_page_path)
-    expect(flash[:notice]).to eq("Saved — 2 rules cut. Your rules now need $750.00 a period.")
+    expect(flash[:notice]).to eq("Saved — 2 rules cut. Your savings and budget now need $750.00 a period.")
     expect(groceries_rule.reload.amount).to eq(700)
     expect(fun_rule.reload.amount).to eq(50)
   end

@@ -11,9 +11,10 @@ class BudgetPagePresenter
     def reorderable? = ruled?
   end
   Segment = Data.define(:type, :amount, :percent)
-  Tiles = Data.define(:need, :segments, :income, :cadence, :leftover, :declared, :fits) do
+  Tiles = Data.define(:budget, :savings, :segments, :income, :cadence, :leftover, :declared, :fits) do
     def declared? = declared
     def fits? = fits
+    def where = budget + savings
   end
 
   TYPE_OVERVIEW_ORDER = [:bill, :usage, :choice].freeze
@@ -28,7 +29,8 @@ class BudgetPagePresenter
 
   def tiles
     @tiles ||= Tiles.new(
-      need: budget,
+      budget: budget,
+      savings: savings,
       segments: segments,
       income: typical_income,
       cadence: user.period_cadence,
@@ -53,7 +55,7 @@ class BudgetPagePresenter
     end
   end
 
-  delegate :budget, to: :claim_ledger
+  delegate :budget, :savings, to: :claim_ledger
 
   # Memoised with defined?, because nil is a real answer and the common one for a new user.
   def typical_income
@@ -62,10 +64,10 @@ class BudgetPagePresenter
     @typical_income = claim_ledger.account_ledger.typical_income
   end
 
-  def leftover = typical_income && (typical_income - budget)
+  def leftover = typical_income && (typical_income - savings - budget)
   def declared? = user.period_cadence.present?
   def history? = typical_income.present?
-  def underwater? = declared? && history? && budget > typical_income
+  def underwater? = declared? && history? && budget + savings > typical_income
 
   private
 
@@ -97,10 +99,12 @@ class BudgetPagePresenter
   end
 
   def segments
-    total = type_overview.sum { |(_type, amount)| amount }
+    parts = [[:savings, savings]] + type_overview
+    total = parts.sum { |(_type, amount)| amount }
     return [] unless total.positive?
 
-    type_overview.map { |(type, amount)| Segment.new(type: type, amount: amount, percent: ((amount / total) * 100).round.clamp(0, 100)) }
+    parts.reject { |(_type, amount)| amount.zero? }
+      .map { |(type, amount)| Segment.new(type: type, amount: amount, percent: ((amount / total) * 100).round.clamp(0, 100)) }
   end
 
   def fits? = declared? && history? && !underwater?

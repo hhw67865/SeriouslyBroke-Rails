@@ -179,7 +179,7 @@ RSpec.describe "Sacrifice view", type: :system do
       cut(rules.fetch(:groceries), "Groceries", to: "500")
       click_button "Save these cuts"
 
-      expect(page).to have_content("Saved — 1 rule cut. Your rules now need $846.15 a period.")
+      expect(page).to have_content("Saved — 1 rule cut. Your savings and budget now need $846.15 a period.")
       expect(rules.fetch(:groceries).reload.amount).to eq(500)
     end
 

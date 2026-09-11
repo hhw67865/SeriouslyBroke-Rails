@@ -51,7 +51,7 @@ RSpec.describe "Budget page tiles", type: :system do
 
     visit budget_page_path
 
-    within(tile("need")) do
+    within(tile("where")) do
       expect(page).to have_css("[data-tile-figure]", text: "$1,300.00")
       expect(page).to have_css("[data-type-total='bill']", text: "$900.00")
       expect(page).to have_css("[data-type-total='usage']", text: "$400.00")
@@ -70,7 +70,7 @@ RSpec.describe "Budget page tiles", type: :system do
     expect(tile("income")).to have_css("[data-tile-figure]", text: "$2,000.00")
     expect(tile("income")).to have_css("[data-tile-cadence]", text: "Biweekly")
     expect(tile("leftover")).to have_css("[data-tile-figure]", text: "$1,100.00")
-    expect(tile("leftover")).to have_css("[data-tile-verdict]", text: "Your rules fit what you bring in.")
+    expect(tile("leftover")).to have_css("[data-tile-verdict]", text: "Your savings and your budget fit what you bring in.")
     expect(tile("leftover")).to have_no_link("What could you cut?")
   end
 
@@ -99,12 +99,27 @@ RSpec.describe "Budget page tiles", type: :system do
 
     within(tile("leftover")) do
       expect(page).to have_css("[data-tile-figure]", text: "-$1,000.00")
-      expect(page).to have_css("[data-tile-verdict]", text: "Your rules ask for more than you bring in.")
+      expect(page).to have_css("[data-tile-verdict]", text: "Your savings and your budget ask for more than you bring in.")
     end
 
     click_link "What could you cut?"
 
     expect(page).to have_content("underwater every period")
+  end
+
+  it "puts savings first in the bar and in the split line", :aggregate_failures do
+    a_period_of_income(2_000)
+    rule_on("Groceries", amount: 400)
+    create(:savings_target, account: create(:account, user: user, name: "Emergency"), amount: 100, starts_on: Date.new(2026, 9, 4))
+
+    visit budget_page_path
+
+    within(tile("where")) do
+      expect(page).to have_css("[data-tile-figure]", text: "$500.00")
+      expect(all("[data-type-band]").first["data-type-band"]).to eq("savings")
+      expect(page).to have_css("[data-tile-split]", text: "Savings $100.00 · Budget $400.00")
+    end
+    expect(tile("leftover")).to have_css("[data-tile-figure]", text: "$1,500.00")
   end
 
   it "invites a user who has said nothing to set a period", :aggregate_failures do

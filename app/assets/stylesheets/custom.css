@@ -94,6 +94,14 @@
   background-color: var(--color-dusty-teal);
 }
 
+.bg-savings {
+  background-color: var(--color-sage-800);
+}
+
+.text-savings {
+  color: var(--color-sage-800);
+}
+
 .border-brand {
   border-color: var(--color-primary);
 }

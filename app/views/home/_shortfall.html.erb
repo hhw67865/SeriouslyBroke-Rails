@@ -2,11 +2,11 @@
     anywhere, so there is nothing to move it from — the door is the Budget page. %>
 <div class="px-6 py-3 border-b border-gray-100 last:border-b-0" data-shortfall>
   <div class="flex justify-between items-baseline gap-4">
-    <%# With nothing claimed at all the shortfall is a plain overspend, and "your rules claim more"
-        would be false — Σ claims is zero. %>
+    <%# With nothing claimed at all the shortfall is a plain overspend, and "your budget and savings
+        claim more" would be false — Σ claims is zero. %>
     <span class="font-medium text-gray-900" data-shortfall-headline>
       <% if presenter.anything_claimed? %>
-        Your rules claim <%= number_to_currency(presenter.shortfall) %> more than checking holds
+        Your budget and savings claim <%= number_to_currency(presenter.shortfall) %> more than checking holds
       <% else %>
         You have spent past what you had
       <% end %>
@@ -36,8 +36,8 @@
     <ul class="mt-2 space-y-1" data-uncovered>
       <% presenter.uncovered_claims.each do |uncovered| %>
         <li class="flex justify-between items-baseline gap-4 text-sm text-gray-600"
-            data-uncovered-claim="<%= uncovered.category.name %>">
-          <span><%= uncovered.category.name %> · <%= rule_label(uncovered.line.rule) %></span>
+            data-uncovered-claim="<%= uncovered.name %>">
+          <span><%= uncovered.name %> · <%= uncovered.kind == :savings ? "savings" : rule_label(uncovered.claim_row.source) %></span>
           <span class="tabular-nums">
             <% if uncovered.whole? %>
               nothing covers its <%= number_to_currency(uncovered.claim) %>
@@ -52,7 +52,7 @@
     <%# The walk stops when it runs out of claims, so the list plus this line is the headline. %>
     <% if presenter.uncovered_remainder.positive? %>
       <p class="mt-1 text-sm text-gray-600" data-uncovered-remainder>
-        …and <%= number_to_currency(presenter.uncovered_remainder) %> past everything the rules claim.
+        …and <%= number_to_currency(presenter.uncovered_remainder) %> past everything that is claimed.
       </p>
     <% end %>
   <% end %>

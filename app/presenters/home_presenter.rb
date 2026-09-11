@@ -5,8 +5,8 @@
 class HomePresenter
   UnbudgetedRow = Data.define(:category, :spent)
   Trouble = Data.define(:kind, :subject)
-  Uncovered = Data.define(:line, :amount) do
-    delegate :category, :claim, to: :line
+  Uncovered = Data.define(:claim_row, :amount) do
+    delegate :name, :kind, :claim, to: :claim_row
     def whole? = amount >= claim
   end
   Progress = Data.define(:first, :last, :day, :days) do
@@ -43,7 +43,7 @@ class HomePresenter
 
   def in_checking = claim_ledger.pot
   def free_to_spend = claim_ledger.free
-  delegate :claimed, :budget, to: :claim_ledger
+  delegate :claimed, :budget, :savings, to: :claim_ledger
   def money_parked_elsewhere? = other_accounts_total.positive?
   def anything_claimed? = claimed.positive?
 
@@ -87,16 +87,17 @@ class HomePresenter
     (shortfall / [progress.days_left, 1].max).round(2)
   end
 
-  # Which claims give way to cover the shortfall, in give-way order.
+  # Which claims give way to cover the shortfall, in give-way order — savings included, between
+  # usage and bills.
   def uncovered_claims
     @uncovered_claims ||= begin
       remaining = short? ? shortfall : 0.to_d
-      give_way_order.each_with_object([]) do |line, list|
+      claim_ledger.claims.each_with_object([]) do |row, list|
         break list unless remaining.positive?
-        next unless line.claim.positive?
+        next unless row.claim.positive?
 
-        taken = [line.claim, remaining].min
-        list << Uncovered.new(line: line, amount: taken)
+        taken = [row.claim, remaining].min
+        list << Uncovered.new(claim_row: row, amount: taken)
         remaining -= taken
       end
     end
@@ -119,12 +120,12 @@ class HomePresenter
 
   def trouble? = troubles.any?
 
-  # Rules ask for more per period than typical income brings in.
+  # The budget and savings together ask for more per period than typical income brings in.
   def structurally_underwater?
     return @structurally_underwater if defined?(@structurally_underwater)
 
     income = typical_income
-    @structurally_underwater = user.period_cadence.present? && income.present? && budget > income
+    @structurally_underwater = user.period_cadence.present? && income.present? && budget + savings > income
   end
 
   def typical_income = @typical_income ||= account_ledger.typical_income

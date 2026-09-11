@@ -19,7 +19,7 @@
            aria-valuenow="<%= claimed %>"
            aria-valuemin="0"
            aria-valuemax="100"
-           aria-label="<%= number_to_currency(presenter.claimed) %> of <%= main_name %> claimed by your rules"
+           aria-label="<%= number_to_currency(presenter.claimed) %> of <%= main_name %> claimed"
            data-claimed-bar="<%= claimed %>">
         <div class="h-2 <%= presenter.short? ? "bg-status-danger" : "bg-brand-dark" %>"
              style="width: <%= claimed %>%;"
@@ -33,7 +33,7 @@
        data-free-subline>
       <% if presenter.free_to_spend.negative? %>
         <% if presenter.anything_claimed? %>
-          Your rules claim <%= number_to_currency(presenter.shortfall) %> more than checking holds.
+          Your budget and savings claim <%= number_to_currency(presenter.shortfall) %> more than checking holds.
         <% end %>
         <% if presenter.money_parked_elsewhere? %>
           Move some in from your other accounts.
@@ -41,7 +41,7 @@
           You have spent past what you had.
         <% end %>
       <% else %>
-        <%= number_to_currency(presenter.claimed) %> claimed by your rules
+        <%= number_to_currency(presenter.claimed) %> claimed by your budget and savings
       <% end %>
     </p>
   </div>

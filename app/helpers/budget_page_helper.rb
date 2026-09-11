@@ -4,7 +4,7 @@
 module BudgetPageHelper
   # The overview's line is a heading over a SUM of rules, so `bill` pluralises there; the label on
   # one row names ONE rule and does not. `fetch`, so a fourth type fails loudly.
-  TYPE_HEADINGS = { "bill" => "Bills", "usage" => "Usage", "choice" => "Choice" }.freeze
+  TYPE_HEADINGS = { "savings" => "Savings", "bill" => "Bills", "usage" => "Usage", "choice" => "Choice" }.freeze
 
   def rule_type_heading(type) = TYPE_HEADINGS.fetch(type.to_s)
 

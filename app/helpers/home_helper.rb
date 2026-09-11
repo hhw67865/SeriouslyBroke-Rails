@@ -12,10 +12,10 @@ module HomeHelper
 
   # A stripe fill and a text colour per rule type. `fetch`, so a fourth type added to the enum with
   # no colour fails here rather than rendering a blank column.
-  STRIPE_FILLS = { bill: "bg-brand-dark", usage: "bg-dusty-teal", choice: "bg-terracotta" }.freeze
+  STRIPE_FILLS = { savings: "bg-savings", bill: "bg-brand-dark", usage: "bg-dusty-teal", choice: "bg-terracotta" }.freeze
 
   TYPE_TEXT = {
-    bill: "text-brand-dark", usage: "text-dusty-teal-dark", choice: "text-terracotta-dark"
+    savings: "text-savings", bill: "text-brand-dark", usage: "text-dusty-teal-dark", choice: "text-terracotta-dark"
   }.freeze
 
   def stripe_fill(line) = type_fill(line.stripe_type)
