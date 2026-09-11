@@ -52,7 +52,7 @@ Plain `ActiveModel::Model` (or plain Ruby) objects that turn form params into a 
 
 ```ruby
 RuleForm.new(current_user, rule_params, rule: @rule).save
-AdjustmentForm.new(source: @rule, params: adjustment_params, name: rule_name(@rule)).save
+AdjustmentForm.new(source: @rule, params: adjustment_params, name: rule_name(@rule), today: current_user.today).save
 EntryForm.new(current_user, @entry, entry_params)
 CadenceChange.new(user: current_user, declaration: declaration_params)
 ```

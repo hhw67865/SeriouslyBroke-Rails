@@ -162,10 +162,11 @@ sentence is replaced, not kept.
   tiles: free to spend (after everything claimed is set aside; no per-day pace), checking with what
   was spent this period, claimed with its budget and savings split, and savings with what is owed.
   Then the trouble strip, only when something is wrong. Then "Coming up": every dated rule due in
-  the next 30 days with its date, amount and state (ready, set aside so far, on track). Then "This
-  period": one block per ruled category and per savings account with a target, each rule or target
-  as a row with its bar and its Adjust disclosure, under a header that carries the kinds legend in
-  give-way order. An adjustment is the one thing written from Home; everything else links out.
+  the next 30 days with its date, amount and state (ready, short, or still building, with what is
+  set aside so far). Then "This period": one block per ruled category and per savings account with
+  a target, each rule or target as a row with its bar and its Adjust disclosure, under a header
+  that carries the kinds legend in give-way order. An adjustment is the one thing written from
+  Home; everything else links out.
 - **Savings** (`/savings`): checking at the top with balance,
   claimed (budget and savings as its two lines) and free; then each savings account with its
   targets in words ("$200 a period, plus 10% of Paycheck"), what it is owed now, a Transfer button that
