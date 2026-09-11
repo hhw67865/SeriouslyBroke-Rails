@@ -56,4 +56,20 @@ RSpec.describe AccountForm do
     expect(saved).to be(false)
     expect(emergency.reload.name).to eq("Emergency")
   end
+
+  it "renames alone when no balance is typed", :aggregate_failures do
+    expect(form(emergency, { name: "Rainy day" }).save).to be(true)
+    expect(emergency.reload.name).to eq("Rainy day")
+    expect(emergency.balance).to eq(500)
+  end
+
+  it "writes nothing when the name is refused, balance included", :aggregate_failures do
+    create(:account, user: user, name: "Taken")
+
+    expect(form(emergency, { name: "taken", balance: "650" }).save).to be(false)
+    expect(emergency.errors[:name]).to be_present
+    emergency.reload
+    expect(emergency.name).to eq("Emergency")
+    expect(emergency.balance).to eq(500)
+  end
 end
