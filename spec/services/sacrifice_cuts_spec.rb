@@ -119,13 +119,27 @@ RSpec.describe SacrificeCuts do
     expect(share.reload.percent).to eq(8)
   end
 
-  it "refuses a target cut at or above its figure", :aggregate_failures do
+  it "refuses a target cut above its figure", :aggregate_failures do
     create(:account, user: user, name: "Checking")
     fixed = create(:savings_target, account: create(:account, user: user), amount: 400)
 
-    service = described_class.new(user, cuts: {}, target_cuts: { fixed.id => "400" }, today: today)
+    service = described_class.new(user, cuts: {}, target_cuts: { fixed.id => "450" }, today: today)
 
     expect(service.apply).to be(false)
     expect(service.errors.full_messages.join).to include("below")
+  end
+
+  it "leaves a target row at its figure alone, and saves the one that was dialled down", :aggregate_failures do
+    create(:account, user: user, name: "Checking")
+    emergency = create(:account, user: user, name: "Emergency")
+    fixed = create(:savings_target, account: emergency, amount: 400)
+    share = create(:savings_target, :share, account: emergency, percent: 10)
+
+    service = described_class.new(user, cuts: {}, target_cuts: { fixed.id => "250", share.id => "10" }, today: today)
+
+    expect(service.apply).to be(true)
+    expect(service.count).to eq(1)
+    expect(fixed.reload.amount).to eq(250)
+    expect(share.reload.percent).to eq(10)
   end
 end

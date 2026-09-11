@@ -65,13 +65,12 @@ class SacrificeCuts
     errors.empty?
   end
 
-  # A fixed target takes the typed amount, a share the typed percent. Unlike a rule's line, a
-  # figure equal to the target's own current figure is refused rather than treated as a no-op: the
-  # form always resubmits every target row, touched or not, so "left alone" has to mean "absent
-  # from target_cuts", never "typed back the same number".
+  # nil for a row left at its figure, exactly as for a rule's line. A fixed target takes the typed
+  # amount, a share the typed percent.
   def target_line_for(target_id, typed)
     target = user.savings_targets.find(target_id)
     current = target.share? ? target.percent.to_d : target.amount.to_d
+    return nil if positive_number?(typed) && typed.to_s.to_d == current
     return { target: target, attributes: nil } unless target_check?(target, current, typed)
 
     { target: target, attributes: target.share? ? { percent: typed.to_s.to_d } : { amount: typed.to_s.to_d } }
@@ -81,7 +80,7 @@ class SacrificeCuts
     name = "#{target.account.name}'s #{target.share? ? "share" : "target"}"
     if !positive_number?(typed)
       errors.add(:base, "#{name} cut needs a positive #{target.share? ? "percent" : "amount"}")
-    elsif typed.to_s.to_d >= current
+    elsif typed.to_s.to_d > current
       errors.add(:base, "#{name} cut must be below what it asks for now")
     end
     errors.empty?
