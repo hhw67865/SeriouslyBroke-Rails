@@ -10,7 +10,7 @@ RSpec.describe SacrificeCuts do
     create(:rule, *traits, category: create(:category, user: user, name: name), starts_on: Date.new(2026, 1, 1), **attributes)
   end
 
-  def cuts_for(map) = described_class.new(user, cuts: map, today: today)
+  def cuts_for(map) = described_class.new(user, cuts: map, target_cuts: {}, today: today)
 
   it "writes the typed amount straight onto a per-period rule", :aggregate_failures do
     rule = rule_on("Groceries", :rate, amount: 800)
@@ -62,7 +62,7 @@ RSpec.describe SacrificeCuts do
     service = cuts_for(rule.id => printed)
 
     expect(service.apply).to be(false)
-    expect(service.errors.full_messages).to eq(["Dial a rule down to cut it first"])
+    expect(service.errors.full_messages).to eq(["Dial a rule or a savings target down to cut it first"])
     expect(rule.reload.amount).to eq(1_000)
   end
 
@@ -103,5 +103,29 @@ RSpec.describe SacrificeCuts do
     expect(service.apply).to be(false)
     expect(groceries.reload.amount).to eq(800)
     expect(insurance.reload.amount).to eq(600)
+  end
+
+  it "writes a lower amount on a fixed target and a lower percent on a share", :aggregate_failures do
+    create(:account, user: user, name: "Checking")
+    emergency = create(:account, user: user, name: "Emergency")
+    fixed = create(:savings_target, account: emergency, amount: 400)
+    share = create(:savings_target, :share, account: emergency, percent: 10)
+
+    service = described_class.new(user, cuts: {}, target_cuts: { fixed.id => "250", share.id => "8" }, today: today)
+
+    expect(service.apply).to be(true)
+    expect(service.count).to eq(2)
+    expect(fixed.reload.amount).to eq(250)
+    expect(share.reload.percent).to eq(8)
+  end
+
+  it "refuses a target cut at or above its figure", :aggregate_failures do
+    create(:account, user: user, name: "Checking")
+    fixed = create(:savings_target, account: create(:account, user: user), amount: 400)
+
+    service = described_class.new(user, cuts: {}, target_cuts: { fixed.id => "400" }, today: today)
+
+    expect(service.apply).to be(false)
+    expect(service.errors.full_messages.join).to include("below")
   end
 end

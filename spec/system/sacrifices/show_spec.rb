@@ -80,7 +80,7 @@ RSpec.describe "Sacrifice view", type: :system do
     # user arriving from that button meets the number they just read.
     it "opens on the gap and the figures behind it", :aggregate_failures do
       expect(figure("gap")).to have_content("$146.15 underwater every period")
-      expect(figure("rules-need")).to have_content("$1,146.15")
+      expect(figure("budget")).to have_content("$1,146.15")
       expect(figure("typical-income")).to have_content("$1,000.00")
     end
 
@@ -179,7 +179,7 @@ RSpec.describe "Sacrifice view", type: :system do
       cut(rules.fetch(:groceries), "Groceries", to: "500")
       click_button "Save these cuts"
 
-      expect(page).to have_content("Saved — 1 rule cut. Your savings and budget now need $846.15 a period.")
+      expect(page).to have_content("Saved — 1 cut. Your savings and budget now need $846.15 a period.")
       expect(rules.fetch(:groceries).reload.amount).to eq(500)
     end
 
@@ -207,6 +207,50 @@ RSpec.describe "Sacrifice view", type: :system do
     end
   end
 
+  # Savings targets get their own section: a fixed target is cut by amount, a share by percent, and
+  # both save through SacrificeCuts alongside any rule cuts.
+  describe "savings targets" do
+    let(:emergency) { create(:account, user: user, name: "Emergency") }
+    let(:paycheck) { create(:item, :income, category: salary, name: "Paycheck") }
+
+    before do
+      rate_rule("Fun", 300)
+      create(:rule, :rolling, :bill, category: category("Rent"), amount: 2_000, anchor_date: Date.new(2026, 10, 1), interval_months: 1, starts_on: Date.new(2026, 1, 1))
+    end
+
+    context "with a fixed and a share target" do
+      before do
+        [Date.new(2026, 8, 7), Date.new(2026, 8, 25)].each { |on| create(:entry, item: paycheck, amount: 500, date: on) }
+        create(:savings_target, account: emergency, amount: 400, starts_on: Date.new(2026, 9, 4))
+        create(:savings_target, :share, account: emergency, item: paycheck, percent: 10, starts_on: Date.new(2026, 9, 4))
+        visit sacrifice_path
+      end
+
+      it "lists each savings target in its own section and dials a share by percent", :aggregate_failures, :js do
+        expect(page).to have_css("[data-figure='savings']", text: "$450.00")
+        within("[data-sacrifice-target='#{SavingsTarget.shares.sole.id}']") do
+          expect(page).to have_content("Emergency · 10% of Paycheck")
+          expect(page).to have_css("[data-role='claim']", text: "$50.00 a period")
+          find("input[type='checkbox']").check
+          find("input[name='target_cuts[#{SavingsTarget.shares.sole.id}]']").fill_in(with: "6")
+          expect(page).to have_css("[data-role='row-frees']", text: "frees $20.00")
+        end
+        expect(page).to have_css("[data-figure='frees']", text: "$20.00 a period")
+      end
+    end
+
+    it "saves a target cut", :aggregate_failures do
+      fixed = create(:savings_target, account: emergency, amount: 400, starts_on: Date.new(2026, 9, 4))
+
+      visit sacrifice_path
+      find("input[name='target_cuts[#{fixed.id}]']").fill_in(with: "250")
+      click_button "Save these cuts"
+
+      expect(page).to have_content("Saved — 1 cut.")
+      expect(fixed.reload.amount).to eq(250)
+    end
+  end
+
   # The page refuses in exactly the two states the Budget page's button is not shown in, so the
   # route's gate and the tile's are one condition read twice.
   describe "the two states this page refuses", :aggregate_failures do
@@ -215,7 +259,7 @@ RSpec.describe "Sacrifice view", type: :system do
 
       visit sacrifice_path
 
-      expect(page).to have_content("Your rules already fit what you bring in")
+      expect(page).to have_content("Your savings and budget already fit what you bring in")
       expect(page).to have_css("[data-tiles]")
     end
 

@@ -1,17 +1,18 @@
 # frozen_string_literal: true
 
-# The figures dialled on the sacrifice page, written to the rules they came from. A row left at its
-# claim is untouched; a cut is refused, and nothing is written, when the rule is fixed, the figure
-# is not a positive number, or it is above the rule's own claim.
+# The figures dialled on the sacrifice page, written to the rules and savings targets they came
+# from. A row left at its own figure is untouched; a cut is refused, and nothing is written, when
+# the rule is fixed, the figure is not a positive number, or it is at or above the row's own figure.
 class SacrificeCuts
   include ActiveModel::Model
 
   attr_reader :user, :today, :count
 
-  def initialize(user, cuts:, today: user.today)
+  def initialize(user, cuts:, target_cuts: {}, today: user.today)
     @user = user
     @today = today
     @cuts = cuts.to_h
+    @target_cuts = target_cuts.to_h
     @count = 0
   end
 
@@ -19,10 +20,10 @@ class SacrificeCuts
     written = false
     ActiveRecord::Base.transaction do
       lines = @cuts.filter_map { |rule_id, typed| line_for(rule_id, typed) }
-      raise ActiveRecord::Rollback if errors.any? || nothing_dialled?(lines)
+      targets = @target_cuts.filter_map { |target_id, typed| target_line_for(target_id, typed) }
+      raise ActiveRecord::Rollback if errors.any? || nothing_dialled?(lines + targets)
 
-      lines.each { |line| line.fetch(:rule).update!(amount: line.fetch(:amount)) }
-      @count = lines.size
+      write!(lines, targets)
       written = true
     end
     written
@@ -30,10 +31,16 @@ class SacrificeCuts
 
   private
 
+  def write!(lines, targets)
+    lines.each { |line| line.fetch(:rule).update!(amount: line.fetch(:amount)) }
+    targets.each { |line| line.fetch(:target).update!(line.fetch(:attributes)) }
+    @count = lines.size + targets.size
+  end
+
   def nothing_dialled?(lines)
     return false if lines.any?
 
-    errors.add(:base, "Dial a rule down to cut it first")
+    errors.add(:base, "Dial a rule or a savings target down to cut it first")
     true
   end
 
@@ -54,6 +61,28 @@ class SacrificeCuts
       errors.add(:base, "#{name_for(rule)}'s cut needs a positive amount")
     elsif typed.to_s.to_d > claim
       errors.add(:base, "#{name_for(rule)}'s cut must be below what it asks for now")
+    end
+    errors.empty?
+  end
+
+  # A fixed target takes the typed amount, a share the typed percent. Unlike a rule's line, a
+  # figure equal to the target's own current figure is refused rather than treated as a no-op: the
+  # form always resubmits every target row, touched or not, so "left alone" has to mean "absent
+  # from target_cuts", never "typed back the same number".
+  def target_line_for(target_id, typed)
+    target = user.savings_targets.find(target_id)
+    current = target.share? ? target.percent.to_d : target.amount.to_d
+    return { target: target, attributes: nil } unless target_check?(target, current, typed)
+
+    { target: target, attributes: target.share? ? { percent: typed.to_s.to_d } : { amount: typed.to_s.to_d } }
+  end
+
+  def target_check?(target, current, typed)
+    name = "#{target.account.name}'s #{target.share? ? "share" : "target"}"
+    if !positive_number?(typed)
+      errors.add(:base, "#{name} cut needs a positive #{target.share? ? "percent" : "amount"}")
+    elsif typed.to_s.to_d >= current
+      errors.add(:base, "#{name} cut must be below what it asks for now")
     end
     errors.empty?
   end

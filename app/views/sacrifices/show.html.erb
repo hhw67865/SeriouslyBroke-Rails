@@ -3,7 +3,7 @@
 <% content_for :title, "What could you cut?" %>
 
 <%= page_header(title: "What could you cut?",
-                subtitle: "Your rules ask for more than you bring in. This is what would have to give.") %>
+                subtitle: "Your savings and your budget ask for more than you bring in. This is what would have to give.") %>
 
 <div class="space-y-6"
      data-controller="app--sacrifice--dial"
@@ -15,7 +15,8 @@
       <%= number_to_currency(@presenter.gap) %> underwater every period
     </h2>
     <p class="mt-2 text-sm text-gray-600">
-      Your rules need <strong data-figure="rules-need"><%= number_to_currency(@presenter.budget) %></strong>.
+      Your budget is <strong data-figure="budget"><%= number_to_currency(@presenter.budget) %></strong>
+      and your savings take <strong data-figure="savings"><%= number_to_currency(@presenter.savings) %></strong>.
       You typically bring home <strong data-figure="typical-income"><%= number_to_currency(@presenter.typical_income) %></strong>.
     </p>
 
@@ -40,12 +41,13 @@
   <section class="bg-white border border-gray-200 rounded">
   <%= form_with url: sacrifice_path, method: :patch, data: { sacrifice_form: true } do |f| %>
     <div class="px-6 py-4 border-b border-gray-200">
-      <h3 class="text-sm font-semibold text-gray-900">What could you cut?</h3>
+      <h3 class="text-sm font-semibold text-gray-900">Your budget</h3>
       <%# The order is part of the offer, so it is said: unexplained, it reads as arbitrary. %>
       <p class="mt-1 text-sm text-gray-500" data-cut-list-order>
         Type what to keep each rule at, per period. Save writes the rules you dialled down; a rule
         left at its figure stays as it is. To drop a rule entirely, delete it on the Budget page.
-        The biggest claim is first, so the cuts that close the gap fastest are at the top.
+        The biggest claim is first, so the cuts that close the gap fastest are at the top. Choices
+        give way first, then usage. A bill is what it is.
       </p>
     </div>
 
@@ -66,7 +68,8 @@
       <div class="px-6 py-3 border-b border-gray-100 flex flex-wrap items-center gap-x-4 gap-y-2"
            data-sacrifice-row="<%= row.rule.id %>"
            data-app--sacrifice--dial-target="row"
-           data-claim="<%= row.claim_param %>">
+           data-claim="<%= row.claim_param %>"
+           data-kind="amount">
         <label class="flex-1 min-w-40 text-sm font-medium text-gray-900" for="cut-amount-<%= row.rule.id %>">
           <%= rule_name(row.rule) %>
         </label>
@@ -136,6 +139,40 @@
                     edit_rule_path(row.rule),
                     class: "btn btn-secondary whitespace-nowrap",
                     data: { rule_edit_link: true } %>
+      </div>
+    <% end %>
+
+    <div class="px-6 py-4 border-y border-gray-200 mt-2">
+      <h3 class="text-sm font-semibold text-gray-900">Your savings</h3>
+      <p class="mt-1 text-sm text-gray-500">One row per target. Lower a fixed amount, or lower a share's percent. Savings gives way after usage and before bills.</p>
+    </div>
+    <% @presenter.target_rows.each do |row| %>
+      <div class="px-6 py-3 border-b border-gray-100 flex flex-wrap items-center gap-x-4 gap-y-2"
+           data-sacrifice-target="<%= row.target.id %>"
+           data-app--sacrifice--dial-target="row"
+           data-claim="<%= row.claim_param %>"
+           data-kind="<%= row.share? ? "percent" : "amount" %>"
+           data-percent="<%= row.percent_param %>"
+           data-income="<%= row.income_param %>">
+        <input type="checkbox" id="cut-target-<%= row.target.id %>" class="form-checkbox" aria-label="Cut <%= row.name %>"
+               data-app--sacrifice--dial-target="toggle" data-action="change->app--sacrifice--dial#recompute">
+        <label class="flex-1 min-w-40 text-sm font-medium text-gray-900" for="cut-target-amount-<%= row.target.id %>"><%= row.name %></label>
+        <span class="text-sm text-gray-600 tabular-nums" data-role="claim"><%= number_to_currency(row.ask) %> a period</span>
+        <div class="flex items-center gap-2">
+          <span class="text-sm text-gray-500">cut to</span>
+          <input type="number" id="cut-target-amount-<%= row.target.id %>" class="form-input w-28 tabular-nums"
+                 step="<%= row.share? ? 1 : 0.01 %>" min="0" <%= "max=100" if row.share? %>
+                 name="target_cuts[<%= row.target.id %>]"
+                 value="<%= @typed_targets&.dig(row.target.id.to_s) || (row.share? ? row.percent_param : row.claim_param) %>"
+                 aria-label="Cut <%= row.name %> to"
+                 data-app--sacrifice--dial-target="amount"
+                 data-action="input->app--sacrifice--dial#recompute change->app--sacrifice--dial#recompute">
+          <% if row.share? %><span class="text-sm text-gray-500">%</span><% end %>
+        </div>
+        <span class="text-sm text-gray-600 tabular-nums w-32 text-right" data-role="row-frees">
+          frees <span data-app--sacrifice--dial-target="rowFrees"><%= number_to_currency(0) %></span>
+        </span>
+        <%= link_to "Edit the target", edit_account_path(row.target.account), class: "btn btn-secondary whitespace-nowrap" %>
       </div>
     <% end %>
 

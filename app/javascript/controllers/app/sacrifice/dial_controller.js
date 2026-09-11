@@ -3,14 +3,15 @@ import { Controller } from "@hotwired/stimulus"
 // The what-if dial: arithmetic over figures the server already printed, in per-period units
 // throughout (`Rule#ask`, never `rule.amount`) and in integer cents, never float dollars.
 export default class extends Controller {
-  static targets = ["row", "amount", "rowFrees", "freed", "verdict", "save", "edit", "undo"]
+  static targets = ["row", "amount", "toggle", "rowFrees", "freed", "verdict", "save", "edit", "undo"]
   // Dollars on the attribute (that is what the server prints), cents inside — see #cents.
   static values = { gap: Number }
 
-  // Every row opens read-only: the input is live only after Edit, and Undo closes it again, so a
-  // disabled input is a row the save will not carry.
+  // A rule row opens read-only: the input is live only after Edit, and Undo closes it again, so a
+  // disabled input is a row the save will not carry. A savings target row has no Edit button — its
+  // checkbox is the toggle instead — so only rows with one are closed here.
   connect() {
-    this.rowTargets.forEach((row) => this.close(row))
+    this.rowTargets.forEach((row) => { if (this.fieldFor(row, "edit")) this.close(row) })
     this.recompute()
   }
 
@@ -58,16 +59,22 @@ export default class extends Controller {
     this.saveTarget.disabled = freed === 0
   }
 
-  // Cutting TO a figure, so `claim - typed` clamped into [0, claim]: a row left at its claim frees
-  // nothing, and the figure typed is the whole statement.
+  // Cutting TO a figure. An amount row frees `claim - typed`; a percent row frees the difference
+  // between its percent and the typed percent, of its item's typical income. Clamped into
+  // [0, claim]. A rule row (no checkbox) frees nothing while its input is disabled; a savings
+  // target row (no Edit button) frees nothing while its checkbox is unchecked.
   freedBy(row) {
+    const toggle = this.fieldFor(row, "toggle")
     const input = this.fieldFor(row, "amount")
-    if (input.disabled) return 0
+    if (toggle ? !toggle.checked : input.disabled) return 0
 
     const claim = this.cents(parseFloat(row.dataset.claim))
-    const typed = this.cents(parseFloat(input.value))
+    const typed = parseFloat(input.value)
+    const kept = row.dataset.kind === "percent"
+      ? this.cents((Number.isFinite(typed) ? typed : 0) / 100 * parseFloat(row.dataset.income))
+      : this.cents(typed)
 
-    return Math.min(Math.max(claim - typed, 0), claim)
+    return Math.min(Math.max(claim - kept, 0), claim)
   }
 
   // Positive means still short, so this can say what the server's unwinnable statement says.

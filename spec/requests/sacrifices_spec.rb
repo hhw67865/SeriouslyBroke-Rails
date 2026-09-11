@@ -33,7 +33,7 @@ RSpec.describe "Sacrifices" do
     )
 
     expect(response).to redirect_to(budget_page_path)
-    expect(flash[:notice]).to eq("Saved — 2 rules cut. Your savings and budget now need $750.00 a period.")
+    expect(flash[:notice]).to eq("Saved — 2 cuts. Your savings and budget now need $750.00 a period.")
     expect(groceries_rule.reload.amount).to eq(700)
     expect(fun_rule.reload.amount).to eq(50)
   end
@@ -42,7 +42,7 @@ RSpec.describe "Sacrifices" do
     patch_cuts(groceries_rule.id => "750")
 
     expect(response).to redirect_to(sacrifice_path)
-    expect(flash[:notice]).to eq("Saved — 1 rule cut. Still $50.00 underwater a period.")
+    expect(flash[:notice]).to eq("Saved — 1 cut. Still $50.00 underwater a period.")
     expect(groceries_rule.reload.amount).to eq(750)
   end
 
@@ -58,7 +58,7 @@ RSpec.describe "Sacrifices" do
     patch_cuts(groceries_rule.id => "800")
 
     expect(response).to have_http_status(:unprocessable_content)
-    expect(response.body).to include("Dial a rule down to cut it first")
+    expect(response.body).to include("Dial a rule or a savings target down to cut it first")
     expect(groceries_rule.reload.amount).to eq(800)
   end
 
