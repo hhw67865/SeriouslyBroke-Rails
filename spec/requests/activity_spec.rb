@@ -20,8 +20,8 @@ RSpec.describe "Activity" do
   it "renders rows for entries, transfers and adjustments", :aggregate_failures do
     groceries = create(:category, user: user, name: "Groceries")
     emergency = create(:account, user: user, name: "Emergency")
-    create(:entry, item: create(:item, category: groceries, name: "Bread"), amount: 5, date: Date.current)
-    create(:transfer, from_account: user.accounts.find_by!(name: "Checking"), to_account: emergency, amount: 20, date: Date.current)
+    create(:entry, item: create(:item, category: groceries, name: "Bread"), amount: 5, date: Date.new(2026, 9, 5))
+    create(:transfer, from_account: user.accounts.find_by!(name: "Checking"), to_account: emergency, amount: 20, date: Date.new(2026, 9, 6))
 
     get activity_path
 

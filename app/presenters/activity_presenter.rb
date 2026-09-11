@@ -4,7 +4,7 @@
 # each saying what it was, what it moved, and where to edit or undo it.
 class ActivityPresenter
   PER_PAGE = 50
-  Row = Data.define(:kind, :date, :created_at, :words, :amount, :edit_path, :remove_path, :remove_confirm) do
+  Row = Data.define(:kind, :date, :created_at, :words, :amount, :color, :edit_path, :remove_path, :remove_confirm) do
     def entry? = kind == :entry
     def transfer? = kind == :transfer
     def adjustment? = kind == :adjustment
@@ -38,6 +38,7 @@ class ActivityPresenter
       created_at: entry.created_at,
       words: "#{entry.item.name} · #{entry.category.name}",
       amount: entry_amount(entry),
+      color: entry.category.display_color,
       edit_path: edit_entry_path(entry, previous_url: activity_path),
       remove_path: entry_path(entry, return: "activity"),
       remove_confirm: "Remove this entry? Your balances will change."
@@ -55,6 +56,7 @@ class ActivityPresenter
         created_at: transfer.created_at,
         words: "#{transfer.from_account.name} → #{transfer.to_account.name}",
         amount: transfer.amount.to_d,
+        color: nil,
         edit_path: nil,
         remove_path: transfer_path(transfer, return: "activity"),
         remove_confirm: "Remove this transfer? The money goes back where it came from."
@@ -62,19 +64,28 @@ class ActivityPresenter
     end
   end
 
+  # Two separate loads, not one polymorphic `or`: a rule-sourced adjustment needs its rule's item
+  # and category preloaded, and an account-sourced one only needs the account, so each half
+  # preloads its own tree instead of one shared `includes(:source)` that leaves the rule's
+  # item/category to N+1.
   def adjustment_rows
-    Adjustment.where(source: user.rules).or(Adjustment.where(source: user.accounts)).includes(:source).map do |change|
-      Row.new(
-        kind: :adjustment,
-        date: change.date,
-        created_at: change.created_at,
-        words: "#{adjustment_name(change)} · #{adjustment_verb(change)}",
-        amount: change.amount.to_d,
-        edit_path: nil,
-        remove_path: adjustment_path(change, return: "activity"),
-        remove_confirm: "Remove this adjustment?"
-      )
-    end
+    rule_adjustments = Adjustment.on_rules(user.rules.select(:id)).includes(source: [:item, :category])
+    account_adjustments = Adjustment.on_accounts(user.accounts.select(:id)).includes(:source)
+    (rule_adjustments.to_a + account_adjustments.to_a).map { |change| adjustment_row(change) }
+  end
+
+  def adjustment_row(change)
+    Row.new(
+      kind: :adjustment,
+      date: change.date,
+      created_at: change.created_at,
+      words: "#{adjustment_name(change)} · #{adjustment_verb(change)}",
+      amount: change.amount.to_d,
+      color: nil,
+      edit_path: nil,
+      remove_path: adjustment_path(change, return: "activity"),
+      remove_confirm: "Remove this adjustment?"
+    )
   end
 
   def adjustment_name(change) = change.rule? ? (change.source.item&.name || change.source.category.name) : change.source.name

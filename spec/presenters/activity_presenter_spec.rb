@@ -33,4 +33,16 @@ RSpec.describe ActivityPresenter do
     60.times { |n| create(:entry, item: bread, amount: 1, date: Date.new(2026, 9, 1) - n) }
     expect(described_class.new(user: user, page: 2).rows.size).to eq(10)
   end
+
+  it "loads rule-sourced adjustments in a fixed number of queries, not one per category" do
+    categories = Array.new(3) { |n| create(:category, user: user, name: "Category #{n}") }
+    rules = categories.map { |category| create(:rule, :rate, amount: 100, category: category, starts_on: Date.new(2026, 1, 1)) }
+    rules.each { |rule| create_list(:adjustment, 2, source: rule, amount: -10, date: Date.new(2026, 9, 8)) }
+    queries = 0
+    counter = ->(_name, _start, _finish, _id, payload) { queries += 1 unless ["SCHEMA", "CACHE"].include?(payload[:name]) }
+
+    ActiveSupport::Notifications.subscribed(counter, "sql.active_record") { described_class.new(user: user, page: nil).rows }
+
+    expect(queries).to be <= 8
+  end
 end

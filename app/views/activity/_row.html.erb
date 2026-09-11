@@ -1,7 +1,12 @@
 <% if card %>
   <div class="p-4 hover:bg-gray-50 transition-colors" data-activity-row="<%= row.kind %>">
     <div class="flex items-center justify-between mb-2">
-      <%= activity_kind_badge(row) %>
+      <span class="inline-flex items-center gap-2">
+        <%= activity_kind_badge(row) %>
+        <% if row.color.present? %>
+          <span class="w-3 h-3 rounded-sm shrink-0" data-category-dot style="background-color: <%= row.color %>;"></span>
+        <% end %>
+      </span>
       <span class="text-base font-semibold <%= activity_amount_class(row) %>"><%= activity_amount(row) %></span>
     </div>
     <div class="flex justify-between items-start">
@@ -13,17 +18,26 @@
         <% if row.edit_path %>
           <%= link_to "Edit", row.edit_path, class: "text-status-info hover:opacity-80 transition-colors duration-200" %>
         <% end %>
-        <%= button_to "Remove", 
-row.remove_path, 
-method: :delete,
+        <%= button_to(
+              "Remove",
+              row.remove_path,
+              method: :delete,
               class: "text-status-danger hover:opacity-80 transition-colors duration-200",
-              form: { data: { turbo_confirm: row.remove_confirm } } %>
+              form: { data: { turbo_confirm: row.remove_confirm } }
+            ) %>
       </div>
     </div>
   </div>
 <% else %>
   <tr class="hover:bg-gray-50 transition-colors duration-200" data-activity-row="<%= row.kind %>">
-    <td class="px-6 py-4 whitespace-nowrap"><%= activity_kind_badge(row) %></td>
+    <td class="px-6 py-4 whitespace-nowrap">
+      <span class="inline-flex items-center gap-2">
+        <%= activity_kind_badge(row) %>
+        <% if row.color.present? %>
+          <span class="w-3 h-3 rounded-sm shrink-0" data-category-dot style="background-color: <%= row.color %>;"></span>
+        <% end %>
+      </span>
+    </td>
     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900"><%= row.date.strftime("%b %-d") %></td>
     <td class="px-6 py-4 text-sm text-gray-900"><%= row.words %></td>
     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-right <%= activity_amount_class(row) %>"><%= activity_amount(row) %></td>
@@ -32,11 +46,13 @@ method: :delete,
         <% if row.edit_path %>
           <%= link_to "Edit", row.edit_path, class: "text-status-info hover:opacity-80 transition-colors duration-200" %>
         <% end %>
-        <%= button_to "Remove", 
-row.remove_path, 
-method: :delete,
+        <%= button_to(
+              "Remove",
+              row.remove_path,
+              method: :delete,
               class: "text-status-danger hover:opacity-80 transition-colors duration-200",
-              form: { data: { turbo_confirm: row.remove_confirm } } %>
+              form: { data: { turbo_confirm: row.remove_confirm } }
+            ) %>
       </div>
     </td>
   </tr>

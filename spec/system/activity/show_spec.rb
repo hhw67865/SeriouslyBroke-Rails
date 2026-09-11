@@ -26,19 +26,26 @@ RSpec.describe "Activity", type: :system do
     expect(page).to have_content("Nothing has happened yet. Log an entry and it shows up here.")
   end
 
-  it "lists an entry, a transfer and an adjustment newest first with their words and amounts", :aggregate_failures do
-    create(:entry, item: create(:item, category: groceries, name: "Bread"), amount: 5, date: today - 2)
-    emergency = create(:account, user: user, name: "Emergency")
-    create(:transfer, from_account: checking, to_account: emergency, amount: 40, date: today - 1)
-    rule = create(:rule, :rate, amount: 400, category: groceries, starts_on: Date.new(2026, 1, 1))
-    create(:adjustment, source: rule, amount: -50, date: today)
+  describe "the list", :aggregate_failures do
+    before do
+      create(:entry, item: create(:item, category: groceries, name: "Bread"), amount: 5, date: today - 2)
+      emergency = create(:account, user: user, name: "Emergency")
+      create(:transfer, from_account: checking, to_account: emergency, amount: 40, date: today - 1)
+      rule = create(:rule, :rate, amount: 400, category: groceries, starts_on: Date.new(2026, 1, 1))
+      create(:adjustment, source: rule, amount: -50, date: today)
+      visit activity_path
+    end
 
-    visit activity_path
+    it "shows an entry, a transfer and an adjustment newest first with their words and amounts" do
+      expect(all("tbody [data-activity-row]").pluck("data-activity-row")).to eq(["adjustment", "transfer", "entry"])
+      expect(row("entry")).to have_content("Bread · Groceries").and have_content("$5.00")
+      expect(row("transfer")).to have_content("Checking → Emergency").and have_content("$40.00")
+      expect(row("adjustment")).to have_content("Groceries · reduced").and have_content("$50.00")
+    end
 
-    expect(all("tbody [data-activity-row]").pluck("data-activity-row")).to eq(["adjustment", "transfer", "entry"])
-    expect(row("entry")).to have_content("Bread · Groceries").and have_content("$5.00")
-    expect(row("transfer")).to have_content("Checking → Emergency").and have_content("$40.00")
-    expect(row("adjustment")).to have_content("Groceries · reduced").and have_content("$50.00")
+    it "marks the entry's badge with its category's colour dot" do
+      expect(row("entry")).to have_css("[data-category-dot]")
+    end
   end
 
   it "removes a transfer from its row and returns to Activity with a notice", :aggregate_failures do
