@@ -30,6 +30,7 @@ bin/rails tailwindcss:build  # Rebuild CSS (required when adding new utility cla
 
 All coding standards and patterns are documented in `/docs/`:
 
+- **`docs/decisions.md`** - How the app works and what has been decided: vocabulary, money, rules, savings, claims, adjustments, give-way order, screens. Present tense only, never history. Read it before designing or changing any behaviour; update it when a decision changes, replacing the old sentence rather than keeping it.
 - **`docs/coding-standards.md`** - Architecture, custom patterns (Presenter, Calculator, Searchable), and key principles (Fat Models/Skinny Controllers, DRY, RESTful design)
 - **`docs/design-standards.md`** - S-Tier SaaS design checklist (colors, typography, spacing, components, accessibility)
 - **`docs/searchable-system-reference.md`** - Complete reference for the searchable DSL system
