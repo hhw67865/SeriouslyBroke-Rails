@@ -33,7 +33,7 @@ class DemoHousehold
     @user = User.create!(email: "demo@example.com", password: "password123", name: "Demo User", timezone: @timezone)
     @today = Time.find_zone!(@user.timezone).today
     @user.update!(period_cadence: :biweekly, period_anchor_date: @today)
-    @demo_start = periods_ago(13)
+    @demo_start = periods_ago(14)
   end
 
   def create_accounts!
@@ -76,9 +76,11 @@ class DemoHousehold
 
   def create_rules!
     rule(@rent, item: @rent_item, amount: 1_500, interval_months: 1, anchor_date: @today + 10, rule_type: :bill)
-    rule(@utilities, item: @electric, amount: 120, interval_months: 1, anchor_date: @today - 10)
+    rule(@utilities, item: @electric, amount: 118, interval_months: 1, anchor_date: @today - 10)
     rule(@dentist, amount: 300, anchor_date: @today + 3, rule_type: :bill)
-    rule(@car_insurance, amount: 1_200, interval_months: 6, anchor_date: @today + 1.month, rule_type: :bill)
+    # Started inside its current six-month cycle: a bill's due dates run back to its start, and
+    # nothing was paid before this one.
+    rule(@car_insurance, amount: 1_200, interval_months: 6, anchor_date: @today + 1.month, rule_type: :bill, starts_on: @today - 4.months)
     rule(@dining, amount: 100, rule_type: :choice)
     rule(@groceries, amount: 400)
     rule(@pet_care, amount: 60, keeps_unspent: true)
@@ -104,7 +106,7 @@ class DemoHousehold
   # The five things that land every period, whoever's turn it is. Returns payday so the
   # every-other-period entries below can anchor to the same date.
   def log_regular_entries(cycle)
-    payday = periods_ago(13 - cycle)
+    payday = periods_ago(14 - cycle)
     log(@paycheck, 2_050, payday, "Fortnightly pay")
     log(@supermarket, 180, payday + 2)
     log(@supermarket, 165, payday + 9)
@@ -123,7 +125,7 @@ class DemoHousehold
   end
 
   def create_transfers_and_adjustments!
-    (1..13).each { |cycle| Transfer.create!(from_account: @checking, to_account: @ally, amount: 250, date: periods_ago(13 - cycle) + 1) }
+    (1..13).each { |cycle| Transfer.create!(from_account: @checking, to_account: @ally, amount: 250, date: periods_ago(14 - cycle) + 1) }
     Transfer.create!(from_account: @checking, to_account: @brokerage, amount: 300, date: @today - 7)
     Adjustment.create!(source: Rule.find_by!(category: @vacation, item_id: nil), amount: 250, date: @today - 3)
     Adjustment.create!(source: Rule.find_by!(category: @dining, item_id: nil), amount: -20, date: @today - 1)

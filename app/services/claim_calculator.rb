@@ -52,7 +52,7 @@ class ClaimCalculator
   def over? = rate? ? raw_rate.negative? : walk.raw.negative?
   def raw_rate = accrued_this_period - spent_this_period
   def over_by = rate? ? -raw_rate : -walk.raw
-  def next_due_on = dated? ? due_on(today, walk.paid) : nil
+  def next_due_on = dated? ? due_on(walk.paid) : nil
   def overdue? = next_due_on.present? && next_due_on < today && !settled?
   def settled? = one_time? && settled_by?(walk.paid)
 
@@ -116,7 +116,7 @@ class ClaimCalculator
   end
 
   def step(state, period)
-    state.planned = planned_for(period, state, due_on(period.first, state.paid))
+    state.planned = planned_for(period, state, due_on(state.paid))
     settle(state, accrued_in(state, period), spent_within(period))
   end
 
@@ -151,26 +151,26 @@ class ClaimCalculator
     spending_rows.select { |day, _amount| counts_spending_on?(day) }.sort_by(&:first)
   end
 
-  # A one-off is due on its date. A rolling rule's date advances one interval per target paid,
-  # never past the cycle the calendar has reached.
-  def due_on(date, paid)
+  # A one-off is due on its date. A rolling rule's due dates are a series — the anchor stepped by
+  # the interval, forward and back — and each target paid settles the earliest open one, so the
+  # next due date is the first not yet covered. Paying ahead settles further dates; no cap.
+  def due_on(paid)
     return nil if anchor.blank?
     return anchor if rule.interval_months.nil? || !target.positive?
 
-    anchor + (cycles_paid_by(date, paid) * rule.interval_months).months
+    due_at(first_due_index + (paid / target).floor)
   end
 
-  def cycles_paid_by(date, paid) = [(paid / target).floor, elapsed_cycles(date)].min
+  def due_at(index) = anchor + (index * rule.interval_months).months
 
-  def elapsed_cycles(date)
-    return 0 if date < anchor
-
-    (months_since_anchor(date) / rule.interval_months) + 1
-  end
-
-  def months_since_anchor(date)
-    months = ((date.year * 12) + date.month) - ((anchor.year * 12) + anchor.month)
-    date.day < anchor.day ? months - 1 : months
+  # The series index of the first due date on or after the rule's start.
+  def first_due_index
+    @first_due_index ||= begin
+      index = 0
+      index -= 1 while due_at(index - 1) >= rule.starts_on
+      index += 1 while due_at(index) < rule.starts_on
+      index
+    end
   end
 
   def periods

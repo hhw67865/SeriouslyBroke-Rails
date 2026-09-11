@@ -51,6 +51,7 @@ RSpec.describe "Budget page rules", type: :system do
     )
   end
 
+  # Started after the April due date, so October 1 is the first due date in its window.
   def rolling_bill(owner)
     create(
       :rule,
@@ -59,7 +60,7 @@ RSpec.describe "Budget page rules", type: :system do
       amount: 600,
       anchor_date: Date.new(2026, 10, 1),
       interval_months: 6,
-      starts_on: Date.new(2026, 1, 1)
+      starts_on: Date.new(2026, 4, 2)
     )
   end
 

@@ -56,7 +56,13 @@ sentence is replaced, not kept.
   - **rate**: per period, does not keep unspent. Claims `max(0, amount − spent)` this period only.
   - **fund**: per period, keeps unspent. Each period adds the amount; what is unspent carries.
   - **dated**: an amount by a date, once or rolling every N months. The claim builds toward the
-    target so it is there on the date.
+    next open due date so it is there on the day.
+- A dated bill's due dates are a series: the anchor date stepped by the interval, forward and back,
+  starting at the first due date on or after the rule's start. A one-off is a series of one.
+- Spending on a dated rule's lane settles due dates in order, earliest open first, whether it
+  lands before or after the day. The next due date is the first one not yet covered. Paying ahead
+  settles further due dates; there is no cap.
+- A one-off is settled at its target. Anything spent past that is just spending.
 - Overspending never carries as debt. Next period starts from the rule's own figure.
 - A dated rule is a budget, never savings. Saving for a car repair, a holiday or a house is
   budgeting an expense that is coming, and belongs on a category.

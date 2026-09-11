@@ -130,6 +130,39 @@ RSpec.describe ClaimCalculator do
       expect(calculator(rule).ask).to eq(rule.ask(today: today)).and eq(13.85)
     end
 
+    it "settles the upcoming due date when it is paid early, and starts on the next", :aggregate_failures do
+      rent = create(:rule, :bill, amount: 1_500, anchor_date: Date.new(2026, 9, 21), interval_months: 1, category: groceries, item: bread, starts_on: Date.new(2026, 9, 1))
+      spend(1_500, on: Date.new(2026, 9, 10))
+
+      paid_day = described_class.new(rent, today: Date.new(2026, 9, 11))
+      expect(paid_day.next_due_on).to eq(Date.new(2026, 10, 21))
+      expect(paid_day.claim).to eq(0)
+      expect(paid_day).not_to be_overdue
+
+      next_period = described_class.new(rent, today: Date.new(2026, 9, 22))
+      expect(next_period.next_due_on).to eq(Date.new(2026, 10, 21))
+      expect(next_period.claim).to eq(500)
+    end
+
+    it "settles two due dates when two targets are paid at once" do
+      rent = create(:rule, :bill, amount: 1_500, anchor_date: Date.new(2026, 9, 21), interval_months: 1, category: groceries, item: bread, starts_on: Date.new(2026, 9, 1))
+      spend(3_000, on: Date.new(2026, 9, 10))
+
+      expect(described_class.new(rent, today: Date.new(2026, 9, 11)).next_due_on).to eq(Date.new(2026, 11, 21))
+    end
+
+    # The due dates run back to the rule's start, so history before the anchor settles its own
+    # months: seven payments from March 1 cover March 21 through September 21.
+    it "counts due dates back to the start date, so old payments settle their own months", :aggregate_failures do
+      rent = create(:rule, :bill, amount: 1_500, anchor_date: Date.new(2026, 9, 21), interval_months: 1, category: groceries, item: bread, starts_on: Date.new(2026, 3, 1))
+      [3, 4, 5, 6, 7, 8].each { |month| spend(1_500, on: Date.new(2026, month, 12)) }
+      spend(1_500, on: Date.new(2026, 9, 10))
+
+      history = described_class.new(rent, today: Date.new(2026, 9, 11))
+      expect(history.next_due_on).to eq(Date.new(2026, 10, 21))
+      expect(history).not_to be_overdue
+    end
+
     # One cycle paid, the next saved for in full. The walk, period by period:
     #
     #   period      due     left  planned  built_up
