@@ -38,10 +38,11 @@
             hint: "Correcting the balance moves the opening balance; nothing else changes." %>
 
         <% unless @account.main? %>
+          <% rows = @account.savings_targets.any? ? @account.savings_targets : [@account.savings_targets.build] %>
           <fieldset class="mt-6 space-y-3"
                     data-controller="app--account--targets"
                     data-app--account--targets-typical-value="<%= @typical_income.to_d %>"
-                    data-app--account--targets-index-value="<%= @account.savings_targets.size %>">
+                    data-app--account--targets-index-value="<%= rows.size %>">
             <legend class="text-sm font-semibold text-gray-900">What this account is owed</legend>
             <p class="text-sm text-gray-600">A fixed amount a period, a share of an income item, or both. Each counts from its own start date.</p>
 
@@ -52,7 +53,6 @@
             </template>
 
             <div class="space-y-3" data-app--account--targets-target="rows">
-              <% rows = @account.savings_targets.any? ? @account.savings_targets : [@account.savings_targets.build] %>
               <%= f.simple_fields_for :savings_targets, rows do |t| %>
                 <%= render "accounts/target_fields", f: t, items: @income_items, typical_income: @typical_income %>
               <% end %>

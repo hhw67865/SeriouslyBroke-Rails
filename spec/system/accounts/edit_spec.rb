@@ -50,6 +50,31 @@ RSpec.describe "Account edit", type: :system do
       expect(page).to have_content("would take Paycheck past 100%")
       expect(page).to have_field("Share", with: "150")
     end
+
+    # Regression: the index value used to be read from `@account.savings_targets.size` before the
+    # placeholder row was built, so on a fresh account it was 0 — the same child index the
+    # placeholder itself renders at. "Add another" then produced a second row also indexed 0,
+    # Rack merged the two under one key, and the fixed row vanished with no error.
+    context "with the placeholder row filled" do
+      before do
+        within("[data-target-row]", match: :first) do
+          select "A fixed amount", from: "Source"
+          fill_in "A period", with: "200"
+        end
+      end
+
+      it "adds a share row without colliding on index 0", :aggregate_failures, :js do
+        click_button "Add another"
+        within(all("[data-target-row]").last) do
+          select "Paycheck", from: "Source"
+          fill_in "Share", with: "10"
+        end
+        click_button "Save account"
+
+        expect(page).to have_css("[data-account-targets]", text: "$200.00 a period, plus 10% of Paycheck")
+        expect(emergency.savings_targets.reload.count).to eq(2)
+      end
+    end
   end
 
   context "with an existing fixed target", :js do
