@@ -13,9 +13,9 @@ class SavingsTarget < ApplicationRecord
   validates :amount, presence: true, numericality: { greater_than: 0 }, if: :target?
   validates :percent, presence: true, numericality: { greater_than: 0, less_than_or_equal_to: 100 }, if: :share?
   validates :account_id, uniqueness: { conditions: -> { where(item_id: nil) }, message: "already has a fixed target" }, if: :target?
-  validates :item_id, uniqueness: { scope: :account_id, message: "already feeds this account" }, if: :share?
   validate :account_is_savings
   validate :item_is_the_users_income
+  validate :item_feeds_this_account_once
   validate :item_is_not_over_shared
 
   delegate :user, to: :account
@@ -55,10 +55,19 @@ class SavingsTarget < ApplicationRecord
     errors.add(:item, "must be one of your income items") unless item.user == account.user && item.category.income?
   end
 
+  # Only a persisted item can already have other rows pointed at it, so an item still being built
+  # alongside this row has nothing to collide with.
+  def item_feeds_this_account_once
+    return if item.blank? || !item.persisted?
+
+    already_feeds = SavingsTarget.where(account_id: account_id, item_id: item.id).where.not(id: id).exists?
+    errors.add(:item, "already feeds this account") if already_feeds
+  end
+
   def item_is_not_over_shared
     return if item.blank? || percent.blank?
 
-    taken = SavingsTarget.shares.where(item_id: item_id).where.not(id: id).sum(:percent).to_d
+    taken = item.savings_shares.where.not(id: id).sum(:percent).to_d
     errors.add(:percent, "would take #{item.name} past 100% across your accounts") if taken + percent.to_d > 100
   end
 end

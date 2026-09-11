@@ -49,6 +49,14 @@ RSpec.describe SavingsTarget do
     expect(build(:savings_target, :share, account: emergency, item: paycheck)).not_to be_valid
   end
 
+  it "does not mistake an unsaved item's share for a collision with the account's fixed row", :aggregate_failures do
+    create(:savings_target, account: emergency)
+
+    unsaved_item_share = build(:savings_target, :share, account: emergency, item: build(:item, :income, user: user))
+
+    expect(unsaved_item_share).to be_valid
+  end
+
   it "asks its amount, or its percent of the item's typical income", :aggregate_failures do
     expect(build(:savings_target, amount: 200).ask).to eq(200)
     expect(build(:savings_target, :share, percent: 10).ask(typical_income: 3_400)).to eq(340)
