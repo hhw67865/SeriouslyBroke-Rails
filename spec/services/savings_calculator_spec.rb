@@ -80,4 +80,8 @@ RSpec.describe SavingsCalculator do
 
     expect(handed.claim).to eq(250)
   end
+
+  it "raises on an unknown row keyword instead of silently querying" do
+    expect { calculator(bogus: []) }.to raise_error(ArgumentError, "unknown keyword: bogus")
+  end
 end

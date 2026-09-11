@@ -5,6 +5,7 @@
 # pairs (income keyed by item id), queried unless handed in.
 class SavingsCalculator
   PERIOD_WALK_LIMIT = 520
+  ROW_KEYS = [:targets, :transfers, :income, :adjustments, :typical_income_by_item].freeze
 
   attr_reader :account, :today
 
@@ -44,11 +45,13 @@ class SavingsCalculator
   private
 
   def assign_rows(rows)
+    rows.each_key { |key| raise ArgumentError, "unknown keyword: #{key}" unless ROW_KEYS.include?(key) }
+
     @targets = rows[:targets]
     @transfers = rows[:transfers]
     @income = rows[:income]
     @adjustments = rows[:adjustments]
-    @typical_income_by_item = rows[:typical_income_by_item] || {}
+    @typical_income_by_item = (rows[:typical_income_by_item] || {}).dup
   end
 
   def user = account.user
