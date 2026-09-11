@@ -71,7 +71,7 @@ RSpec.describe "Accounts", type: :system do
   it "shows the empty state with nothing set aside" do
     read_accounts
 
-    expect(page).to have_css("[data-set-aside-empty]", text: "Nothing set aside yet. Add an account below to start.")
+    expect(page).to have_css("[data-set-aside-empty]", text: "Nothing set aside yet. Add an account to start.")
   end
 
   it "offers Move money and Add an account from the heading, and no row has Move money", :aggregate_failures do
