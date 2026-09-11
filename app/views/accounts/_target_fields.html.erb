@@ -1,0 +1,49 @@
+<%# ONE TARGET ROW. Locals: `f` (fields_for builder on a SavingsTarget), `items` (the user's income
+    items), `typical_income` (nil until a period completes). Both figure fields render; without
+    JavaScript both show and SavingsTarget keeps the one the source implies, with it the controller
+    shows one. Neither is hidden server-side, so a plain form can still be filled. %>
+<% target = f.object %>
+<div class="grid grid-cols-1 gap-3 rounded border border-gray-200 bg-[#FAFAF7] p-3 sm:grid-cols-[1.4fr_1fr_1fr_auto] sm:items-end"
+     data-target-row
+     data-app--account--targets-target="row">
+  <div>
+    <%= f.label :item_id, "Source", class: "form-label text-xs" %>
+    <%= f.select :item_id,
+                 options_for_select([["A fixed amount", ""]] + items.map { |item| [item.name, item.id] }, target.item_id),
+                 {},
+                 class: "form-select",
+                 data: { "app--account--targets-target": "source", action: "change->app--account--targets#switch" } %>
+  </div>
+  <div data-app--account--targets-target="amountField">
+    <%= f.label :amount, "A period", class: "form-label text-xs" %>
+    <%= f.number_field :amount,
+        step: 0.01,
+        min: 0.01,
+        class: "form-input tabular-nums",
+        value: target.amount && number_with_precision(target.amount, precision: 2),
+        data: { "app--account--targets-target": "amount", action: "input->app--account--targets#hint" } %>
+  </div>
+  <div data-app--account--targets-target="percentField">
+    <%= f.label :percent, "Share", class: "form-label text-xs" %>
+    <%= f.number_field :percent,
+        step: 0.01,
+        min: 0.01,
+        max: 100,
+        class: "form-input tabular-nums",
+        value: target.percent && target.percent.to_d.to_s("F").sub(/\.0+\z/, "") %>
+  </div>
+  <div>
+    <%= f.label :starts_on, "Since", class: "form-label text-xs" %>
+    <%= f.date_field :starts_on, value: (target.starts_on || current_user.today).strftime("%Y-%m-%d"), class: "form-input" %>
+  </div>
+  <div class="flex h-10 items-center">
+    <%= f.check_box :_destroy, class: "sr-only", data: { "app--account--targets-target": "destroy" } %>
+    <button type="button" class="text-xs font-medium text-gray-500 hover:text-status-danger"
+            data-action="click->app--account--targets#remove">Remove</button>
+  </div>
+  <p class="form-hint sm:col-span-4" data-target-hint data-app--account--targets-target="hint">
+    <% if target.target? && target.amount.present? && typical_income.to_d.positive? %>
+      That's <%= ((target.amount.to_d / typical_income) * 100).round %>% of what you typically bring in.
+    <% end %>
+  </p>
+</div>
