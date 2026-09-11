@@ -18,12 +18,22 @@
       <p class="mt-0.5 text-xs text-savings">savings · <%= row.mode_words %></p>
       <p class="mt-1 flex flex-wrap items-baseline gap-x-2 text-xs text-gray-500">
         <% if row.transferable? %>
-          <%= button_to "Transfer #{number_to_currency(row.claim)}", 
-transfers_path,
-                        params: { transfer: { from_account_id: presenter.user.main_account_id, to_account_id: row.account.id, amount: row.claim, date: presenter.today }, return: "home" },
-                        class: "text-brand-dark hover:text-brand underline", 
-form: { class: "inline" }, 
-data: { transfer_owed: row.name } %>
+          <%= button_to(
+                "Transfer #{number_to_currency(row.claim)}",
+                transfers_path,
+                params: {
+                  transfer: {
+                    from_account_id: presenter.user.main_account_id,
+                    to_account_id: row.account.id,
+                    amount: row.claim,
+                    date: presenter.today
+                  },
+                  return: "home"
+                },
+                class: "text-brand-dark hover:text-brand underline",
+                form: { class: "inline" },
+                data: { transfer_owed: row.name }
+              ) %>
         <% else %>
           <span class="text-status-success font-medium">On pace</span>
         <% end %>

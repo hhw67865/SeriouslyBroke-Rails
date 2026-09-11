@@ -131,20 +131,43 @@ RSpec.describe "Home adjustments", :js, type: :system do
     expect(find("[data-adjust-hint]")).to have_content("This period only, up to today.")
   end
 
-  # A savings block's Adjust panel writes through the same door, and carries `return=home` so a
-  # refusal or a skip lands back on Home rather than on the Savings page.
-  it "skips a savings block's period from Home and returns to Home with the notice", :aggregate_failures do
+  def seed_emergency!
     emergency = create(:account, user: user, name: "Emergency")
     create(:savings_target, account: emergency, amount: 200, starts_on: Date.new(2026, 9, 4))
+    emergency
+  end
 
-    open_panel
+  def within_emergency_adjust
     within("[data-savings-block='Emergency']") do
       find("[data-adjust='Emergency'] summary").click
-      click_button "Skip this period (−$200.00)"
+      yield
     end
+  end
+
+  # A savings block's Adjust panel writes through the same door, and carries `return=home` so a
+  # refusal, a skip or a removal all land back on Home rather than on the Savings page.
+  it "skips a savings block's period from Home and returns to Home with the notice", :aggregate_failures do
+    emergency = seed_emergency!
+
+    open_panel
+    within_emergency_adjust { click_button "Skip this period (−$200.00)" }
 
     expect(page).to have_current_path(root_path, ignore_query: true)
     expect(page).to have_content("Skipped this period for Emergency — $200.00 less owed.")
     expect(page).to have_css("#savings-#{emergency.id}")
+  end
+
+  # Removing that same change carries `return=home` too — the Remove button sits inside the same
+  # `savings/_adjust` partial the Skip button does, so it must not fall back to the Savings page.
+  it "removes a savings block's change from Home and returns to Home with the notice", :aggregate_failures do
+    seed_emergency!
+
+    open_panel
+    within_emergency_adjust { click_button "Skip this period (−$200.00)" }
+    within_emergency_adjust { click_button "Remove" }
+
+    expect(page).to have_current_path(root_path, ignore_query: true)
+    expect(page).to have_content("Removed the $200.00 reduction on Emergency.")
+    expect(page).to have_no_css("[data-savings-block='Emergency'] [data-change]")
   end
 end

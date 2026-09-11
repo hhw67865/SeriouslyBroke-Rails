@@ -68,7 +68,7 @@
         <li class="flex items-baseline gap-2 text-xs text-gray-600" data-change="<%= change.id %>">
           <span class="text-gray-500"><%= change.date.strftime("%b %-d") %></span>
           <span class="text-status-danger" data-change-amount><%= number_to_currency(change.amount) %></span>
-          <%= button_to "Remove", adjustment_path(change), method: :delete, class: "text-brand-dark hover:text-brand underline" %>
+          <%= button_to "Remove", adjustment_path(change, return: return_to), method: :delete, class: "text-brand-dark hover:text-brand underline" %>
         </li>
       <% end %>
     </ul>

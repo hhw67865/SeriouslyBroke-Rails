@@ -18,6 +18,13 @@ RSpec.describe "Transfers" do
     expect(Transfer.count).to eq(1)
   end
 
+  it "redirects to Home when the form carried return: home", :aggregate_failures do
+    post transfers_path, params: { transfer: { from_account_id: main.id, to_account_id: savings.id, amount: "40.00", date: Date.current }, return: "home" }
+
+    expect(response).to redirect_to(root_path)
+    expect(Transfer.count).to eq(1)
+  end
+
   it "re-renders the savings page at 422 on a refusal", :aggregate_failures do
     post transfers_path, params: { transfer: { from_account_id: main.id, to_account_id: main.id, amount: "40.00", date: Date.current } }
 
