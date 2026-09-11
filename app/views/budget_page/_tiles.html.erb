@@ -36,7 +36,7 @@
   <div class="col-span-2 bg-white border border-gray-200 rounded p-4 sm:col-span-1 sm:px-5 sm:py-4" data-tile="where">
     <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Where it goes</h2>
     <p class="mt-1 text-xl font-semibold text-gray-900 tabular-nums" data-tile-figure>
-      <%= number_to_currency(presenter.tiles.where) %> <span class="block text-sm font-normal text-gray-500 md:inline">a period</span>
+      <%= number_to_currency(presenter.tiles.where_now) %> <span class="block text-sm font-normal text-gray-500 md:inline">this period</span>
     </p>
 
     <% if presenter.tiles.segments.any? %>
@@ -69,6 +69,10 @@
       Savings <span class="tabular-nums text-gray-900"><%= number_to_currency(presenter.tiles.savings) %></span> ·
       Budget <span class="tabular-nums text-gray-900"><%= number_to_currency(presenter.tiles.budget) %></span>
     </p>
+
+    <% if presenter.tiles.catching_up? %>
+      <p class="mt-1 text-xs text-gray-500" data-tile-steady><%= number_to_currency(presenter.tiles.where) %> a period once every bill is caught up</p>
+    <% end %>
   </div>
 
   <%# TILE 3 — the subtraction, green when it fits and red when it does not. %>
@@ -83,6 +87,10 @@
       <p class="mt-2 text-xs text-gray-500" data-tile-verdict>
         <%= presenter.tiles.fits? ? "Your savings and your budget fit what you bring in." : "Your savings and your budget ask for more than you bring in." %>
       </p>
+
+      <% if presenter.tiles.catching_up? && presenter.history? %>
+        <p class="mt-1 text-xs text-gray-500" data-tile-leftover-now>This period leaves <%= number_to_currency(presenter.tiles.leftover_now) %></p>
+      <% end %>
 
       <%# Reallocation cannot fix a budget that does not fit an income, and `sacrifice_path` refuses
           in exactly the two states this button is not shown in. %>

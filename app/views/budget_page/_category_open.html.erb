@@ -7,7 +7,7 @@
           · when, which reads without headings. %>
       <div class="hidden sm:flex items-baseline gap-3 px-1 pb-1 text-xs uppercase tracking-wide text-gray-400">
         <span class="flex-1">Rule</span>
-        <span class="w-40 text-right">Now</span>
+        <span class="w-40 text-right">Takes this period</span>
         <span class="w-28">Progress</span>
         <span class="w-40">When</span>
         <span class="w-24 text-right">&nbsp;</span>
@@ -33,12 +33,12 @@
                     </div>
                   </div>
 
-                  <%# `over?` is the pre-clamp reader, and the only one that can tell "spent it exactly"
-                      from "spent more than there was". %>
-                  <p class="text-sm tabular-nums sm:w-40 sm:text-right <%= line.over? ? "text-status-danger font-medium" : "text-gray-700" %>"
-                     data-rule-figure>
-                    <%= figure_words(line) %> <span class="text-gray-400" aria-hidden="true">&#9662;</span>
-                  </p>
+                  <%# The steady figure underneath is the calculator's `ask` — a catch-up rule prints
+                      a second line and a steady one says so once instead of always. %>
+                  <div class="sm:w-40 sm:text-right" data-rule-figure>
+                    <p class="text-sm tabular-nums font-medium text-gray-900"><%= number_to_currency(line.per_period) %></p>
+                    <p class="text-xs text-gray-500" data-rule-steady><%= line.per_period == line.rule.ask ? "same every period" : "#{number_to_currency(line.rule.ask)} a period once caught up" %></p>
+                  </div>
 
                   <%# The percent rides on the TRACK: a 0% fill has no width, so a hook there would be
                       unassertable on exactly the row a bar most needs pinning. %>
@@ -61,13 +61,13 @@
                       no boundary declared has nothing to say and renders no element. %>
                   <p class="text-xs sm:w-40 <%= line.trouble? || line.short? ? "text-status-danger font-medium" : "text-gray-500" %>"
                      data-rule-when>
-                    <%= when_words(line) %>
+                    <%= [when_words(line), figure_words(line)].compact.join(" · ") %>
                   </p>
 
                   <%# A `div`, not a `p`: Delete is a `button_to`, and a form is not phrasing content. %>
                   <div class="flex items-baseline gap-3 shrink-0 sm:w-24 sm:justify-end text-sm">
-                    <%# `_adjust` renders its own summary, so this column holds the rule's two doors.
-                        All three wear RuleActionsHelper::RULE_ACTION_CLASSES — one string, not three. %>
+                    <%# The rule's two doors, both wearing RuleActionsHelper::RULE_ACTION_CLASSES —
+                        one string, not two. %>
                     <%= link_to "Edit",
                                 edit_rule_path(line.rule),
                                 class: rule_action_classes("mt-1 sm:mt-0 sm:text-right sm:underline") %>
@@ -86,31 +86,6 @@
                 <p class="text-xs text-gray-500">Loading…</p>
               <% end %>
             </details>
-
-            <%# Task 3 removes this render along with the Budget page's own Adjust panel; until then
-                it points at Home's moved partial so Budget keeps rendering. %>
-            <%= render "home/adjust", line: line %>
-
-            <%# What was already done, in date order. The claim above counts every one of them; the
-                list is what makes that figure explicable rather than merely asserted. %>
-            <% if line.adjustments.any? %>
-              <ul class="mt-2 space-y-1" data-rule-changes>
-                <% line.adjustments.each do |change| %>
-                  <li class="flex items-baseline gap-2 text-xs text-gray-600" data-change="<%= change.id %>">
-                    <span class="text-gray-500"><%= change.date.strftime("%b %-d") %></span>
-                    <%# Signed: the leading minus on a take-back is this table's whole vocabulary
-                        said in one character. %>
-                    <span class="<%= change.amount.negative? ? "text-status-danger" : "text-gray-900" %>" data-change-amount>
-                      <%= number_to_currency(change.amount) %>
-                    </span>
-                    <%= button_to "Remove",
-                                  adjustment_path(change, open: row.category.id),
-                                  method: :delete,
-                                  class: "text-brand-dark hover:text-brand underline" %>
-                  </li>
-                <% end %>
-              </ul>
-            <% end %>
           </li>
         <% end %>
       </ul>

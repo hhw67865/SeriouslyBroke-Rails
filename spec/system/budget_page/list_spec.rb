@@ -46,8 +46,6 @@ RSpec.describe "Budget page list", type: :system do
     )
   end
 
-  def spend(owner, amount) = create(:entry, item: create(:item, category: owner), amount: amount, date: today)
-
   def row(name) = find("[data-category-row='#{name}']")
   def rows = page.all("[data-category-row]").pluck("data-category-row")
 
@@ -107,20 +105,22 @@ RSpec.describe "Budget page list", type: :system do
       end
     end
 
-    # `$X claimed` is Σ the category's rules' claims — the same figure Home subtracts. Planted: a
-    # $400 rate rule with $250 spent this period claims `max(0, 400 − 250)` = $150.
-    it "reads what the category claims" do
-      spend(rule_on("Groceries", amount: 400).category, 250)
+    # `takes $X this period` is Σ the category's rules' `per_period` — the calculator's own planned
+    # figure for this period, not what has been spent. Planted: a $400 rate rule plus a $50 choice
+    # lane rule takes $450.
+    it "reads what the category takes this period" do
+      groceries = rule_on("Groceries", amount: 400).category
+      lane_rule(groceries, "Wine", amount: 50, type: :choice)
 
       visit budget_page_path
 
-      within(row("Groceries")) { expect(page).to have_css("[data-category-claim]", text: "$150.00 claimed") }
+      within(row("Groceries")) { expect(page).to have_css("[data-category-takes]", text: "takes $450.00 this period") }
     end
 
-    # Nothing claims a rule-less category's money, so there is no claim to print and no figure
+    # Nothing claims a rule-less category's money, so there is no figure to print and no figure
     # invented in its place — and no arrows, because `Category.apply_fill_order` would refuse a list
     # holding it.
-    it "says a rule-less category has no rules, and gives it no claim and no arrows" do
+    it "says a rule-less category has no rules, and gives it no figure and no arrows" do
       rule_on("Groceries", amount: 400)
       category("Coffee")
 
@@ -128,7 +128,7 @@ RSpec.describe "Budget page list", type: :system do
 
       within(row("Coffee")) do
         expect(page).to have_css("[data-category-unruled]", text: "no rules yet")
-        expect(page).to have_no_css("[data-category-claim]")
+        expect(page).to have_no_css("[data-category-takes]")
         expect(page).to have_no_button("Move Coffee up")
       end
     end

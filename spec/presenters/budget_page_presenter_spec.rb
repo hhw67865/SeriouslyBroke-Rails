@@ -76,4 +76,18 @@ RSpec.describe BudgetPagePresenter do
 
     expect(described_class.new(user: user, today: today, open_category_id: rent.id).open?(rent)).to be(true)
   end
+
+  # 100.0 is $1,200 over the 12 biweekly periods from Sep 4 to Feb 11 — ClaimCalculator's own
+  # count, read off #planned_this_period rather than assumed.
+  it "says what the rules take this period as of today, beside the steady figure", :aggregate_failures do
+    rule_on("Groceries", amount: 400)
+    fresh = create(:category, user: user, name: "Insurance")
+    create(:rule, :bill, category: fresh, amount: 1_200, anchor_date: Date.new(2027, 2, 11), interval_months: 12, starts_on: today)
+    presenter = described_class.new(user: user, today: today)
+
+    expect(presenter.budget).to eq(400 + 46.15)
+    expect(presenter.budget_now).to eq(400 + 100.0)
+    expect(presenter.tiles.where_now).to eq(presenter.budget_now + presenter.savings)
+    expect(presenter.category_rows.find { |row| row.name == "Insurance" }.takes_now).to eq(100.0)
+  end
 end

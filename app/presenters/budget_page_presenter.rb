@@ -2,7 +2,7 @@
 
 # The Budget page: the tiles, every expense category with its rules, and the declaration form.
 class BudgetPagePresenter
-  CategoryRow = Data.define(:category, :lines, :type_dots, :claimed, :open) do
+  CategoryRow = Data.define(:category, :lines, :type_dots, :takes_now, :open) do
     delegate :name, :priority, to: :category
     def open? = open
     def rule_count = lines.size
@@ -11,10 +11,12 @@ class BudgetPagePresenter
     def reorderable? = ruled?
   end
   Segment = Data.define(:type, :amount, :percent)
-  Tiles = Data.define(:budget, :savings, :segments, :income, :cadence, :leftover, :declared, :fits) do
+  Tiles = Data.define(:budget, :budget_now, :savings, :segments, :income, :cadence, :leftover, :leftover_now, :declared, :fits) do
     def declared? = declared
     def fits? = fits
     def where = budget + savings
+    def where_now = budget_now + savings
+    def catching_up? = budget_now != budget
   end
 
   TYPE_OVERVIEW_ORDER = [:bill, :usage, :choice].freeze
@@ -30,11 +32,13 @@ class BudgetPagePresenter
   def tiles
     @tiles ||= Tiles.new(
       budget: budget,
+      budget_now: budget_now,
       savings: savings,
       segments: segments,
       income: typical_income,
       cadence: user.period_cadence,
       leftover: leftover,
+      leftover_now: leftover_now,
       declared: declared?,
       fits: fits?
     )
@@ -65,6 +69,8 @@ class BudgetPagePresenter
   end
 
   def leftover = typical_income && (typical_income - savings - budget)
+  def budget_now = @budget_now ||= claim_ledger.rules.sum(0.to_d) { |rule| claim_ledger.calculator_for(rule).planned_this_period }
+  def leftover_now = typical_income && (typical_income - savings - budget_now)
   def declared? = user.period_cadence.present?
   def history? = typical_income.present?
   def underwater? = declared? && history? && budget + savings > typical_income
@@ -74,17 +80,23 @@ class BudgetPagePresenter
   def ruled_rows
     claim_rows.blocks
       .sort_by { |block| [block.category.priority, block.category.name] }
-      .map { |block| row_for(block.category, lines: block.rows, claimed: block.claimed) }
+      .map { |block| row_for(block.category, lines: block.rows) }
   end
 
   def unruled_rows
     ruled = claim_rows.blocks.to_set { |block| block.category.id }
     expense_categories.reject { |category| ruled.include?(category.id) }
-      .map { |category| row_for(category, lines: [], claimed: 0.to_d) }
+      .map { |category| row_for(category, lines: []) }
   end
 
-  def row_for(category, lines:, claimed:)
-    CategoryRow.new(category: category, lines: lines, type_dots: lines.map(&:stripe_type), claimed: claimed, open: open?(category))
+  def row_for(category, lines:)
+    CategoryRow.new(
+      category: category,
+      lines: lines,
+      type_dots: lines.map(&:stripe_type),
+      takes_now: lines.sum(0.to_d, &:per_period),
+      open: open?(category)
+    )
   end
 
   def expense_categories = @expense_categories ||= user.categories.expenses.order(:name).to_a
@@ -93,8 +105,7 @@ class BudgetPagePresenter
     @claim_rows ||= ClaimRows.new(
       ledger: claim_ledger,
       today: today,
-      categories: user.categories.in_fill_order.to_a,
-      adjustments: adjustments_this_period
+      categories: user.categories.in_fill_order.to_a
     )
   end
 
@@ -109,9 +120,4 @@ class BudgetPagePresenter
 
   def fits? = declared? && history? && !underwater?
   def claim_ledger = @claim_ledger ||= ClaimLedger.new(user, today: today)
-
-  def adjustments_this_period
-    @adjustments_this_period ||= Adjustment.on_rules(claim_ledger.rules.map(&:id))
-      .dated_within(user.period_containing(today)).order(:date, :created_at).group_by(&:source_id)
-  end
 end

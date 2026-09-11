@@ -41,6 +41,19 @@ RSpec.describe "Budget page tiles", type: :system do
     end
   end
 
+  # A rolling bill still catching up: it plans more this period than its steady ask.
+  def catching_up_bill
+    create(
+      :rule,
+      :bill,
+      amount: 1_200,
+      anchor_date: Date.new(2027, 2, 11),
+      interval_months: 12,
+      starts_on: today,
+      category: create(:category, user: user, name: "Insurance")
+    )
+  end
+
   def tile(name) = find("[data-tile='#{name}']")
 
   # $900 of bills and $400 of usage: the tile's figure is the sum and the bands under it are the
@@ -120,6 +133,22 @@ RSpec.describe "Budget page tiles", type: :system do
       expect(page).to have_css("[data-type-total='savings']", text: "$100.00")
     end
     expect(tile("leftover")).to have_css("[data-tile-figure]", text: "$1,500.00")
+  end
+
+  # A rolling bill still catching up plans more this period than its steady ask, so the tiles say
+  # both: the "this period" figure up top, the steady one once caught up beneath it, and what
+  # leftover looks like this period rather than only once every bill is caught up.
+  it "shows the steady figure and this period's leftover for a rule still catching up", :aggregate_failures do
+    catching_up_bill
+    a_period_of_income(2_000)
+
+    visit budget_page_path
+
+    within(tile("where")) do
+      expect(page).to have_css("[data-tile-figure]", text: "$100.00")
+      expect(page).to have_css("[data-tile-steady]", text: "$46.15 a period once every bill is caught up")
+    end
+    expect(tile("leftover")).to have_css("[data-tile-leftover-now]", text: "This period leaves $1,900.00")
   end
 
   it "invites a user who has said nothing to set a period", :aggregate_failures do

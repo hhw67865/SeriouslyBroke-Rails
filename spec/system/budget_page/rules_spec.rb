@@ -81,13 +81,14 @@ RSpec.describe "Budget page rules", type: :system do
     open_panel(groceries)
 
     expect(rule_row("Groceries")).to have_content("Whole category")
-    expect(rule_row("Groceries")).to have_css("[data-rule-figure]", text: "$300.00 of $400.00")
+    expect(rule_row("Groceries")).to have_css("[data-rule-figure]", text: "$400.00")
+    expect(rule_row("Groceries")).to have_css("[data-rule-steady]", text: "same every period")
     expect(rule_row("Groceries")).to have_css("[data-rule-shape]", text: "usage · a period")
-    expect(rule_row("Groceries")).to have_css("[data-rule-when]", text: "resets Sep 18")
+    expect(rule_row("Groceries")).to have_css("[data-rule-when]", text: "resets Sep 18 · $300.00 of $400.00")
     expect(rule_row("Groceries")).to have_css("[data-rule-bar='75'][data-rule-bar-state='normal']")
   end
 
-  # A one-off bill: the money it has of the money it needs, and the day it is wanted.
+  # A one-off bill: what it takes this period toward the money it needs, and the day it is wanted.
   it "says what a one-off bill has built up and when it is due", :aggregate_failures do
     rent = category("Rent")
     one_off_bill(rent)
@@ -95,12 +96,15 @@ RSpec.describe "Budget page rules", type: :system do
     open_panel(rent)
 
     expect(rule_row("Rent")).to have_css("[data-rule-shape]", text: "bill · once, Oct 16")
-    expect(rule_row("Rent")).to have_css("[data-rule-figure]", text: "of $900.00")
+    expect(rule_row("Rent")).to have_css("[data-rule-figure]", text: "$225.00")
     expect(rule_row("Rent")).to have_css("[data-rule-when]", text: "Oct 16")
+    expect(rule_row("Rent")).to have_css("[data-rule-when]", text: "$225.00 of $900.00")
   end
 
-  # A rolling bill names its interval rather than a single day, because the day moves with the cycle.
-  it "says a rolling bill's interval", :aggregate_failures do
+  # A rolling bill names its interval rather than a single day, because the day moves with the
+  # cycle — and, started well before today, it is still catching up: this period takes less than
+  # its steady ask.
+  it "says a rolling bill's interval, and what it takes while catching up", :aggregate_failures do
     insurance = category("Insurance")
     rolling_bill(insurance)
 
@@ -108,6 +112,8 @@ RSpec.describe "Budget page rules", type: :system do
 
     expect(rule_row("Insurance")).to have_css("[data-rule-shape]", text: "bill · every 6 months")
     expect(rule_row("Insurance")).to have_css("[data-rule-when]", text: "Oct 1")
+    expect(rule_row("Insurance")).to have_css("[data-rule-figure]", text: "$42.86")
+    expect(rule_row("Insurance")).to have_css("[data-rule-steady]", text: "$46.15 a period once caught up")
   end
 
   # A fund aims at nothing, so its sentence stops early and names its noun instead — and there is no
@@ -119,8 +125,9 @@ RSpec.describe "Budget page rules", type: :system do
     open_panel(pets)
 
     expect(rule_row("Pet Care")).to have_css("[data-rule-shape]", text: "usage · a period, keeps")
-    expect(rule_row("Pet Care")).to have_css("[data-rule-figure]", text: "built up $120.00")
-    expect(rule_row("Pet Care")).to have_css("[data-rule-when]", text: "+$60.00 a period")
+    expect(rule_row("Pet Care")).to have_css("[data-rule-figure]", text: "$60.00")
+    expect(rule_row("Pet Care")).to have_css("[data-rule-steady]", text: "same every period")
+    expect(rule_row("Pet Care")).to have_css("[data-rule-when]", text: "+$60.00 a period · built up $120.00")
     expect(rule_row("Pet Care")).to have_no_css("[data-rule-bar]")
   end
 
@@ -137,8 +144,8 @@ RSpec.describe "Budget page rules", type: :system do
     expect(rule_row("Groceries")).to have_content("Whole category")
   end
 
-  # Spending past what the rule had is the news, so the row wears the danger colour — and the
-  # category's own claimed figure goes red with it.
+  # Spending past what the rule had is the news, so the When cell wears the danger colour — and the
+  # category's own takes-this-period figure goes red with it.
   it "marks a rule that has been overspent", :aggregate_failures do
     rate_rule(groceries)
     spend(groceries, 450)
@@ -146,8 +153,8 @@ RSpec.describe "Budget page rules", type: :system do
     open_panel(groceries)
 
     expect(rule_row("Groceries")).to have_css("[data-rule-bar-state='over']")
-    expect(rule_row("Groceries").find("[data-rule-figure]")[:class]).to include("text-status-danger")
-    expect(find("[data-category-row='Groceries'] [data-category-claim]")[:class]).to include("text-status-danger")
+    expect(rule_row("Groceries").find("[data-rule-when]")[:class]).to include("text-status-danger")
+    expect(find("[data-category-row='Groceries'] [data-category-takes]")[:class]).to include("text-status-danger")
   end
 
   # The door onto a rule's declaration is inside the panel the rule is listed in.

@@ -1,4 +1,4 @@
-<%# ▲▼ · name · rules · dots · claimed · ⌄. Locals: `row`, `reorderable` (whole, because every ▲▼
+<%# ▲▼ · name · rules · dots · takes this period · ⌄. Locals: `row`, `reorderable` (whole, because every ▲▼
     carries the entire order), `presenter`. Below `md` it is a two-line grid so a name can wrap. %>
 <section class="bg-white border border-gray-200 rounded"
          data-category-row="<%= row.name %>"
@@ -36,9 +36,8 @@
 
     <div class="col-start-2 row-start-2 flex flex-wrap items-center gap-x-3 gap-y-1 shrink-0 md:row-start-1">
       <% if row.ruled? %>
-        <span class="text-sm tabular-nums <%= row.needs_attention? ? "text-status-danger font-medium" : "text-gray-700" %>"
-              data-category-claim>
-          <%= number_to_currency(row.claimed) %> claimed
+        <span class="text-sm tabular-nums <%= row.needs_attention? ? "text-status-danger font-medium" : "text-gray-700" %>" data-category-takes>
+          takes <%= number_to_currency(row.takes_now) %> this period
         </span>
       <% else %>
         <%# Nothing claims this money, so there is no claim to print and no figure in its place. %>
