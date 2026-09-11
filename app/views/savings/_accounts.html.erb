@@ -18,14 +18,14 @@
       <% end %>
       <div class="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
         <%= link_to(
-              "Transfer money", 
-savings_path(open: "transfer"),
+              "Transfer money",
+              savings_path(open: "transfer"),
               class: "btn btn-secondary",
               data: { drawer: "transfer", action: "click->shared--drawer#open" }
             ) %>
         <%= link_to(
-              "Add an account", 
-savings_path(open: "add"),
+              "Add an account",
+              savings_path(open: "add"),
               class: "btn btn-primary",
               data: { drawer: "add", action: "click->shared--drawer#open" }
             ) %>

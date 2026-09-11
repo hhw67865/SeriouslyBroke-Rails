@@ -46,7 +46,10 @@
               transfers_path,
               params: {
                 transfer: {
-                  from_account_id: presenter.checking.id, to_account_id: row.account.id, amount: row.claim, date: presenter.today
+                  from_account_id: presenter.checking.id,
+                  to_account_id: row.account.id,
+                  amount: row.claim,
+                  date: presenter.today
                 }
               },
               class: "btn btn-primary h-8 px-3 text-xs",
@@ -55,17 +58,17 @@
             ) %>
       <% end %>
       <%= link_to(
-            "Edit", 
-edit_account_path(row.account),
+            "Edit",
+            edit_account_path(row.account),
             class: "text-xs font-medium text-brand hover:text-brand-dark",
             data: { account_edit: row.name }
           ) %>
       <% confirm = "Delete #{row.name}? Its targets, adjustments and transfers are deleted with it, so the money " \
                    "they moved goes back to checking — and whatever it was opened with goes with it. This cannot be undone." %>
       <%= button_to(
-            "Delete", 
-account_path(row.account), 
-method: :delete,
+            "Delete",
+            account_path(row.account),
+            method: :delete,
             class: "text-xs font-medium text-gray-500 hover:text-status-danger transition-colors",
             form: { class: "inline-block leading-none", data: { turbo_confirm: confirm } },
             data: { account_delete: row.name }

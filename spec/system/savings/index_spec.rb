@@ -64,7 +64,7 @@ RSpec.describe "Savings page", type: :system do
       within(row("Joint")) do
         expect(page).to have_css("[data-account-untargeted]", text: "No savings target")
         expect(page).to have_link("set one", href: edit_account_path(Account.find_by!(name: "Joint")))
-        expect(page).to have_no_button(/Transfer/)
+        expect(page).to have_no_css("[data-transfer-owed]")
       end
     end
 
