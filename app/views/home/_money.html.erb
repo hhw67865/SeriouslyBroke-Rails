@@ -45,6 +45,15 @@
       <% end %>
     </p>
   </div>
+
+  <%# The two halves of that claim, so the tile answers "by which" without a trip to Savings. %>
+  <% if presenter.anything_claimed? %>
+    <p class="mt-1 text-xs text-gray-600" data-claimed-split>
+      Budget <span class="font-medium tabular-nums text-gray-900" data-budget-claim><%= number_to_currency(presenter.budget_claim) %></span>
+      <span class="text-gray-400" aria-hidden="true">·</span>
+      Savings <span class="font-medium tabular-nums text-gray-900" data-savings-claim><%= number_to_currency(presenter.savings_claim) %></span>
+    </p>
+  <% end %>
 </div>
 
 <%# TILE 2 — main's balance, not the user's money everywhere. One type step smaller below `sm`,

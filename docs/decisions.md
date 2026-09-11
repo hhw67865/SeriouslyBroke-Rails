@@ -142,7 +142,8 @@ sentence is replaced, not kept.
 
 ## 10. Screens
 
-- **Home**: free to spend, this period's progress, the trouble strip, the give-way list, the runway.
+- **Home**: free to spend with the budget and savings claims beneath it, this period's progress, the
+  trouble strip, the give-way list, the runway.
 - **Savings** (`/savings`): checking at the top with balance,
   claimed (budget and savings as its two lines) and free; then each savings account with its
   targets in words ("$200 a period, plus 10% of Paycheck"), what it is owed now, a Transfer button that

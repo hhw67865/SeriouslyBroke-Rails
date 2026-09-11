@@ -43,7 +43,7 @@ class HomePresenter
 
   def in_checking = claim_ledger.pot
   def free_to_spend = claim_ledger.free
-  delegate :claimed, :budget, :savings, to: :claim_ledger
+  delegate :claimed, :budget_claim, :savings_claim, :budget, :savings, to: :claim_ledger
   def money_parked_elsewhere? = other_accounts_total.positive?
   def anything_claimed? = claimed.positive?
 

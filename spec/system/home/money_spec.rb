@@ -47,11 +47,24 @@ RSpec.describe "Home money row", type: :system do
     expect(page).to have_css("[data-in-checking]", text: "$1,000.00")
     expect(page).to have_css("[data-free]", text: "$600.00")
     expect(page).to have_css("[data-free-subline]", text: "$400.00 claimed by your budget and savings")
+    expect(page).to have_css("[data-claimed-split]", text: "Budget $400.00 · Savings $0.00")
     # The words this row does not say. Case-insensitive, because a substring match would pass over
     # the app's own capitalised spelling — which is the spelling that could slip in.
     within("[data-money]") do
       expect(page).to have_no_content(/available|unclaimed|left to spend|set aside|spoken for/i)
     end
+  end
+
+  it "splits the claim between the budget and savings", :aggregate_failures do
+    rule_for("Groceries", rate: 400)
+    emergency = create(:account, user: user, name: "Emergency")
+    create(:savings_target, account: emergency, amount: 200, starts_on: Date.new(2026, 9, 4))
+
+    read_home
+
+    expect(page).to have_css("[data-free]", text: "$400.00")
+    expect(page).to have_css("[data-free-subline]", text: "$600.00 claimed by your budget and savings")
+    expect(page).to have_css("[data-claimed-split]", text: "Budget $400.00 · Savings $200.00")
   end
 
   # The bar is the subline as a picture: two segments of the pot off ONE figure, so they cannot add
