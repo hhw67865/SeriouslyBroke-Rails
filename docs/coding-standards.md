@@ -38,7 +38,7 @@ SavingsCalculator.new(account).claim
 ClaimLedger.new(current_user).claims
 ```
 
-`AccountLedger` totals one user's account balances; `ClaimCalculator` computes a single rule's claim on main; `SavingsCalculator` computes a single savings Account's claim on main, the same way for a fixed amount or a share of an item; `ClaimLedger` runs every rule's and every savings account's calculator for a user in a fixed number of queries. `ClaimLedger#claims` is the one list every screen reads — Home, the Savings page, the sacrifice page and the Budget tiles never ask what record is behind a claim.
+`AccountLedger` totals one user's account balances; `ClaimCalculator` computes a single rule's claim on main; `SavingsCalculator` computes a single savings Account's claim on main, the same way for a fixed amount or a share of an item; `ClaimLedger` runs every rule's and every savings account's calculator for a user in a fixed number of queries, plus one per distinct share item for typical income. `ClaimLedger#claims` is the one list every screen reads — Home, the Savings page, the sacrifice page and the Budget tiles never ask what record is behind a claim.
 
 ### Form Object Pattern (`app/services/`)
 

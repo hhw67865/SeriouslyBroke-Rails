@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
 # Every claim on checking for one user, fed in a fixed number of queries: each rule's lane spending
-# and adjustments, and each savings account's targets, transfers in, share income and adjustments.
+# and adjustments, and each savings account's targets, transfers in, share income and adjustments —
+# plus one per distinct share item for typical income.
 class ClaimLedger
   class UnknownSource < StandardError; end
 

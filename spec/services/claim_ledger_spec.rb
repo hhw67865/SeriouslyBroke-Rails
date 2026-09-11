@@ -39,14 +39,19 @@ RSpec.describe ClaimLedger do
     expect(ledger.claims.find { |c| c.name == "Rent" }.cuttable).to be(true)
   end
 
-  it "loads its rows in a fixed number of queries" do
+  it "loads its rows in a fixed number of queries, plus one per distinct share item" do
     3.times { create(:rule, :rate, category: create(:category, user: user), starts_on: Date.new(2026, 1, 1)) }
+    paycheck = create(:item, :income, user: user, name: "Paycheck")
+    emergency = create(:account, user: user, name: "Emergency")
+    brokerage = create(:account, user: user, name: "Brokerage")
+    create(:savings_target, account: emergency, amount: 200, starts_on: Date.new(2026, 9, 4))
+    create(:savings_target, :share, account: brokerage, item: paycheck, percent: 10, starts_on: Date.new(2026, 9, 4))
     queries = 0
     counter = ->(_name, _start, _finish, _id, payload) { queries += 1 unless ["SCHEMA", "CACHE"].include?(payload[:name]) }
 
     ActiveSupport::Notifications.subscribed(counter, "sql.active_record") { ledger.claimed }
 
-    expect(queries).to be <= 8
+    expect(queries).to be <= 12
   end
 
   it "refuses a rule it does not hold" do
