@@ -5,9 +5,10 @@
 class SavingsPresenter
   attr_reader :user, :today
 
-  def initialize(user:, today: user.today)
+  def initialize(user:, today: user.today, ledger: nil)
     @user = user
     @today = today
+    @ledger = ledger
   end
 
   def checking = user.main_account

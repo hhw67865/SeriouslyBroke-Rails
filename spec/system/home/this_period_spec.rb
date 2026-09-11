@@ -111,7 +111,6 @@ RSpec.describe "Home this period", type: :system do
 
     expect(page.all("[data-category-block]").pluck("data-category-block")).to eq(["Fun", "Rent"])
     expect(page).to have_css("[data-this-period-claimed]", text: "$1,200.00 claimed")
-    expect(page).to have_css("[data-give-way]", text: "choices give way first")
   end
 
   # A category no rule claims, with spending this period: the fact, no bar, no pressure.
@@ -147,6 +146,20 @@ RSpec.describe "Home this period", type: :system do
 
       expect(page).to have_content("Total")
       expect(page).to have_content("$300.00")
+    end
+  end
+
+  it "carries the kinds legend and a savings block", :aggregate_failures do
+    emergency = create(:account, user: user, name: "Emergency")
+    create(:savings_target, account: emergency, amount: 200, starts_on: Date.new(2026, 9, 4))
+    read_home
+
+    expect(page).to have_css("[data-kinds-legend]", text: "gives way first → Choice Usage Savings Bill")
+    within("[data-savings-block='Emergency']") do
+      expect(page).to have_css("[data-block-owed]", text: "$200.00 owed")
+      expect(page).to have_css("[data-savings-figure]", text: "$200.00 owed this period")
+      expect(page).to have_button("Transfer $200.00")
+      expect(page).to have_css("[data-adjust='Emergency']")
     end
   end
 

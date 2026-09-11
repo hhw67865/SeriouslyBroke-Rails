@@ -12,7 +12,7 @@ class TransfersController < ApplicationController
       amount: attrs[:amount],
       date: attrs[:date]
     )
-    return redirect_to savings_path, notice: moved_notice(transfer) if transfer.persisted?
+    return redirect_to(params[:return] == "home" ? root_path : savings_path, notice: moved_notice(transfer)) if transfer.persisted?
 
     assign_savings_state(transfer: transfer, open_transfer: true)
     @transfer_to = transfer.to_account_id

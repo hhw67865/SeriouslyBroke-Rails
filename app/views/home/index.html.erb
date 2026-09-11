@@ -1,32 +1,17 @@
 <% content_for :title, "Home" %>
 
-<%= page_header(title: "Home", subtitle: "Where your money stands") %>
+<%= page_header(title: @presenter.day_words, subtitle: @presenter.period_words) %>
 
-<%# Answers first, in two bands: the money row, the runway, the trouble strip (only when something
-    real needs a human), this period's rules, and everything else on one line. %>
+<%# The full picture: the four tiles, trouble only when there is some, what is coming up, and this
+    period rule by rule. An adjustment is the one thing written here; everything else links out. %>
 <div class="space-y-4 lg:space-y-6">
-  <%# Three columns at `lg`, two when a user banks in one place and has no "other accounts" tile. %>
-  <div class="grid gap-4 lg:gap-6 <%= @presenter.other_accounts.any? ? "grid-cols-2 lg:grid-cols-3" : "grid-cols-1 lg:grid-cols-2" %>"
-       data-money>
-    <%= render "home/money", presenter: @presenter %>
-  </div>
-
-  <%= render "home/manage_accounts", presenter: @presenter %>
-
-  <%= render "home/runway", presenter: @presenter %>
+  <%= render "home/tiles", presenter: @presenter %>
 
   <% if @presenter.trouble? %>
     <%= render "home/trouble", presenter: @presenter %>
   <% end %>
 
-  <%= render "home/this_period", presenter: @presenter %>
+  <%= render "home/upcoming", presenter: @presenter %>
 
-  <%# The section's order said in words: an order nobody explains reads as arbitrary. %>
-  <p class="text-sm text-gray-600" data-give-way>
-    When the money runs short, choices give way first, then usage, and bills last — which is the
-    order above.
-    <%# On one line deliberately: rubocop-erb's autocorrect re-breaks a multi-line link_to in an ERB
-        tag onto a raw newline mid-argument-list on every run. %>
-    <%= link_to "Change what a category asks for on the Budget page", budget_page_path, class: "text-status-info hover:underline" %>
-  </p>
+  <%= render "home/this_period", presenter: @presenter %>
 </div>

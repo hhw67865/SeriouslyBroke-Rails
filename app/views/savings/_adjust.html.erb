@@ -1,5 +1,7 @@
-<%# One savings account's period, reduced. Local: `row` (SavingsLine). Reduce and Skip only: with
-    no ceiling, saving more is just transferring more. %>
+<%# One savings account's period, reduced. Locals: `row` (SavingsLine), `return_to` (optional —
+    "home" carries the adjustment back to the Home page it was made from). Reduce and Skip only:
+    with no ceiling, saving more is just transferring more. %>
+<% return_to = local_assigns[:return_to] %>
 <div class="mt-2 w-full max-w-xl rounded border border-gray-200 bg-gray-50 px-3 py-3 space-y-3 text-left">
   <p class="text-xs text-gray-600" data-adjust-owed>
     <%= number_to_currency(row.accrued) %> owed this period
@@ -9,6 +11,7 @@
     <%= hidden_field_tag :source_type, "Account" %>
     <%= hidden_field_tag :source_id, row.account.id %>
     <%= hidden_field_tag :amount_sign, "-1" %>
+    <%= hidden_field_tag :return, return_to if return_to %>
 
     <div class="flex flex-wrap items-end gap-2">
       <div>
@@ -49,6 +52,7 @@
       <%= hidden_field_tag :source_type, "Account" %>
       <%= hidden_field_tag :source_id, row.account.id %>
       <%= hidden_field_tag :skip, "1" %>
+      <%= hidden_field_tag :return, return_to if return_to %>
       <%= button_tag(
             "Skip this period (−#{number_to_currency(row.accrued)})",
             type: :submit,

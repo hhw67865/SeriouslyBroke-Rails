@@ -1,5 +1,5 @@
 <%# One rule's period, changed. Local: `line` (ClaimLine). The direction rides on the button that
-    was pressed, and `open` on both actions so a refusal returns with this panel still open. %>
+    was pressed; a refusal re-renders Home itself, so there is no `open` to carry. %>
 <details class="mt-2" data-adjust="<%= rule_name(line.rule) %>">
   <summary class="<%= rule_action_classes("cursor-pointer text-sm sm:text-left") %>">Adjust what's owed now</summary>
 
@@ -11,7 +11,7 @@
       <%= line.rate? ? "planned this period" : "going in this period" %>
     </p>
 
-    <%= form_with url: adjustments_path(open: line.category.id), method: :post, class: "space-y-2" do %>
+    <%= form_with url: adjustments_path, method: :post, class: "space-y-2" do %>
       <%= hidden_field_tag :source_type, "Rule" %>
       <%= hidden_field_tag :source_id, line.rule.id %>
 
@@ -71,7 +71,7 @@
     <% end %>
 
     <% if line.skippable? %>
-      <%= form_with url: adjustments_path(open: line.category.id), method: :post do %>
+      <%= form_with url: adjustments_path, method: :post do %>
         <%= hidden_field_tag :source_type, "Rule" %>
         <%= hidden_field_tag :source_id, line.rule.id %>
         <%= hidden_field_tag :skip, "1" %>

@@ -63,9 +63,9 @@ RSpec.describe "Home trouble strip", type: :system do
     expect(page).to have_css("[data-trouble] h3", text: "1 thing needs you")
   end
 
-  # FREE BELOW ZERO: the figure, who gives way, what the walk cannot account for, and the pace that
-  # lands the period at zero. $1,000 in, $1,100 spent on nothing any rule claims and a $50 claim
-  # standing — so the shortfall outlasts the give-way list by $100.
+  # FREE BELOW ZERO: the figure, who gives way, and what the walk cannot account for. $1,000 in,
+  # $1,100 spent on nothing any rule claims and a $50 claim standing — so the shortfall outlasts the
+  # give-way list by $100.
   it "says who gives way, by how much, and what is left over", :aggregate_failures do
     rule_for("Fun", rate: 50, rule_type: :choice)
     spend(category("Repairs"), 1_100, on: Date.new(2026, 9, 6))
@@ -76,7 +76,6 @@ RSpec.describe "Home trouble strip", type: :system do
     expect(page).to have_css("[data-shortfall-headline]", text: "Your budget and savings claim $150.00 more than checking holds")
     expect(page).to have_css("[data-shortfall-amount]", text: "short $150.00")
     expect(page).to have_css("[data-shortfall-elsewhere]", text: "$500.00 of your money is sitting outside")
-    expect(page).to have_css("[data-shortfall-pace]", text: "Spending $18.75 a day less")
     expect(page).to have_css("[data-uncovered-claim='Fun']", text: "nothing covers its $50.00")
     expect(page).to have_css("[data-uncovered-remainder]", text: "$100.00 past everything that is claimed")
   end

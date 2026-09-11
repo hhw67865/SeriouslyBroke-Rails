@@ -16,12 +16,18 @@
       <%= pluralize(presenter.blocks.size, "category") %> ·
       <%= pluralize(presenter.blocks.sum(&:rule_count), "rule") %>
     </p>
+    <p class="basis-full flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 sm:basis-auto" data-kinds-legend>
+      <span>gives way first →</span>
+      <% presenter.kinds_legend.each do |kind, label| %>
+        <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-sm <%= type_fill(kind) %>" aria-hidden="true"></span><%= label %></span>
+      <% end %>
+    </p>
   </div>
 
   <%# `items-start` so a two-rule block beside a five-rule one keeps its own height. %>
   <div class="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:items-start">
     <% presenter.blocks.each do |block| %>
-      <div class="bg-white border border-gray-200 rounded overflow-hidden" data-category-block="<%= block.name %>">
+      <div class="bg-white border border-gray-200 rounded overflow-hidden" data-category-block="<%= block.name %>" id="block-<%= block.category.id %>">
         <%# The header tints when any row is over, short or overdue — CategoryBlock#trouble?, which
             is deliberately wider than the trouble strip's own two triggers. %>
         <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 px-4 py-2 border-b border-gray-200 <%= block.trouble? ? "bg-status-danger-light" : "bg-gray-50" %>"
@@ -91,8 +97,27 @@
               <p class="text-xs text-gray-500">Loading…</p>
             <% end %>
           </details>
+
+          <div class="px-4 pb-3">
+            <%= render "home/adjust", line: row %>
+            <% if row.adjustments.any? %>
+              <ul class="mt-2 space-y-1" data-rule-changes>
+                <% row.adjustments.each do |change| %>
+                  <li class="flex items-baseline gap-2 text-xs text-gray-600" data-change="<%= change.id %>">
+                    <span class="text-gray-500"><%= change.date.strftime("%b %-d") %></span>
+                    <span class="<%= change.amount.negative? ? "text-status-danger" : "text-gray-900" %>" data-change-amount><%= number_to_currency(change.amount) %></span>
+                    <%= button_to "Remove", adjustment_path(change), method: :delete, class: "text-brand-dark hover:text-brand underline" %>
+                  </li>
+                <% end %>
+              </ul>
+            <% end %>
+          </div>
         <% end %>
       </div>
+    <% end %>
+
+    <% presenter.savings_blocks.each do |row| %>
+      <%= render "home/savings_block", row: row, presenter: presenter %>
     <% end %>
 
     <%# A category no rule claims, with spending this period: the fact, no bar, no pressure. Nothing

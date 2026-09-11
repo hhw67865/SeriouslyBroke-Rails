@@ -1,0 +1,30 @@
+<%# COMING UP — every dated rule due in the next 30 days, with where its money stands. Local:
+    `presenter`. Absent when nothing is due, rather than an empty card. %>
+<% if presenter.upcoming.any? %>
+  <section class="bg-white border border-gray-200 rounded" data-upcoming aria-labelledby="upcoming-heading">
+    <div class="flex items-baseline justify-between gap-3 px-4 py-3 border-b border-gray-200 lg:px-5">
+      <h3 id="upcoming-heading" class="text-sm font-semibold text-gray-900">Coming up</h3>
+      <p class="text-xs text-gray-500">the next <%= HomePresenter::UPCOMING_DAYS %> days</p>
+    </div>
+    <ul class="divide-y divide-gray-100">
+      <% presenter.upcoming.each do |row| %>
+        <li class="grid grid-cols-[56px_1fr_auto] items-center gap-3 px-4 py-3 sm:grid-cols-[56px_1.4fr_1fr_1fr] lg:px-5"
+            data-upcoming-row="<%= row.name %>" data-upcoming-state="<%= row.state %>">
+          <div class="rounded border border-gray-200 py-1 text-center">
+            <div class="text-[10px] uppercase text-gray-500"><%= row.due_on.strftime("%b") %></div>
+            <div class="text-lg font-semibold leading-tight text-gray-900"><%= row.due_on.day %></div>
+          </div>
+          <div class="min-w-0">
+            <p class="text-sm font-medium text-gray-900 truncate"><%= row.name %></p>
+            <p class="text-xs <%= type_text_class(row.line) %>"><%= shape_words(row.line) %></p>
+          </div>
+          <p class="text-sm tabular-nums text-gray-900 sm:text-left"><%= number_to_currency(row.amount) %></p>
+          <p class="col-span-3 text-xs sm:col-span-1 sm:text-sm <%= row.short? ? "text-status-danger font-medium" : row.ready? ? "text-status-success font-medium" : "text-gray-600" %>"
+             data-upcoming-words>
+            <%= upcoming_words(row) %>
+          </p>
+        </li>
+      <% end %>
+    </ul>
+  </section>
+<% end %>

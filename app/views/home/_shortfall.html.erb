@@ -25,11 +25,6 @@
     </p>
   <% end %>
 
-  <%# Nil for a user with no period declared: there is no "rest of the period" to spread it over. %>
-  <% if pace = presenter.pace_line %>
-    <p class="mt-1 text-sm text-gray-700" data-shortfall-pace><%= pace_words(pace) %></p>
-  <% end %>
-
   <%# The figure is what this claim is short by after everything below it in the order has already
       given way, which is why the last row is usually partial and says so. %>
   <% if presenter.uncovered_claims.any? %>

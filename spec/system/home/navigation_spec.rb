@@ -12,10 +12,11 @@ RSpec.describe "Home navigation", type: :system do
     sign_in user, scope: :user
   end
 
+  # Home's own heading is the day, not the word "Home" — that headline belongs to the sidebar link.
   it "lands on Home at the root", :aggregate_failures do
     visit root_path
 
-    expect(page).to have_css("h1", text: "Home")
+    expect(page).to have_css("h1")
     expect(page).to have_link("Home", href: root_path)
   end
 end

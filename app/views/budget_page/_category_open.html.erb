@@ -87,7 +87,9 @@
               <% end %>
             </details>
 
-            <%= render "budget_page/adjust", line: line %>
+            <%# Task 3 removes this render along with the Budget page's own Adjust panel; until then
+                it points at Home's moved partial so Budget keeps rendering. %>
+            <%= render "home/adjust", line: line %>
 
             <%# What was already done, in date order. The claim above counts every one of them; the
                 list is what makes that figure explicable rather than merely asserted. %>

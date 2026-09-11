@@ -14,7 +14,7 @@ RSpec.describe "Adjustments" do
 
   it "tops up and takes back", :aggregate_failures do
     post adjustments_path, params: { source_type: "Rule", source_id: rule.id, amount: "50" }
-    expect(response).to redirect_to(budget_page_path(open: groceries.id))
+    expect(response).to redirect_to(root_path(anchor: "block-#{groceries.id}"))
     expect(rule.adjustments.sole.amount).to eq(50)
 
     delete adjustment_path(rule.adjustments.sole)
@@ -42,6 +42,16 @@ RSpec.describe "Adjustments" do
     post adjustments_path, params: { source_type: "Account", source_id: emergency.id, amount: "50", amount_sign: "-1" }
 
     expect(response).to redirect_to(savings_path)
+    expect(emergency.adjustments.sole.amount).to eq(-50)
+  end
+
+  it "reduces a savings account and comes back to Home when the form carried return: home", :aggregate_failures do
+    emergency = create(:account, user: user, name: "Emergency")
+    create(:savings_target, account: emergency, amount: 200, starts_on: user.period_containing(user.today).first)
+
+    post adjustments_path, params: { source_type: "Account", source_id: emergency.id, amount: "50", amount_sign: "-1", return: "home" }
+
+    expect(response).to redirect_to(root_path(anchor: "savings-#{emergency.id}"))
     expect(emergency.adjustments.sole.amount).to eq(-50)
   end
 

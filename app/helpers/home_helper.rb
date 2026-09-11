@@ -110,20 +110,12 @@ module HomeHelper
     line.per_period.positive? ? "+#{number_to_currency(line.per_period)}" : nil
   end
 
-  # What a runway tick says beside its dot. No date in it: a tick's place on the ruler is its day.
-  def runway_tick_words(tick)
-    state = tick.short? ? "#{number_to_currency(tick.gap)} short" : "ready"
+  # What an upcoming row says beside its amount.
+  def upcoming_words(row)
+    return "Ready — it's all there" if row.ready?
+    return "#{number_to_currency(row.line.fund_gap)} short" if row.short?
 
-    "#{tick.label} · #{state}"
-  end
-
-  # The runway's pace line and the shortfall strip's remedy are one sentence about one figure.
-  # HomePresenter::Pace decides which arm; this says it.
-  def pace_words(pace)
-    return nil if pace.nil?
-    return "#{number_to_currency(pace.amount)} a day is fine for the rest of the period." if pace.fine?
-
-    "Spending #{number_to_currency(pace.amount)} a day less for the rest of this period lands it at zero."
+    "#{number_to_currency(row.set_aside)} set aside · +#{number_to_currency(row.line.per_period)} a period"
   end
 
   # What a row calls one of a category's rules. An item names itself; an item-less rule is named by

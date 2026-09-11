@@ -12,7 +12,7 @@ require "rails_helper"
 # `:js` throughout, and the reason is the `<details>`: the panel is opened by the browser's own
 # disclosure, which Rack::Test does not have — its fields are invisible until a real summary is
 # clicked. Everything under the summary is a plain form to the same endpoint.
-RSpec.describe "Budget page adjustments", :js, type: :system do
+RSpec.describe "Home adjustments", :js, type: :system do
   include ActiveSupport::Testing::TimeHelpers
 
   let(:user) { create(:user, :biweekly) }
@@ -39,7 +39,7 @@ RSpec.describe "Budget page adjustments", :js, type: :system do
     )
   end
 
-  def open_panel = visit budget_page_path(open: groceries.id)
+  def open_panel = visit root_path
 
   def open_adjust = find("[data-adjust='Groceries'] summary").click
 
@@ -51,7 +51,7 @@ RSpec.describe "Budget page adjustments", :js, type: :system do
     end
   end
 
-  def claimed = find("[data-category-row='Groceries'] [data-category-claim]")
+  def claimed = find("[data-category-block='Groceries'] [data-block-claimed]")
 
   # Both directions on the allowance's own words, and the claim moves with them: $400 topped up by
   # $50 claims $450, and reduced by $50 claims $400 again.
@@ -129,5 +129,22 @@ RSpec.describe "Budget page adjustments", :js, type: :system do
     expect(field[:min]).to eq("2026-09-04")
     expect(field[:max]).to eq("2026-09-09")
     expect(find("[data-adjust-hint]")).to have_content("This period only, up to today.")
+  end
+
+  # A savings block's Adjust panel writes through the same door, and carries `return=home` so a
+  # refusal or a skip lands back on Home rather than on the Savings page.
+  it "skips a savings block's period from Home and returns to Home with the notice", :aggregate_failures do
+    emergency = create(:account, user: user, name: "Emergency")
+    create(:savings_target, account: emergency, amount: 200, starts_on: Date.new(2026, 9, 4))
+
+    open_panel
+    within("[data-savings-block='Emergency']") do
+      find("[data-adjust='Emergency'] summary").click
+      click_button "Skip this period (−$200.00)"
+    end
+
+    expect(page).to have_current_path(root_path, ignore_query: true)
+    expect(page).to have_content("Skipped this period for Emergency — $200.00 less owed.")
+    expect(page).to have_css("#savings-#{emergency.id}")
   end
 end

@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # Everything the home page shows: accounts and balances, free to spend, this period's progress,
-# the trouble strip, the give-way list and the runway. Reads through one ClaimLedger.
+# the trouble strip, what is coming up and the give-way list. Reads through one ClaimLedger.
 class HomePresenter
   UnbudgetedRow = Data.define(:category, :spent)
   Trouble = Data.define(:kind, :subject)
@@ -14,17 +14,33 @@ class HomePresenter
     def percent = percent_at(day)
     def percent_at(day_index) = ((day_index.to_f / days) * 100).round.clamp(0, 100)
   end
-  RunwayTick = Data.define(:line, :day_index, :percent, :label, :amount, :state, :gap) do
+  Tiles = Data.define(
+    :free,
+    :checking,
+    :spent_this_period,
+    :claimed,
+    :budget_claim,
+    :savings_claim,
+    :savings_total,
+    :savings_owed,
+    :savings_count
+  )
+  # One dated rule due soon. `state` is :ready (the money is there), :short (due this period and
+  # not there) or :building (still accruing toward a later day).
+  Upcoming = Data.define(:line, :state) do
+    # ClaimLine#name says "Whole category" for an item-less rule — the Budget page's own vocabulary
+    # for telling one rule from a sibling in the same category. Coming up never shows two rules from
+    # one category side by side, so it names the row by its item, or its category standing in for it.
+    def name = line.rule.item&.name || line.category.name
+    def due_on = line.next_due_on
+    def amount = line.target
+    def set_aside = line.built_up
     def ready? = state == :ready
     def short? = state == :short
+    def building? = state == :building
   end
-  Runway = Data.define(:progress, :ticks, :due_total, :short) do
-    delegate :first, :last, :day, :days, :days_left, :percent, to: :progress
-    def any_due? = ticks.any?
-  end
-  Pace = Data.define(:amount, :fine) do
-    def fine? = fine
-  end
+
+  UPCOMING_DAYS = 30
 
   attr_reader :user, :today
 
@@ -63,29 +79,50 @@ class HomePresenter
     Progress.new(first: range.first, last: range.last, day: (today - range.first).to_i + 1, days: range.count)
   end
 
-  def runway
-    return @runway if defined?(@runway)
-
-    @runway = build_runway
-  end
-
-  def pace_line
-    progress = period_progress
-    return nil if progress.nil?
-    return Pace.new(amount: per_day_pace, fine: false) if short?
-
-    Pace.new(amount: (free_to_spend / [progress.days_left, 1].max).round(2), fine: true)
-  end
-
   def short? = free_to_spend.negative?
   def shortfall = -free_to_spend
 
-  def per_day_pace
-    progress = period_progress
-    return nil if progress.nil? || !short?
+  def day_words = today.strftime("%A, %B %-d")
 
-    (shortfall / [progress.days_left, 1].max).round(2)
+  def period_words
+    progress = period_progress
+    return "No period set yet" if progress.nil?
+
+    "Day #{progress.day} of #{progress.days} in this period · next payday #{(progress.last + 1).strftime("%b %-d")}"
   end
+
+  def tiles
+    @tiles ||= Tiles.new(
+      free: free_to_spend,
+      checking: in_checking,
+      spent_this_period: spent_this_period,
+      claimed: claimed,
+      budget_claim: budget_claim,
+      savings_claim: savings_claim,
+      savings_total: other_accounts_total,
+      savings_owed: savings_claim,
+      savings_count: other_accounts.size
+    )
+  end
+
+  def spent_this_period
+    @spent_this_period ||= Entry.expenses.where(categories: { user_id: user.id })
+      .where(date: user.period_containing(today)).sum(:amount).to_d
+  end
+
+  # Dated rules due from today through UPCOMING_DAYS, soonest first, each with where its money stands.
+  def upcoming
+    @upcoming ||= upcoming_lines
+      .map { |line| Upcoming.new(line: line, state: upcoming_state(line)) }
+      .sort_by { |row| [row.due_on, row.name] }
+  end
+
+  # Savings accounts with a target, as the Savings page reads them, off this page's own ledger.
+  def savings_blocks
+    @savings_blocks ||= SavingsPresenter.new(user: user, today: today, ledger: claim_ledger).rows.select(&:targeted?)
+  end
+
+  def kinds_legend = ClaimLedger::KIND_RANK.keys.map { |kind| [kind, kind.to_s.capitalize] }
 
   # Which claims give way to cover the shortfall, in give-way order — savings included, between
   # usage and bills.
@@ -156,36 +193,28 @@ class HomePresenter
     @unbudgeted_categories ||= Category.where(id: unbudgeted_spending.keys).index_by(&:id)
   end
 
-  def build_runway
-    progress = period_progress
-    return nil if progress.nil?
-
-    ticks = runway_ticks(progress)
-    Runway.new(progress: progress, ticks: ticks, due_total: ticks.sum(0.to_d, &:amount), short: ticks.select(&:short?))
+  # Dated, unpaid, and due somewhere in the next UPCOMING_DAYS.
+  def upcoming_lines
+    blocks.flat_map(&:rows).select { |line| line.dated? && !line.paid? && due_soon?(line) }
   end
 
-  def runway_ticks(progress)
-    give_way_order
-      .select { |line| line.dated? && line.due_this_period && !line.paid? }
-      .sort_by { |line| [line.next_due_on, line.name] }
-      .map { |line| runway_tick(line, progress) }
+  def due_soon?(line) = line.next_due_on&.between?(today, today + UPCOMING_DAYS) || false
+
+  def upcoming_state(line)
+    return :short if line.short?
+    return :building if line.fund_short?
+
+    :ready
   end
 
-  def runway_tick(line, progress)
-    day_index = (line.next_due_on - progress.first).to_i + 1
-    RunwayTick.new(
-      line: line,
-      day_index: day_index,
-      percent: progress.percent_at(day_index),
-      label: line.rule.item&.name || line.category.name,
-      amount: line.target,
-      state: line.fund_short? ? :short : :ready,
-      gap: line.fund_gap
-    )
+  # This period's adjustments, so each rule row can list them under its Adjust panel.
+  def adjustments_this_period
+    @adjustments_this_period ||= Adjustment.on_rules(claim_ledger.rules.map(&:id))
+      .dated_within(user.period_containing(today)).order(:date, :created_at).group_by(&:source_id)
   end
 
   def trouble_lines = @trouble_lines ||= blocks.flat_map(&:rows).select(&:trouble?)
   def claim_ledger = @claim_ledger ||= ClaimLedger.new(user, today: today)
-  def claim_rows = @claim_rows ||= ClaimRows.new(ledger: claim_ledger, today: today, categories: categories)
+  def claim_rows = @claim_rows ||= ClaimRows.new(ledger: claim_ledger, today: today, categories: categories, adjustments: adjustments_this_period)
   def account_ledger = claim_ledger.account_ledger
 end

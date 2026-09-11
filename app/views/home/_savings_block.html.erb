@@ -1,0 +1,41 @@
+<%# ONE SAVINGS ACCOUNT WITH A TARGET, in the shape of a category block. Locals: `row`
+    (SavingsLine), `presenter`. The bar is what has arrived this period against what is owed. %>
+<div class="bg-white border border-gray-200 rounded overflow-hidden" data-savings-block="<%= row.name %>" id="savings-<%= row.account.id %>">
+  <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 px-4 py-2 border-b border-gray-200 bg-gray-50" data-block-header>
+    <div class="flex items-baseline gap-2">
+      <h4 class="text-sm font-semibold text-gray-900"><%= row.name %></h4>
+      <span class="text-xs text-gray-500">savings</span>
+    </div>
+    <span class="text-sm text-gray-700 tabular-nums" data-block-owed><%= number_to_currency(row.claim) %> owed</span>
+  </div>
+  <div class="flex gap-3 px-4 py-3">
+    <span class="w-1 shrink-0 rounded bg-savings" aria-hidden="true"></span>
+    <div class="min-w-0 flex-1">
+      <div class="flex flex-wrap items-baseline justify-between gap-x-3">
+        <p class="text-sm font-medium text-gray-900 truncate"><%= row.target_words %></p>
+        <p class="text-sm tabular-nums text-gray-700" data-savings-figure><%= number_to_currency(row.accrued) %> owed this period</p>
+      </div>
+      <p class="mt-0.5 text-xs text-savings">savings · <%= row.mode_words %></p>
+      <p class="mt-1 flex flex-wrap items-baseline gap-x-2 text-xs text-gray-500">
+        <% if row.transferable? %>
+          <%= button_to "Transfer #{number_to_currency(row.claim)}", 
+transfers_path,
+                        params: { transfer: { from_account_id: presenter.user.main_account_id, to_account_id: row.account.id, amount: row.claim, date: presenter.today }, return: "home" },
+                        class: "text-brand-dark hover:text-brand underline", 
+form: { class: "inline" }, 
+data: { transfer_owed: row.name } %>
+        <% else %>
+          <span class="text-status-success font-medium">On pace</span>
+        <% end %>
+      </p>
+    </div>
+  </div>
+  <div class="px-4 pb-3">
+    <%# `savings/_adjust` carries no disclosure of its own — the Savings page's own row wraps it in
+        one, and this block does the same, in the rule rows' own words so the two read as one list. %>
+    <details data-adjust="<%= row.name %>">
+      <summary class="<%= rule_action_classes("cursor-pointer text-sm sm:text-left") %>">Adjust what's owed now</summary>
+      <%= render "savings/adjust", row: row, return_to: "home" %>
+    </details>
+  </div>
+</div>

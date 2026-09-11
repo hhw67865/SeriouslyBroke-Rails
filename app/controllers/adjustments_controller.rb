@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class AdjustmentsController < ApplicationController
-  include BudgetPageState
+  include HomeState
   include SavingsPageState
 
   # Where each source is found, through current_user: a foreign id is not found rather than refused.
@@ -39,10 +39,15 @@ class AdjustmentsController < ApplicationController
   end
 
   def name_for(source) = source.is_a?(Rule) ? helpers.rule_name(source) : source.name
-  def back_to(source) = source.is_a?(Rule) ? budget_page_path(open: source.category_id) : savings_path
+
+  def back_to(source)
+    return root_path(anchor: "block-#{source.category_id}") if source.is_a?(Rule)
+
+    params[:return] == "home" ? root_path(anchor: "savings-#{source.id}") : savings_path
+  end
 
   def refuse(source, message)
-    source.is_a?(Rule) ? refuse_on_budget_page(message) : refuse_on_savings_page(message)
+    source.is_a?(Rule) || params[:return] == "home" ? refuse_on_home(message) : refuse_on_savings_page(message)
   end
 
   def confirmation(form)
