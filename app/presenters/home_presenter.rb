@@ -40,7 +40,24 @@ class HomePresenter
     def building? = state == :building
   end
 
+  # The order the kinds hold on in — a bill gives way last — which is the order Home lists them.
+  KIND_ORDER = [:bill, :savings, :usage, :choice].freeze
+  KIND_NAMES = { bill: "Bills", savings: "Savings", usage: "Usage", choice: "Choice" }.freeze
+
+  # One kind's column: ClaimLines for a rule kind, SavingsLines for savings, in give-way order.
+  KindColumn = Data.define(:kind, :rows, :total) do
+    def name = HomePresenter::KIND_NAMES.fetch(kind)
+    def savings? = kind == :savings
+    def count = rows.size
+    def count_words = "#{count} #{(savings? ? "account" : "rule").pluralize(count)}"
+    delegate :empty?, to: :rows
+  end
+
+  # One segment of the claimed bar. Percent is of claimed, so the four sum to about 100.
+  ClaimedShare = Data.define(:kind, :amount, :percent)
+
   UPCOMING_DAYS = 30
+  UPCOMING_ROWS = 4
 
   attr_reader :user, :today
 
@@ -114,11 +131,25 @@ class HomePresenter
       .where(date: user.period_containing(today)).sum(:amount).to_d
   end
 
-  # Dated rules due from today through UPCOMING_DAYS, soonest first, each with where its money stands.
+  # Dated rules due from today through UPCOMING_DAYS: anything short first, then soonest, each with
+  # where its money stands.
   def upcoming
     @upcoming ||= upcoming_lines
       .map { |line| Upcoming.new(line: line, state: upcoming_state(line)) }
-      .sort_by { |row| [row.due_on, row.name] }
+      .sort_by { |row| [row.short? ? 0 : 1, row.due_on, row.name] }
+  end
+
+  def upcoming_shown = upcoming.first(UPCOMING_ROWS)
+  def upcoming_hidden = upcoming.drop(UPCOMING_ROWS)
+
+  # "3 due in the next 30 days", or past the cap "3 more by Oct 9 · 2 ready · 1 still building".
+  def upcoming_footer_words
+    return "#{upcoming.size} due in the next #{UPCOMING_DAYS} days" if upcoming_hidden.empty?
+
+    [
+      "#{upcoming_hidden.size} more by #{(today + UPCOMING_DAYS).strftime("%b %-d")}",
+      *hidden_state_counts.map { |words, count| "#{count} #{words}" }
+    ].join(" · ")
   end
 
   # Savings accounts with a target, as the Savings page reads them, off this page's own ledger.
@@ -126,7 +157,21 @@ class HomePresenter
     @savings_blocks ||= SavingsPresenter.new(user: user, today: today, ledger: claim_ledger).rows.select(&:targeted?)
   end
 
-  def kinds_legend = ClaimLedger::KIND_RANK.keys.map { |kind| [kind, kind.to_s.capitalize] }
+  # Four columns, always four: an empty kind renders as an empty column so the page keeps its shape.
+  def columns
+    @columns ||= KIND_ORDER.map do |kind|
+      rows = kind == :savings ? savings_blocks : give_way_order.select { |line| line.stripe_type == kind }
+      KindColumn.new(kind: kind, rows: rows, total: rows.sum(0.to_d, &:claim))
+    end
+  end
+
+  def claimed_shares
+    @claimed_shares ||= columns.map do |column|
+      ClaimedShare.new(kind: column.kind, amount: column.total, percent: share_percent(column.total))
+    end
+  end
+
+  def rule_count = blocks.sum(&:rule_count)
 
   # Which claims give way to cover the shortfall, in give-way order — savings included, between
   # usage and bills.
@@ -179,6 +224,21 @@ class HomePresenter
   end
 
   private
+
+  # Only the states that are there, in the order ready, still building, short.
+  def hidden_state_counts
+    {
+      "ready" => upcoming_hidden.count(&:ready?),
+      "still building" => upcoming_hidden.count(&:building?),
+      "short" => upcoming_hidden.count(&:short?)
+    }.select { |_, count| count.positive? }
+  end
+
+  def share_percent(amount)
+    return 0 unless claimed.positive?
+
+    ((amount / claimed) * 100).round.clamp(0, 100)
+  end
 
   def unbudgeted_spending
     @unbudgeted_spending ||= begin

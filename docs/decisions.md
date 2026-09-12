@@ -15,7 +15,7 @@ sentence is replaced, not kept.
 - **Claim** is what one rule or one account currently holds on checking. The **budget claim** is
   the rules' claims summed; the **savings claim** is the accounts' claims summed. **Claimed** is
   both together.
-- **Free** (free to spend) is checking minus claimed.
+- **Free** is checking minus claimed. On screen it is called **guilt-free money**.
 - **Ask** is what one rule or target costs per period. There is one word for this, not three.
 - **Typical income** is the mean of regular income over the last two complete periods. It is
   derived, never typed.
@@ -166,16 +166,23 @@ sentence is replaced, not kept.
 - **Nav**, in four groups: Today (Home, Entries, Calendar), Plan (Budget, Savings), Look back
   (Activity, Reports), Set up (Categories, Settings). A page is one of three things: an answer to read, a
   thing you do, or a thing you set up, and it is never two of them.
-- **Home** (`/`) is the full picture, headed by the day and where it sits in the period. Four
-  tiles: free to spend (after everything claimed is set aside; no per-day pace), checking with what
-  was spent this period, claimed with its budget and savings split, and savings with what is owed.
-  Then the trouble strip, only when something is wrong. Then "Coming up": every dated rule due in
-  the next 30 days with its date, amount and state (ready, short, or still building, with what is
-  set aside so far). Then "This period", two sections with their own totals under a header that
-  carries the kinds legend in give-way order: **Budget**, "$X claimed", one block per ruled
-  category; then **Savings**, "$Y owed", one block per savings account with a target. Each rule or
-  target is a row with its bar and its Adjust disclosure. An adjustment is the one thing written
-  from Home; everything else links out.
+- **Home** (`/`) is the full picture, headed by the day and where it sits in the period. First the
+  sum, as one card: **in checking**, minus **claimed** with a bar split by kind (bill, savings,
+  usage, choice, each with its figure), equals **guilt-free money**, the tinted answer. **In
+  savings** stands beside the card and outside it, with its balance, its account count, what is
+  owed, and a link to Savings; it is not in the sum, and the card's edge says so. Then the trouble
+  strip, only when something is wrong. Then "Coming up": dated rules due in the next 30 days, at
+  most four rows, anything short first and then the soonest, each with its date, amount and state
+  (ready, short, or still building, with what is set aside so far). Its footer always says how many
+  are due and links to Calendar; past four it counts the rest by state. Then "What's claimed": four
+  columns in the order they hold on — **Bills**, **Savings**, **Usage**, **Choice** — each headed by
+  its kind, its count and its total, holding one card per rule, or per savings account with a
+  target. A card carries the lane's name, its category when the name doesn't say it, the schedule,
+  a bar in the kind's colour, the figure, the when-clause and an Adjust disclosure; a savings card
+  carries Transfer for what is owed. The kind is the column, so a card never repeats it. Spending
+  this period in a category with no rule is listed plainly beneath the columns, with no bar. On a
+  phone the columns become a segmented control showing one kind at a time. An adjustment is the one
+  thing written from Home; everything else links out.
 - **Savings** (`/savings`): checking at the top with balance,
   claimed (budget and savings as its two lines) and free; then each savings account with its
   targets in words ("$200 a period, plus 10% of Paycheck"), what it is owed now, a Transfer button that

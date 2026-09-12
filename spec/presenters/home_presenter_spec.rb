@@ -75,30 +75,100 @@ RSpec.describe HomePresenter do
     expect(tiles).to have_attributes(checking: 970, spent_this_period: 30, claimed: 570, budget_claim: 370, savings_claim: 200, free: 400, savings_total: 500, savings_owed: 200, savings_count: 1)
   end
 
-  it "lists dated rules due within 30 days with their state, soonest first", :aggregate_failures do
+  # Rent: started Sep 4 in the period its Sep 12 due date falls in, so it is fully planned; the
+  # $200 spent in its lane is what leaves it short.
+  def seed_upcoming!
     create(:account, user: user, name: "Checking", opening_balance: 5_000) unless user.main_account
     rule_on("Dentist", :bill, amount: 300, anchor_date: Date.new(2026, 9, 12), starts_on: Date.new(2026, 8, 1))
     rule_on("Vet", :bill, amount: 180, anchor_date: Date.new(2026, 10, 1), starts_on: Date.new(2026, 9, 4))
     rule_on("Insurance", :bill, amount: 1_200, anchor_date: Date.new(2026, 12, 1), starts_on: Date.new(2026, 9, 4))
+    rent = rule_on("Rent", :bill, amount: 900, anchor_date: Date.new(2026, 9, 12), starts_on: Date.new(2026, 9, 4))
+    create(:entry, item: create(:item, category: rent.category), amount: 200, date: Date.new(2026, 9, 6))
+  end
+
+  it "lists dated rules due within 30 days, anything short first and then soonest", :aggregate_failures do
+    seed_upcoming!
     presenter = described_class.new(user: user, today: today)
 
     expect(presenter.upcoming.map { |u| [u.name, u.due_on, u.state] })
-      .to eq([["Dentist", Date.new(2026, 9, 12), :ready], ["Vet", Date.new(2026, 10, 1), :building]])
-    expect(presenter.upcoming.first.set_aside).to eq(300)
+      .to eq([["Rent", Date.new(2026, 9, 12), :short], ["Dentist", Date.new(2026, 9, 12), :ready], ["Vet", Date.new(2026, 10, 1), :building]])
+    expect(presenter.upcoming_shown.size).to eq(3)
+    expect(presenter.upcoming_hidden).to be_empty
+    expect(presenter.upcoming_footer_words).to eq("3 due in the next 30 days")
+  end
+
+  it "heads the page with the day and where it sits in the period", :aggregate_failures do
     expect(presenter.day_words).to eq("Wednesday, September 9")
     expect(presenter.period_words).to eq("Day 6 of 14 in this period · next payday Sep 18")
   end
 
-  it "carries one savings block per targeted account and the legend in give-way order", :aggregate_failures do
-    create(:account, user: user, name: "Checking") unless user.main_account
+  # Past the cap, the rest are counted by state rather than listed.
+  it "shows four and counts the rest by state", :aggregate_failures do
+    create(:account, user: user, name: "Checking", opening_balance: 50_000) unless user.main_account
+    ["Water", "Internet", "Phone", "Gym", "Trash", "Gas"].each_with_index do |name, index|
+      rule_on(name, :bill, amount: 100, anchor_date: Date.new(2026, 9, 12 + index), starts_on: Date.new(2026, 8, 1))
+    end
+    rule_on("Tuition", :bill, amount: 2_000, anchor_date: Date.new(2026, 10, 5), starts_on: Date.new(2026, 9, 4))
+    presenter = described_class.new(user: user, today: today)
+
+    expect(presenter.upcoming_shown.map(&:name)).to eq(["Water", "Internet", "Phone", "Gym"])
+    expect(presenter.upcoming_hidden.map(&:name)).to eq(["Trash", "Gas", "Tuition"])
+    expect(presenter.upcoming_footer_words).to eq("3 more by Oct 9 · 2 ready · 1 still building")
+  end
+
+  def seed_kinds!
+    rule_on("Rent", :bill, amount: 900)
+    rule_on("Fun", :choice, amount: 300)
+    rule_on("Groceries", :usage, amount: 400)
     emergency = create(:account, user: user, name: "Emergency")
-    create(:account, user: user, name: "Joint")
+    create(:savings_target, account: emergency, amount: 200, starts_on: Date.new(2026, 9, 4))
+  end
+
+  it "reads four kind columns in the order they hold on, each with its total and count", :aggregate_failures do
+    seed_kinds!
+
+    columns = presenter.columns
+    expect(columns.map(&:kind)).to eq([:bill, :savings, :usage, :choice])
+    expect(columns.map(&:name)).to eq(["Bills", "Savings", "Usage", "Choice"])
+    expect(columns.map(&:total)).to eq([900, 200, 400, 300])
+    expect(columns.map(&:count_words)).to eq(["1 rule", "1 account", "1 rule", "1 rule"])
+    expect(presenter.rule_count).to eq(3)
+  end
+
+  it "fills a rule kind's column with claim lines and the savings column with savings lines", :aggregate_failures do
+    seed_kinds!
+
+    columns = presenter.columns
+    expect(columns.first.rows.map { |row| row.category.name }).to eq(["Rent"])
+    expect(columns.second.rows.map(&:name)).to eq(["Emergency"])
+    expect(columns.second).to be_savings
+  end
+
+  it "keeps an empty kind as an empty column and never a missing one", :aggregate_failures do
+    rule_on("Rent", :bill, amount: 900)
+
+    columns = presenter.columns
+    expect(columns.size).to eq(4)
+    expect(columns.map(&:empty?)).to eq([false, true, true, true])
+    expect(columns.second.count_words).to eq("0 accounts")
+  end
+
+  it "splits claimed into four shares that sum to claimed, as rounded percents", :aggregate_failures do
+    rule_on("Rent", :bill, amount: 600)
+    rule_on("Fun", :choice, amount: 200)
+    emergency = create(:account, user: user, name: "Emergency")
     create(:savings_target, account: emergency, amount: 200, starts_on: Date.new(2026, 9, 4))
     presenter = described_class.new(user: user, today: today)
 
-    expect(presenter.savings_blocks.map(&:name)).to eq(["Emergency"])
-    expect(presenter.savings_blocks.first.claim).to eq(200)
-    expect(presenter.kinds_legend).to eq([[:choice, "Choice"], [:usage, "Usage"], [:savings, "Savings"], [:bill, "Bill"]])
+    shares = presenter.claimed_shares
+    expect(shares.map(&:kind)).to eq([:bill, :savings, :usage, :choice])
+    expect(shares.map(&:amount)).to eq([600, 200, 0, 200])
+    expect(shares.map(&:percent)).to eq([60, 20, 0, 20])
+    expect(shares.sum(0.to_d, &:amount)).to eq(presenter.claimed)
+  end
+
+  it "gives every share a zero percent when nothing is claimed" do
+    expect(presenter.claimed_shares.map(&:percent)).to eq([0, 0, 0, 0])
   end
 
   it "lists spending in categories no rule claims" do
