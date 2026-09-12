@@ -26,14 +26,20 @@ RSpec.describe RuleForm do
     expect(dated.rule).to have_attributes(keeps_unspent: false, anchor_date: Date.new(2026, 10, 15), interval_months: nil)
   end
 
-  it "writes a cap only on a fund, and clears it for a dated rule", :aggregate_failures do
+  it "writes a cap only on a fund, and clears it for a dated rule or an unticked keeps box", :aggregate_failures do
     capped = form({ category_id: groceries.id, rule_type: "usage", amount: "100", schedule: "per_period", keeps: "1", cap: "250" })
     dated = form({ category_id: groceries.id, rule_type: "bill", amount: "600", schedule: "by_date", keeps: "1", cap: "250", anchor_date: "2026-10-15", item_id: bread.id })
+    # The gap the ledger deferred: a cap typed before Keeps is unticked must not survive the save.
+    # A category of its own — an item-less rule already sits on `groceries` above.
+    pantry = create(:category, user: user, name: "Pantry")
+    no_keeps = form({ category_id: pantry.id, rule_type: "usage", amount: "100", schedule: "per_period", keeps: "0", cap: "250" })
 
     expect(capped.save).to be(true)
     expect(capped.rule).to have_attributes(keeps_unspent: true, cap: 250)
     expect(dated.save).to be(true)
     expect(dated.rule.cap).to be_nil
+    expect(no_keeps.save).to be(true)
+    expect(no_keeps.rule).to have_attributes(keeps_unspent: false, cap: nil)
   end
 
   it "reads a fund's cap back into words" do

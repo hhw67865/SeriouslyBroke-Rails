@@ -81,6 +81,11 @@ export default class extends Controller {
     return box ? box.checked : false
   }
 
+  get keeps() {
+    const box = this.field("keeps")
+    return box ? box.checked : false
+  }
+
   revealFields() {
     const dated = this.schedule === "by_date"
 
@@ -88,6 +93,7 @@ export default class extends Controller {
     this.toggle(this.optional("repeatsField"), dated)
     this.toggle(this.optional("intervalField"), dated && this.repeats)
     this.allowKeeps(!dated)
+    this.allowCap(!dated && this.keeps)
   }
 
   // Disabled and cleared rather than hidden: a box left ticked under a date is a 422 about a
@@ -102,13 +108,18 @@ export default class extends Controller {
       if (!allowed) box.checked = false
     }
 
-    const cap = this.field("cap")
-    if (cap) {
-      cap.disabled = !allowed
-      if (!allowed) cap.value = ""
-    }
-
     field.classList.toggle("opacity-50", !allowed)
+  }
+
+  // "Stop at" is a detail of Keeps, not of the schedule alone: `RuleForm#schedule_columns` only
+  // keeps a typed cap when `keeps?` is true, so a cap left fillable with the box unticked would be
+  // silently dropped on save. Cleared the same way the keeps box is under a date.
+  allowCap(allowed) {
+    const cap = this.field("cap")
+    if (!cap) return
+
+    cap.disabled = !allowed
+    if (!allowed) cap.value = ""
   }
 
   optional(name) {

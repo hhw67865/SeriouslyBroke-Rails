@@ -151,12 +151,22 @@
                     "with no limit",
               input_html: { disabled: rule_form.schedule == "by_date" } %>
 
-          <%= f.input :cap,
-              as: :decimal,
-              label: "Stop at",
-              required: false,
-              hint: "optional — once the pile reaches this, the rule stops asking until you spend from it",
-              input_html: { step: 0.01, min: 0.01, disabled: rule_form.schedule == "by_date" } %>
+          <div class="w-full">
+            <%= f.label :cap, "Stop at", class: "form-label" %>
+            <span class="flex items-center gap-1">
+              <span class="text-gray-500">$</span>
+              <%= f.number_field :cap,
+                  class: "form-input w-32 tabular-nums",
+                  placeholder: "0.00",
+                  step: 0.01,
+                  min: 0.01,
+                  disabled: !rule_form.keeps? %>
+            </span>
+            <p class="form-hint">optional — once the pile reaches this, the rule stops asking until you spend from it</p>
+            <% if rule_form.errors[:cap].any? %>
+              <p class="form-error">Stop at <%= rule_form.errors[:cap].to_sentence %></p>
+            <% end %>
+          </div>
         </div>
 
         <div class="space-y-4 pl-3 border-l-2 border-gray-100">

@@ -68,18 +68,20 @@ RSpec.describe "Rule form", type: :system do
 
   # The cap is optional and lives beside "Keeps what it doesn't spend": once the pile reaches it,
   # the rule stops asking and the row says so instead of a running "+$X a period".
+  # "Stop at" is disabled until Keeps is ticked (a typed cap the box does not carry would be
+  # silently dropped), so a Rack::Test example reaches it the same way it reaches a dated rule's
+  # controls: by opening the form already in that state.
   it "offers the cap field, with its label and hint", :aggregate_failures do
-    open_form
+    open_form(rule: { keeps: "1" })
 
     expect(page).to have_field("Stop at")
     expect(page).to have_content("optional — once the pile reaches this, the rule stops asking until you spend from it")
   end
 
   it "writes a fund that stops at a cap", :aggregate_failures do
-    open_form
+    open_form(rule: { keeps: "1" })
 
     fill_in "Amount", with: "100"
-    check "Keeps what it doesn't spend"
     fill_in "Stop at", with: "2000"
     choose "Usage"
     click_button "Create rule"
