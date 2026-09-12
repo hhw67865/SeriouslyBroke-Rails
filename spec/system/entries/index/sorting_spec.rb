@@ -108,7 +108,7 @@ RSpec.describe "Entries Index - Sorting", type: :system do
     it "maintains search when sorting" do
       select "Description", from: "field"
       fill_in "q", with: "entry"
-      find("input[name='q']").send_keys(:return)
+      click_button "Search"
 
       click_link "Amount"
 
@@ -139,7 +139,8 @@ RSpec.describe "Entries Index - Sorting", type: :system do
       expect(page).to have_content("$50.00")
       expect(page).not_to have_content("$1,000.00") # High amount should NOT be on page 1
 
-      click_link "Next"
+      # Mobile and desktop each render a "Next", and CSS is what hides one of them.
+      within("nav[aria-label='Pagination']") { click_link "Next" }
 
       expect(page).to have_current_path(entries_path(sort: "amount", direction: "asc", page: 2))
 

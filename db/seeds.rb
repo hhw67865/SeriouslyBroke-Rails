@@ -1,474 +1,149 @@
 # frozen_string_literal: true
 
-# Clear existing data
-Rails.logger.debug "Clearing existing data..."
-# Delete in the correct order to avoid foreign key violations
-[Entry, Item, Budget, Category, SavingsPool, User].each do |model|
-  Rails.logger.debug { "Deleting #{model.name} records..." }
-  model.delete_all
-end
-
-# Create users
-Rails.logger.debug "Creating users..."
-user1 = User.create!(
-  email: "demo@example.com",
-  password: "password123",
-  name: "Demo User",
-  timezone: "America/New_York"
-)
-
-# Define category structure with color schemes
-Rails.logger.debug "Creating categories for Demo User..."
-
-# Expense categories with realistic colors
-expense_categories = [
-  { name: "Housing", color: "#E57373" },
-  { name: "Transportation", color: "#64B5F6" },
-  { name: "Food & Dining", color: "#81C784" },
-  { name: "Utilities", color: "#FFD54F" },
-  { name: "Entertainment", color: "#BA68C8" },
-  { name: "Health", color: "#4DB6AC" },
-  { name: "Personal Care", color: "#FF8A65" },
-  { name: "Education", color: "#7986CB" },
-  { name: "Shopping", color: "#F06292" },
-  { name: "Gifts & Donations", color: "#9575CD" }
-].map do |attrs|
-  user1.categories.create!(attrs.merge(category_type: :expense))
-end
-
-# Income categories
-income_categories = [
-  { name: "Salary", color: "#66BB6A" },
-  { name: "Freelance", color: "#26C6DA" },
-  { name: "Investments", color: "#42A5F5" },
-  { name: "Gifts", color: "#EC407A" },
-  { name: "Rental Income", color: "#AB47BC" }
-].map do |attrs|
-  user1.categories.create!(attrs.merge(category_type: :income))
-end
-
-# Savings categories with specific purposes
-savings_categories = [
-  { name: "Emergency Fund", color: "#5C6BC0" },
-  { name: "Vacation", color: "#26A69A" },
-  { name: "Home Down Payment", color: "#EF5350" },
-  { name: "Retirement", color: "#66BB6A" },
-  { name: "Vehicle", color: "#FFA726" }
-].map do |attrs|
-  user1.categories.create!(attrs.merge(category_type: :savings))
-end
-
-# Create savings pools
-Rails.logger.debug "Creating savings pools..."
-savings_pools = [
-  { name: "Emergency Fund", target_amount: 10_000 },
-  { name: "Vacation to Europe", target_amount: 5000 },
-  { name: "House Down Payment", target_amount: 50_000 },
-  { name: "New Car", target_amount: 15_000 },
-  { name: "Retirement Supplement", target_amount: 100_000 }
-].map { |attrs| user1.savings_pools.create!(attrs) }
-
-# Link savings categories to savings pools
-savings_categories[0].update(savings_pool: savings_pools[0]) # Emergency Fund
-savings_categories[1].update(savings_pool: savings_pools[1]) # Vacation
-savings_categories[2].update(savings_pool: savings_pools[2]) # Home Down Payment
-savings_categories[3].update(savings_pool: savings_pools[4]) # Retirement
-savings_categories[4].update(savings_pool: savings_pools[3]) # Vehicle
-
-# Create expense category items
-Rails.logger.debug "Creating expense items..."
-
-# Housing items
-housing_items = [
-  { name: "Rent" },
-  { name: "Home Insurance" },
-  { name: "Property Tax" },
-  { name: "Maintenance" },
-  { name: "Mortgage" }
-].map { |attrs| expense_categories[0].items.create!(attrs) }
-
-# Transportation items
-transportation_items = [
-  { name: "Gas" },
-  { name: "Car Insurance" },
-  { name: "Public Transit" },
-  { name: "Car Maintenance" },
-  { name: "Parking" },
-  { name: "Rideshare" }
-].map { |attrs| expense_categories[1].items.create!(attrs) }
-
-# Food items
-food_items = [
-  { name: "Groceries" },
-  { name: "Dining Out" },
-  { name: "Takeout" },
-  { name: "Coffee Shops" },
-  { name: "Work Lunches" }
-].map { |attrs| expense_categories[2].items.create!(attrs) }
-
-# Utilities items
-utilities_items = [
-  { name: "Electricity" },
-  { name: "Water" },
-  { name: "Internet" },
-  { name: "Phone" },
-  { name: "Streaming Services" },
-  { name: "Gas" }
-].map { |attrs| expense_categories[3].items.create!(attrs) }
-
-# Entertainment items
-entertainment_items = [
-  { name: "Movies" },
-  { name: "Concerts" },
-  { name: "Subscriptions" },
-  { name: "Hobbies" },
-  { name: "Gaming" }
-].map { |attrs| expense_categories[4].items.create!(attrs) }
-
-# Link some expense categories to savings pools (pool-covered expenses)
-# These represent irregular expenses funded by savings pools, not budgets
-Rails.logger.debug "Linking expense categories to savings pools..."
-expense_categories.find { |c| c.name == "Health" }.update!(savings_pool: savings_pools[0])           # Health → Emergency Fund
-expense_categories.find { |c| c.name == "Education" }.update!(savings_pool: savings_pools[4])        # Education → Retirement Supplement
-expense_categories.find { |c| c.name == "Gifts & Donations" }.update!(savings_pool: savings_pools[1]) # Gifts → Vacation to Europe
-
-# Create budgets only for budgetable expense categories (not pool-linked)
-Rails.logger.debug "Creating budgets..."
-expense_budgets = {
-  "Housing" => 1500,
-  "Transportation" => 400,
-  "Food & Dining" => 600,
-  "Utilities" => 300,
-  "Entertainment" => 200,
-  "Personal Care" => 100,
-  "Shopping" => 200
-}
-
-expense_categories.select(&:budgetable?).each do |category|
-  category.create_budget!(
-    amount: expense_budgets[category.name] || rand(100..1000),
-    prorated: ["Groceries", "Entertainment", "Shopping"].include?(category.name)
-  )
-end
-
-# Create income items
-Rails.logger.debug "Creating income items..."
-income_items = {
-  "Salary" => [{ name: "Primary Job" }],
-  "Freelance" => [
-    { name: "Web Development" },
-    { name: "Writing" },
-    { name: "Consulting" }
-  ],
-  "Investments" => [
-    { name: "Dividends" },
-    { name: "Interest" },
-    { name: "Capital Gains" }
-  ],
-  "Gifts" => [
-    { name: "Birthday" },
-    { name: "Holiday" }
-  ],
-  "Rental Income" => [
-    { name: "Property Rental" }
-  ]
-}
-
-income_categories.each do |category|
-  income_items[category.name].each do |item_attrs|
-    category.items.create!(item_attrs)
-  end
-end
-
-# Create savings items
-Rails.logger.debug "Creating savings items..."
-savings_items = {
-  "Emergency Fund" => [
-    { name: "Monthly Contribution" }
-  ],
-  "Vacation" => [
-    { name: "Vacation Savings" }
-  ],
-  "Home Down Payment" => [
-    { name: "Home Savings" }
-  ],
-  "Retirement" => [
-    { name: "Additional Retirement" }
-  ],
-  "Vehicle" => [
-    { name: "Car Fund" }
-  ]
-}
-
-savings_categories.each do |category|
-  savings_items[category.name].each do |item_attrs|
-    category.items.create!(item_attrs)
-  end
-end
-
-# Generate entries for the current and previous month
-Rails.logger.debug "Creating entries for the current and previous month..."
-
-# Define months for entries
-current_month = Date.current.beginning_of_month
-previous_month = 1.month.ago.beginning_of_month
-months = [previous_month, current_month]
-
-# Create expense entries for both months
-months.each do |month_start|
-  month_name = month_start.strftime("%B %Y")
-
-  # Housing expenses
-  housing_entries = {
-    "Rent" => { amount: 1500, day: 1 },
-    "Home Insurance" => month_start.month == 1 ? { amount: 1200, day: 15 } : nil, # January only
-    "Property Tax" => (month_start.month % 3).zero? ? { amount: 900, day: 20 } : nil, # Quarterly
-    "Maintenance" => { amount: rand(50..200), day: rand(1..28) }
-  }
-
-  housing_items.each do |item|
-    entry_data = housing_entries[item.name]
-    next unless entry_data
-
-    item.entries.create!(
-      amount: entry_data[:amount],
-      date: month_start + entry_data[:day].days,
-      description: "#{item.name} payment for #{month_name}"
-    )
+# A demo household on a fortnightly grid: four accounts, income landing in checking, every
+# rule shape, savings targets, transfers, and adjustments. Log in as demo@example.com / password123.
+# Split into one method per step so each stays small enough for rubocop's size cops without a disable.
+class DemoHousehold
+  def initialize(timezone)
+    @timezone = timezone
   end
 
-  # Transportation expenses - more frequent entries
-  transportation_entries = {
-    "Gas" => [
-      { amount: rand(40..60), day: rand(1..7) },
-      { amount: rand(40..60), day: rand(8..14) },
-      { amount: rand(40..60), day: rand(15..21) },
-      { amount: rand(40..60), day: rand(22..28) }
-    ],
-    "Car Insurance" => [
-      { amount: 120, day: 15 }
-    ],
-    "Public Transit" => [
-      { amount: 25, day: 5 },
-      { amount: 25, day: 19 }
-    ],
-    "Car Maintenance" => month_start == current_month ? [{ amount: 230, day: 12 }] : [],
-    "Parking" => [
-      { amount: 45, day: 1 }
-    ],
-    "Rideshare" => [
-      { amount: rand(15..30), day: rand(1..7) },
-      { amount: rand(15..30), day: rand(8..14) },
-      { amount: rand(15..30), day: rand(15..21) },
-      { amount: rand(15..30), day: rand(22..28) }
-    ]
-  }
-
-  transportation_items.each do |item|
-    entry_list = transportation_entries[item.name] || []
-    entry_list.each do |entry_data|
-      item.entries.create!(
-        amount: entry_data[:amount],
-        date: month_start + entry_data[:day].days,
-        description: "#{item.name} expense on #{(month_start + entry_data[:day].days).strftime("%b %d")}"
-      )
+  def plant
+    Time.use_zone(@timezone) do
+      reset!
+      create_user!
+      create_accounts!
+      create_categories!
+      create_items!
+      create_rules!
+      create_savings_targets!
+      log_entries!
+      create_transfers_and_adjustments!
+      report
     end
   end
 
-  # Food expenses - weekly entries
-  weekly_food_amounts = {
-    "Groceries" => [120, 130, 115, 125],
-    "Dining Out" => [45, 65, 70, 50],
-    "Takeout" => [35, 30, 40, 25],
-    "Coffee Shops" => [18, 22, 20, 15],
-    "Work Lunches" => [45, 40, 50, 35]
-  }
+  private
 
-  food_items.each do |item|
-    amounts = weekly_food_amounts[item.name] || [25, 25, 25, 25]
+  def reset!
+    [Adjustment, SavingsTarget, Rule, Transfer, Entry, Item, Category, Account, User].each(&:delete_all)
+  end
 
-    4.times do |week|
-      day = (week * 7) + rand(1..6)
-      next if day > 28 # Skip if past end of month
+  def create_user!
+    @user = User.create!(email: "demo@example.com", password: "password123", name: "Demo User", timezone: @timezone)
+    @today = Time.find_zone!(@user.timezone).today
+    @user.update!(period_cadence: :biweekly, period_anchor_date: @today)
+    @demo_start = periods_ago(14)
+  end
 
-      item.entries.create!(
-        amount: amounts[week],
-        date: month_start + day.days,
-        description: "#{item.name} for week #{week + 1} of #{month_name}"
-      )
+  def create_accounts!
+    @checking = Account.open(@user, name: "Checking", balance: 1_800)
+    @ally = Account.open(@user, name: "Ally Savings", balance: 4_200)
+    @brokerage = Account.open(@user, name: "Brokerage", balance: 12_750)
+    Account.open(@user, name: "Health Savings", balance: 900)
+    @brokerage.update!(keeps_extra: false)
+  end
+
+  def create_categories!
+    @salary = category("Salary", :income, "#66BB6A")
+    @freelance = category("Freelance", :income, "#26C6DA")
+    @gifts = category("Gifts", :income, "#EC407A", regular: false)
+    @rent = category("Rent", :expense, "#E57373", priority: 1)
+    @utilities = category("Utilities", :expense, "#FFD54F", priority: 2)
+    @dentist = category("Dentist", :expense, "#F48FB1", priority: 3)
+    @car_insurance = category("Car Insurance", :expense, "#9575CD", priority: 4)
+    @dining = category("Dining Out", :expense, "#81C784", priority: 5)
+    @groceries = category("Groceries", :expense, "#8BC34A", priority: 6)
+    @pet_care = category("Pet Care", :expense, "#A1887F", priority: 7)
+    @vacation = category("Vacation to Europe", :expense, "#FF8A65", priority: 8)
+    @coffee = category("Coffee", :expense, "#795548")
+  end
+
+  def create_items!
+    @paycheck = item(@salary, "Paycheck")
+    @contract = item(@freelance, "Contract work")
+    @birthday = item(@gifts, "Birthday")
+    @rent_item = item(@rent, "Monthly Rent")
+    @electric = item(@utilities, "Electric Bill")
+    @internet = item(@utilities, "Internet")
+    @restaurants = item(@dining, "Restaurants")
+    @supermarket = item(@groceries, "Supermarket")
+    @pet_food = item(@pet_care, "Pet Food")
+    @vet = item(@pet_care, "Vet")
+    @flights = item(@vacation, "Flights & Hotels")
+    @cafe = item(@coffee, "Cafe")
+  end
+
+  def create_rules!
+    rule(@rent, item: @rent_item, amount: 1_500, interval_months: 1, anchor_date: @today + 10, rule_type: :bill)
+    rule(@utilities, item: @electric, amount: 118, interval_months: 1, anchor_date: @today - 10)
+    rule(@dentist, amount: 300, anchor_date: @today + 3, rule_type: :bill)
+    # Started inside its current six-month cycle: a bill's due dates run back to its start, and
+    # nothing was paid before this one.
+    rule(@car_insurance, amount: 1_200, interval_months: 6, anchor_date: @today + 1.month, rule_type: :bill, starts_on: @today - 4.months)
+    rule(@dining, amount: 100, rule_type: :choice)
+    rule(@groceries, amount: 400)
+    rule(@pet_care, amount: 60, keeps_unspent: true)
+    rule(@pet_care, item: @vet, amount: 180, anchor_date: @today + 20, rule_type: :bill)
+    rule(@vacation, amount: 5_000, anchor_date: @demo_start + (14 * 78) - 1, rule_type: :choice)
+  end
+
+  def create_savings_targets!
+    @ally.savings_targets.create!(amount: 150, starts_on: @demo_start)
+    @ally.savings_targets.create!(item: @paycheck, percent: 5, starts_on: @demo_start)
+    @brokerage.savings_targets.create!(item: @paycheck, percent: 15, starts_on: periods_ago(4))
+  end
+
+  def log_entries!
+    (0..13).each do |cycle|
+      payday = log_regular_entries(cycle)
+      log_biweekly_entries(cycle, payday)
+    end
+    log(@birthday, 200, @today - 30, "From Mom")
+    log(@flights, 620, @today - 40, "Deposit on flights")
+  end
+
+  # The five things that land every period, whoever's turn it is. Returns payday so the
+  # every-other-period entries below can anchor to the same date.
+  def log_regular_entries(cycle)
+    payday = periods_ago(14 - cycle)
+    log(@paycheck, 2_050, payday, "Fortnightly pay")
+    log(@supermarket, 180, payday + 2)
+    log(@supermarket, 165, payday + 9)
+    log(@restaurants, 45, payday + 5)
+    log(@cafe, 12, payday + 1)
+    log(@pet_food, 38, payday + 4)
+    payday
+  end
+
+  # The things that land every other period: the contract invoice on even cycles, the bills on odd ones.
+  def log_biweekly_entries(cycle, payday)
+    log(@contract, 400, payday + 3, "Invoice") if cycle.even?
+    log(@electric, 118, payday + 1) if cycle.odd?
+    log(@internet, 60, payday + 1) if cycle.odd?
+    log(@rent_item, 1_500, payday + 1) if cycle.odd?
+  end
+
+  def create_transfers_and_adjustments!
+    (1..13).each { |cycle| Transfer.create!(from_account: @checking, to_account: @ally, amount: 250, date: periods_ago(14 - cycle) + 1) }
+    Transfer.create!(from_account: @checking, to_account: @brokerage, amount: 300, date: @today - 7)
+    Adjustment.create!(source: Rule.find_by!(category: @vacation, item_id: nil), amount: 250, date: @today - 3)
+    Adjustment.create!(source: Rule.find_by!(category: @dining, item_id: nil), amount: -20, date: @today - 1)
+    Adjustment.create!(source: @ally, amount: -50, date: @today - 2)
+  end
+
+  def report
+    Rails.logger.debug do
+      "Seeded #{@user.email}: #{Account.count} accounts, #{Category.count} categories, #{Entry.count} entries, " \
+        "#{Rule.count} rules, #{SavingsTarget.count} savings targets"
     end
   end
 
-  # Utilities - monthly
-  utilities_dates = {
-    "Electricity" => 5,
-    "Water" => 10,
-    "Internet" => 15,
-    "Phone" => 20,
-    "Streaming Services" => 25,
-    "Gas" => 7
-  }
-
-  utilities_amounts = {
-    "Electricity" => rand(80..110),
-    "Water" => rand(40..60),
-    "Internet" => 65,
-    "Phone" => 85,
-    "Streaming Services" => 35,
-    "Gas" => rand(30..70)
-  }
-
-  utilities_items.each do |item|
-    day = utilities_dates[item.name] || rand(1..15)
-    amount = utilities_amounts[item.name] || rand(30..100)
-
-    item.entries.create!(
-      amount: amount,
-      date: month_start + day.days,
-      description: "#{item.name} bill for #{month_name}"
-    )
-  end
-
-  # Entertainment expenses
-  entertainment_entries = {
-    "Movies" => [
-      { amount: rand(15..30), day: rand(5..15) },
-      { amount: rand(15..30), day: rand(20..27) }
-    ],
-    "Concerts" => month_start == current_month ? [{ amount: 120, day: 18 }] : [],
-    "Subscriptions" => [{ amount: 50, day: 5 }],
-    "Hobbies" => [{ amount: rand(30..80), day: rand(1..28) }],
-    "Gaming" => month_start == previous_month ? [{ amount: 70, day: 12 }] : []
-  }
-
-  entertainment_items.each do |item|
-    entry_list = entertainment_entries[item.name] || []
-    entry_list.each do |entry_data|
-      item.entries.create!(
-        amount: entry_data[:amount],
-        date: month_start + entry_data[:day].days,
-        description: "#{item.name} expense on #{(month_start + entry_data[:day].days).strftime("%b %d")}"
-      )
-    end
-  end
-
-  # Income entries - show month-to-month changes
-  income_multiplier = month_start == current_month ? 1.05 : 1.0 # 5% increase in current month
-
-  # Salary - consistent monthly
-  salary_item = income_categories[0].items.find_by(name: "Primary Job")
-  salary_amount = 4500 * income_multiplier
-  salary_item.entries.create!(
-    amount: salary_amount.round,
-    date: month_start + 1.day,
-    description: "Monthly salary for #{month_name}"
-  )
-
-  # Freelance - varied
-  freelance_category = income_categories[1]
-
-  if month_start == current_month
-    # More freelance work this month
-    freelance_category.items.find_by(name: "Web Development").entries.create!(
-      amount: 1200,
-      date: month_start + 8.days,
-      description: "Web project payment"
-    )
-
-    freelance_category.items.find_by(name: "Writing").entries.create!(
-      amount: 400,
-      date: month_start + 15.days,
-      description: "Article series payment"
-    )
-  else
-    # Less freelance work last month
-    freelance_category.items.find_by(name: "Web Development").entries.create!(
-      amount: 800,
-      date: month_start + 12.days,
-      description: "Small website project"
-    )
-  end
-
-  # Investments - quarterly for some items
-  investments_category = income_categories[2]
-
-  # For dividends (paid every 3 months)
-  if (month_start.month % 3).zero?
-    investments_category.items.find_by(name: "Dividends").entries.create!(
-      amount: 350,
-      date: month_start + 20.days,
-      description: "Quarterly dividend payment"
-    )
-  end
-
-  # Monthly interest
-  investments_category.items.find_by(name: "Interest").entries.create!(
-    amount: 25,
-    date: month_start + 28.days,
-    description: "Monthly interest on savings"
-  )
-
-  # Savings contributions
-  savings_categories.each do |category|
-    item = category.items.first
-
-    amount = case category.name
-             when "Emergency Fund"
-               200
-             when "Vacation"
-               150
-             when "Home Down Payment"
-               500
-             when "Retirement"
-               300
-             when "Vehicle"
-               250
-             else
-               100
-             end
-
-    # Some variation between months
-    amount_adjustment = month_start == current_month ? 1.0 : 0.9
-
-    item.entries.create!(
-      amount: (amount * amount_adjustment).round,
-      date: month_start + 3.days,
-      description: "Monthly contribution to #{category.name}"
-    )
-  end
+  def periods_ago(cycle) = @today - (cycle * 14)
+  def category(name, type, color, **attributes) = @user.categories.create!(name: name, category_type: type, color: color, **attributes)
+  def item(cat, name) = cat.items.create!(name: name)
+  def rule(cat, **attributes) = Rule.create!(category: cat, starts_on: @demo_start, rule_type: :usage, **attributes)
+  def log(holder, amount, on, description = nil) = holder.entries.create!(amount: amount, date: on, description: description)
 end
 
-Rails.logger.debug "Creating entries for other expense categories..."
-
-# Add some entries for remaining expense categories
-remaining_expense_categories = expense_categories[5..9] # Health, Personal Care, Education, Shopping, Gifts
-
-months.each do |month_start|
-  month_name = month_start.strftime("%B %Y")
-
-  remaining_expense_categories.each do |category|
-    # Create a few items if not already present
-    if category.items.empty?
-      3.times do |i|
-        category.items.create!(
-          name: "#{category.name} Item #{i + 1}"
-        )
-      end
-    end
-
-    # Create 2-4 entries for each item
-    category.items.each do |item|
-      entry_count = rand(1..3)
-
-      entry_count.times do |_i|
-        item.entries.create!(
-          amount: rand(15..150),
-          date: month_start + rand(1..28).days,
-          description: "#{item.name} expense for #{month_name}"
-        )
-      end
-    end
-  end
-end
-
-Rails.logger.debug "Seed data created successfully!"
+DemoHousehold.new("America/New_York").plant

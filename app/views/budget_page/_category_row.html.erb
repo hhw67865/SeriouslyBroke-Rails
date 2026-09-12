@@ -1,0 +1,65 @@
+<%# ▲▼ · name · rules · dots · takes this period · ⌄. Locals: `row`, `reorderable` (whole, because every ▲▼
+    carries the entire order), `presenter`. Below `md` it is a two-line grid so a name can wrap. %>
+<section class="bg-white border border-gray-200 rounded"
+         data-category-row="<%= row.name %>"
+         data-category-id="<%= row.category.id %>"
+         data-app--budget-page--category-list-target="row">
+  <div class="grid grid-cols-[auto_1fr_auto] items-center gap-y-1 px-4 py-3 cursor-pointer
+              md:flex md:items-center md:justify-between md:gap-4"
+       data-category-header
+       data-action="click->app--budget-page--category-list#toggleFromHeader">
+    <% if row.reorderable? %>
+      <div class="col-start-1 row-span-2 mr-3 md:mr-0">
+        <%= render "budget_page/reorder_controls", group: row, groups: reorderable %>
+      </div>
+    <% end %>
+
+    <div class="col-start-2 row-start-1 flex items-center gap-3 min-w-0 md:flex-1">
+      <h3 class="text-sm font-semibold text-gray-900 md:truncate"><%= row.name %></h3>
+
+      <% if row.ruled? %>
+        <span class="text-xs text-gray-500 shrink-0"><%= pluralize(row.rule_count, "rule") %></span>
+
+        <%# One dot per rule, in the RULE's type. `aria-hidden`: the row already says how many
+            rules there are and the panel says what kind each one is. %>
+        <span class="flex items-center gap-1 shrink-0" aria-hidden="true" data-type-dots="<%= row.type_dots.join(" ") %>">
+          <% row.type_dots.each do |type| %>
+            <span class="h-1.5 w-1.5 rounded-full <%= type_fill(type) %>" data-type-dot="<%= type %>"></span>
+          <% end %>
+        </span>
+      <% end %>
+
+      <% if row.reorderable? %>
+        <span class="hidden md:inline text-xs text-gray-500 shrink-0">priority <%= row.priority %></span>
+      <% end %>
+    </div>
+
+    <div class="col-start-2 row-start-2 flex flex-wrap items-center gap-x-3 gap-y-1 shrink-0 md:row-start-1">
+      <% if row.ruled? %>
+        <span class="text-sm tabular-nums <%= row.needs_attention? ? "text-status-danger font-medium" : "text-gray-700" %>" data-category-takes>
+          takes <%= number_to_currency(row.takes_now) %> this period
+        </span>
+      <% else %>
+        <%# Nothing claims this money, so there is no claim to print and no figure in its place. %>
+        <span class="text-sm text-gray-400" data-category-unruled>no rules yet</span>
+      <% end %>
+    </div>
+
+    <%# The whole no-JavaScript mechanism: `?open=<id>` on a closed row, bare `/budget` on the open
+        one. `category_list_controller` intercepts the click and flips the panels in place. %>
+    <%= link_to category_toggle_path(row),
+                class: "col-start-3 row-start-1 row-span-2 ml-3 shrink-0 inline-flex h-11 w-11 items-center " \
+                       "justify-center rounded text-gray-500 hover:bg-gray-100 hover:text-gray-900 " \
+                       "md:ml-0",
+                aria: { label: category_toggle_label(row), expanded: row.open?.to_s },
+                data: { action: "app--budget-page--category-list#toggle", category_toggle: row.category.id } do %>
+      <span class="text-xs" aria-hidden="true"><%= row.open? ? "&#9652;".html_safe : "&#9662;".html_safe %></span>
+    <% end %>
+  </div>
+
+  <%# Every panel is rendered and the closed ones are `hidden` — no round trip, and no query
+      either. `hidden` rather than a class, so Capybara and a screen reader agree with the eye. %>
+  <div class="border-t border-gray-200" data-app--budget-page--category-list-target="panel" <%= "hidden" unless row.open? %>>
+    <%= render "budget_page/category_open", row: row, presenter: presenter %>
+  </div>
+</section>

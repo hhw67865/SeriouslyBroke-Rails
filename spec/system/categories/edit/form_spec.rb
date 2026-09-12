@@ -20,15 +20,17 @@ RSpec.describe "Categories Edit - Form", type: :system do
       expect(page).to have_button("Update Category")
     end
 
-    it "shows category type options" do
-      expect(page).to have_content("Expense")
-      expect(page).to have_content("Income")
-      expect(page).to have_content("Savings")
+    # Two tiles, not three — `Category.category_types` drives the loop.
+    it "shows category type options", :aggregate_failures do
+      within("main") do
+        expect(page).to have_content("Expense")
+        expect(page).to have_content("Income")
+        expect(page).to have_no_content("Savings")
+      end
     end
 
     it "shows color selection options" do
       expect(page).to have_content("Selected:")
-      # Check that color grid is present
       expect(page).to have_css("[data-app--category--form-target='colorOption']", count: 16)
     end
 
@@ -55,15 +57,6 @@ RSpec.describe "Categories Edit - Form", type: :system do
       expect(page).to have_field("Name", with: "Salary Income")
       expect(page).to have_checked_field("category_category_type_income")
     end
-
-    it "pre-fills savings category correctly" do
-      savings_pool = create(:savings_pool, user: user)
-      savings_category = create(:category, :savings, name: "Emergency Fund", user: user, savings_pool: savings_pool)
-      visit edit_category_path(savings_category)
-
-      expect(page).to have_field("Name", with: "Emergency Fund")
-      expect(page).to have_checked_field("category_category_type_savings")
-    end
   end
 
   describe "form validation", :aggregate_failures do
@@ -74,7 +67,7 @@ RSpec.describe "Categories Edit - Form", type: :system do
       click_button "Update Category"
 
       expect(page).to have_content("can't be blank")
-      expect(page).to have_current_path(edit_category_path(category))
+      expect(page).to have_button("Update Category")
     end
 
     it "shows error for duplicate name" do
@@ -84,7 +77,7 @@ RSpec.describe "Categories Edit - Form", type: :system do
       click_button "Update Category"
 
       expect(page).to have_content("has already been taken")
-      expect(page).to have_current_path(edit_category_path(category))
+      expect(page).to have_field("Name", with: "Duplicate Name")
     end
 
     it "allows same name if unchanged" do
@@ -132,23 +125,119 @@ RSpec.describe "Categories Edit - Form", type: :system do
       click_button "Update Category"
 
       expect(page).to have_content("Category was successfully updated")
-      category.reload
-      expect(category.color).to eq("#FF5733")
+      expect(category.reload.color).to eq("#FF5733")
     end
 
     it "updates multiple fields simultaneously" do
       fill_in "Name", with: "Completely Updated"
-      find("label", text: "Savings").click
+      find("label", text: "Income").click
       fill_in "Color", with: "#00FF00"
       click_button "Update Category"
 
       expect(page).to have_content("Category was successfully updated")
-      expect(page).to have_current_path(categories_path(type: "savings"))
+      expect(page).to have_current_path(categories_path(type: "income"))
 
       category.reload
       expect(category.name).to eq("Completely Updated")
-      expect(category.category_type).to eq("savings")
+      expect(category.category_type).to eq("income")
       expect(category.color).to eq("#00FF00")
+    end
+  end
+
+  # What the form still writes about claiming: the give-way order, and nothing else. How much a
+  # category is saving toward is a fact about a RULE.
+  describe "the claiming fields", :aggregate_failures do
+    it "pre-fills the give-way order and offers no target or start date" do
+      visit edit_category_path(create(:category, :expense, user: user, name: "Vacation", priority: 3))
+
+      expect(page).to have_field("Gives way", with: "3")
+      expect(page).to have_no_field("Claiming since")
+      expect(page).to have_no_field("Target")
+    end
+
+    it "writes the give-way order" do
+      visit edit_category_path(category)
+      fill_in "Gives way", with: "5"
+      click_button "Update Category"
+
+      expect(page).to have_content("Category was successfully updated")
+      expect(category.reload.priority).to eq(5)
+    end
+
+    # The question this is really about — can this form damage a goal by saving something else? —
+    # is asked of the record that holds the goal.
+    it "leaves the goal's own figure alone" do
+      vacation = create(:category, :expense, user: user, name: "Vacation")
+      goal = create(:rule, :choice, :by_date, category: vacation, amount: 2_400, due: Date.new(2027, 6, 1))
+
+      visit edit_category_path(vacation)
+      fill_in "Name", with: "Vacation Fund"
+      click_button "Update Category"
+
+      expect(page).to have_content("Category was successfully updated")
+      expect(goal.reload.slice(:amount, :anchor_date))
+        .to eq("amount" => 2_400, "anchor_date" => Date.new(2027, 6, 1))
+      expect(vacation.reload.name).to eq("Vacation Fund")
+    end
+  end
+
+  # The server writes the `hidden` attribute for the wrong type, so the non-JS path is right on its
+  # own and these need no browser.
+  describe "the sections only one type can answer", :aggregate_failures do
+    it "asks an expense category for its give-way order and nothing about income" do
+      visit edit_category_path(category)
+
+      expect(page).to have_field("Gives way")
+      expect(page).to have_no_field("Counts as typical income")
+    end
+
+    it "asks an income category about typical income and nothing about giving way" do
+      visit edit_category_path(create(:category, :income, user: user, name: "Salary"))
+
+      expect(page).to have_field("Counts as typical income")
+      expect(page).to have_no_field("Gives way")
+    end
+
+    it "unticks typical income for a bonus category" do
+      bonus = create(:category, :income, user: user, name: "Bonus")
+      visit edit_category_path(bonus)
+
+      uncheck "Counts as typical income"
+      click_button "Update Category"
+
+      expect(page).to have_content("Category was successfully updated")
+      expect(bonus.reload.regular).to be(false)
+    end
+  end
+
+  # `:js`: the Stimulus controller swaps the two sections as the tiles change, which the first
+  # paint cannot show.
+  describe "the type-only sections under script", :js do
+    it "swaps the two sections when the type changes", :aggregate_failures do
+      visit edit_category_path(create(:category, :income, user: user, name: "Salary"))
+
+      expect(page).to have_field("Counts as typical income")
+      expect(page).to have_no_field("Gives way")
+
+      find("label", text: "Expense").click
+      expect(page).to have_field("Gives way")
+      expect(page).to have_no_field("Counts as typical income")
+    end
+  end
+
+  # `Category` refuses turning a ruled expense category into income, and the form says so like any
+  # other error.
+  describe "a ruled expense category that is asked to become income" do
+    it "refuses and names the rules", :aggregate_failures do
+      create(:rule, :rate, category: category, amount: 400)
+
+      visit edit_category_path(category)
+      find("label", text: "Income").click
+      click_button "Update Category"
+
+      expect(page).to have_content(Category::RULES_KEEP_IT_AN_EXPENSE)
+      expect(page).to have_button("Update Category")
+      expect(category.reload).to be_expense
     end
   end
 
@@ -192,18 +281,6 @@ RSpec.describe "Categories Edit - Form", type: :system do
 
       expect(page).to have_current_path(categories_path(type: "income"))
       expect(page).to have_content("Income Categories")
-    end
-
-    it "redirects to savings index when updating savings category" do
-      savings_pool = create(:savings_pool, user: user)
-      savings_category = create(:category, :savings, user: user, savings_pool: savings_pool)
-      visit edit_category_path(savings_category)
-
-      fill_in "Name", with: "Updated Savings"
-      click_button "Update Category"
-
-      expect(page).to have_current_path(categories_path(type: "savings"))
-      expect(page).to have_content("Savings Categories")
     end
   end
 end

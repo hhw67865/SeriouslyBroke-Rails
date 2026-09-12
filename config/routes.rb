@@ -1,22 +1,28 @@
 # frozen_string_literal: true
 
 Rails.application.routes.draw do
-  # Authentication routes
   devise_for :users, controllers: { registrations: "users/registrations" }
 
-  # Application routes (protected by authentication)
   authenticated :user do
-    root "dashboard#index", as: :authenticated_root
+    root "home#index", as: :authenticated_root
   end
 
-  resources :savings_pools do
-    member do
-      get :categories, to: "savings_pools/categories#index"
-      patch :categories, to: "savings_pools/categories#update"
+  get "reports", to: "dashboard#index", as: :reports
+
+  get "activity" => "activity#show", as: :activity
+
+  get "savings" => "savings#show", as: :savings
+  resources :accounts, only: [:create, :edit, :update, :destroy]
+  resources :transfers, only: [:create, :destroy]
+
+  resources :entries, except: [:show] do
+    collection do
+      get :impact
     end
   end
-  resources :entries, except: [:show]
+
   resources :items, only: [:edit, :update, :destroy]
+
   resources :categories do
     resources :items, only: [:index, :new, :create], controller: "categories/items" do
       collection do
@@ -32,20 +38,32 @@ Rails.application.routes.draw do
       patch :update_tracked
     end
   end
-  resources :budgets, only: [:new, :create, :edit, :update, :destroy]
 
-  resource :account, only: [:show] do
+  resources :rules, only: [:new, :create, :edit, :update, :destroy] do
+    collection do
+      match :preview, via: [:post, :patch]
+    end
+    member do
+      get :spending
+    end
+  end
+
+  get "budget" => "budget_page#show", as: :budget_page
+  patch "budget/reorder" => "budget_page#reorder", as: :budget_page_reorder
+  get "budget/income" => "budget_income#show", as: :budget_income
+  patch "budget/income" => "budget_income#update"
+  post "budget/income/preview" => "budget_income#preview", as: :preview_budget_income
+  resources :adjustments, only: [:create, :destroy]
+  resource :sacrifice, only: [:show, :update]
+
+  resource :settings, only: [:show] do
     patch :toggle_theme
     patch :toggle_ming_mode
   end
 
-  # Calendar
   get "calendar", to: "calendar#index", as: :calendar
   get "calendar/week", to: "calendar#week", as: :calendar_week
 
-  # Landing page for non-authenticated users
   root "pages#home"
-
-  # Health check
   get "up" => "rails/health#show", as: :rails_health_check
 end

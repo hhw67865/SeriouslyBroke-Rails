@@ -3,80 +3,81 @@
 class Category < ApplicationRecord
   include ModelSearchable
 
+  DEFAULT_COLOR = "#C9C78B"
+  RULES_KEEP_IT_AN_EXPENSE = "can't become income while it has rules — delete them first"
+
   belongs_to :user, touch: true
-  belongs_to :savings_pool, optional: true, touch: true
   has_many :items, dependent: :destroy
   has_many :entries, through: :items
-  has_one :budget, dependent: :destroy
+  has_many :rules, dependent: :destroy
 
   normalizes :name, with: ->(name) { name.squish }
 
-  validates :name, presence: true
+  enum :category_type, { expense: 0, income: 1 }
+
+  validates :name, presence: true, uniqueness: { scope: :user_id, case_sensitive: false }
   validates :category_type, presence: true
-  validates :name, uniqueness: { scope: :user_id, case_sensitive: false }
+  validates :priority, numericality: { only_integer: true, greater_than_or_equal_to: 0 }
+  validate :rules_keep_it_an_expense
 
-  enum :category_type,
-       {
-         expense: 0,
-         income: 1,
-         savings: 2
-       }
-
-  before_validation :destroy_budget_if_not_expense
-  before_validation :destroy_budget_if_pool_linked
-
-  validate :budget_only_for_expense
-
-  # Basic scopes
   scope :expenses, -> { where(category_type: :expense) }
   scope :incomes, -> { where(category_type: :income) }
-  scope :savings, -> { where(category_type: :savings) }
   scope :tracked, -> { where(tracked: true) }
   scope :untracked, -> { where(tracked: false) }
-  scope :budgetable, -> { expenses.where(savings_pool_id: nil) }
-  scope :pool_covered, -> { expenses.where.not(savings_pool_id: nil) }
+  scope :regular, -> { where(regular: true) }
+  scope :with_a_rule, -> { where(id: Rule.select(:category_id)) }
+  # The give-way order on the home page: lower priority gives way first.
+  scope :in_fill_order, -> { expenses.with_a_rule.order(:priority, :name) }
+  scope :with_type, ->(type) { (type.to_s == "income" ? incomes : expenses).includes(:items) }
 
-  scope :with_type,
-        lambda { |type|
-          case (type || :expense).to_sym
-          when :expense then expenses.includes(:budget, :savings_pool, :items)
-          when :income then incomes.includes(:items)
-          when :savings then savings.includes(:items, :savings_pool)
-          end
-        }
-
-  # Configure searchable fields
   searchable :name, label: "Name"
 
-  def budgetable?
-    expense? && savings_pool_id.nil?
+  # Rewrites priorities to match the submitted order. The list must be exactly the user's ruled
+  # expense categories, once each; anything else is refused with nothing written.
+  def self.apply_fill_order(user:, category_ids:)
+    ids = Array(category_ids).map(&:to_s)
+    return false if ids.empty? || ids.uniq.size != ids.size
+
+    transaction do
+      user.lock!
+      ordered = user.categories.in_fill_order.to_a
+      matches = ordered.map { |category| category.id.to_s }.sort == ids.sort
+      write_fill_order(ordered, ids) if matches
+      matches
+    end
   end
 
-  def pool_covered?
-    expense? && savings_pool_id.present?
+  def self.write_fill_order(ordered, ids)
+    by_id = ordered.index_by { |category| category.id.to_s }
+    ids.each_with_index { |id, index| by_id.fetch(id).update!(priority: index) }
+  end
+  private_class_method :write_fill_order
+
+  # Sets which of the user's income categories feed typical income. Unknown ids are dropped by
+  # the scope itself; expense categories are never in it.
+  def self.choose_regular_income(user:, category_ids:)
+    chosen = Array(category_ids).to_set(&:to_s)
+
+    transaction do
+      incomes = user.categories.incomes.to_a
+      incomes.each { |category| category.update!(regular: chosen.include?(category.id.to_s)) }
+      incomes.count(&:regular?)
+    end
   end
 
-  def calculator(date = Date.current, period: :monthly)
-    CategoryCalculator.new(self, date, period: period)
+  def display_color = color.presence || DEFAULT_COLOR
+
+  def ruled? = rules.load.any?
+
+  def stats(date = user.today, period: :monthly)
+    CategoryStats.new(self, date, period: period)
   end
 
   private
 
-  def destroy_budget_if_not_expense
-    return unless category_type_changed? && !expense? && budget
+  def rules_keep_it_an_expense
+    return unless category_type_change == ["expense", "income"] && rules.exists?
 
-    budget.destroy
-    self.budget = nil
-  end
-
-  def destroy_budget_if_pool_linked
-    return unless savings_pool_id_changed? && savings_pool_id.present? && budget
-
-    budget.destroy
-    self.budget = nil
-  end
-
-  def budget_only_for_expense
-    errors.add(:budget, "can only be set for expense categories") if budget.present? && !expense?
+    errors.add(:category_type, RULES_KEEP_IT_AN_EXPENSE)
   end
 end

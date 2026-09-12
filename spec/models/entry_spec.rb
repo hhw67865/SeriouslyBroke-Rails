@@ -2,66 +2,49 @@
 
 require "rails_helper"
 
-RSpec.describe Entry, type: :model do
-  describe "associations" do
-    it { is_expected.to belong_to(:item) }
-  end
+RSpec.describe Entry do
+  let(:user) { create(:user) }
 
-  describe "validations" do
-    it { is_expected.to validate_presence_of(:amount) }
-    it { is_expected.to validate_presence_of(:date) }
-  end
-
-  describe "money handling" do
-    it "stores decimal values correctly" do
-      entry = create(:entry, amount: 15.99)
-      expect(entry.amount).to eq(15.99)
+  describe "validations", :aggregate_failures do
+    it "needs a positive amount and a date" do
+      expect(build(:entry, amount: 0)).not_to be_valid
+      expect(build(:entry, amount: 12.5, date: nil)).not_to be_valid
+      expect(build(:entry, amount: 12.5)).to be_valid
     end
   end
 
-  describe "delegations" do
-    let(:user) { create(:user) }
-    let(:category) { create(:category, user: user) }
-    let(:item) { create(:item, category: category) }
-    let(:entry) { create(:entry, item: item) }
+  describe "scopes", :aggregate_failures do
+    let(:groceries) { create(:category, user: user, name: "Groceries") }
+    let(:bread) { create(:item, category: groceries, name: "Bread") }
+    let(:milk) { create(:item, category: groceries, name: "Milk") }
 
-    it "delegates category to item" do
-      expect(entry.category).to eq(category)
+    it "separates income from spending and tracked from untracked" do
+      spend = create(:entry, item: bread)
+      earn = create(:entry, :income, user: user)
+      groceries.update!(tracked: false)
+
+      expect(described_class.expenses).to eq([spend])
+      expect(described_class.incomes).to eq([earn])
+      expect(described_class.expenses.tracked).to be_empty
     end
 
-    it "delegates user to item" do
-      expect(entry.user).to eq(user)
-    end
-  end
+    it "finds a rule's lane: its item, or the category's items that have no rule" do
+      bread_rule = create(:rule, category: groceries, item: bread)
+      whole_rule = create(:rule, category: groceries)
+      on_bread = create(:entry, item: bread)
+      on_milk = create(:entry, item: milk)
 
-  describe "scopes" do
-    let(:user) { create(:user) }
-    let!(:expense_entry) { create(:entry, :expense, user: user) }
-    let!(:income_entry) { create(:entry, :income, user: user) }
-    let!(:savings_entry) { create(:entry, :savings, user: user) }
-
-    describe ".expenses" do
-      it "returns only expense entries", :aggregate_failures do
-        expect(described_class.expenses).to include(expense_entry)
-        expect(described_class.expenses).not_to include(income_entry)
-        expect(described_class.expenses).not_to include(savings_entry)
-      end
+      expect(described_class.in_lane_of(bread_rule)).to eq([on_bread])
+      expect(described_class.in_lane_of(whole_rule)).to eq([on_milk])
+      expect(described_class.on_unruled_items).to eq([on_milk])
     end
 
-    describe ".income" do
-      it "returns only income entries", :aggregate_failures do
-        expect(described_class.incomes).to include(income_entry)
-        expect(described_class.incomes).not_to include(expense_entry)
-        expect(described_class.incomes).not_to include(savings_entry)
-      end
-    end
+    it "counts from a day" do
+      old = create(:entry, item: bread, date: Date.new(2026, 1, 1))
+      recent = create(:entry, item: bread, date: Date.new(2026, 6, 1))
 
-    describe ".savings" do
-      it "returns only savings entries", :aggregate_failures do
-        expect(described_class.savings).to include(savings_entry)
-        expect(described_class.savings).not_to include(expense_entry)
-        expect(described_class.savings).not_to include(income_entry)
-      end
+      expect(described_class.since(Date.new(2026, 3, 1))).to eq([recent])
+      expect(described_class.since(Date.new(2026, 1, 1))).to contain_exactly(old, recent)
     end
   end
 end

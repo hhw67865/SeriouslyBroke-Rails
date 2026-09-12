@@ -1,0 +1,18 @@
+<%# ▲▼ — the give-way order without JavaScript. Locals: `group`, `groups`. Each button carries the
+    WHOLE order, so a press made against a stale list is refused rather than half-applied. %>
+<span class="flex flex-col items-center gap-1 shrink-0 md:flex-row">
+  <% { -1 => ["▲", "up"], 1 => ["▼", "down"] }.each do |offset, (glyph, direction)| %>
+    <%= button_to glyph,
+                  budget_page_reorder_path,
+                  method: :patch,
+                  params: { category_ids: reordered_category_ids(groups, group, offset) },
+                  disabled: reorder_edge?(groups, group, offset),
+                  form_class: "inline-block leading-none",
+                  aria: { label: "Move #{group.category.name} #{direction}" },
+                  title: "Move #{group.category.name} #{direction} — within each type, the highest number gives way first",
+                  class: "inline-flex h-11 w-11 items-center justify-center text-xs rounded " \
+                         "border border-gray-200 text-gray-700 transition-colors " \
+                         "enabled:hover:text-gray-900 enabled:hover:border-gray-400 " \
+                         "disabled:bg-gray-100 disabled:text-gray-500 disabled:border-gray-200" %>
+  <% end %>
+</span>

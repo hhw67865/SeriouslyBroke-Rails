@@ -10,9 +10,9 @@ bin/dev                      # Start Rails server with Tailwind watcher
 bin/setup                    # Full environment setup
 
 # Testing
-bundle exec rspec            # Run all tests
-bundle exec rspec spec/system/calendar/  # Run specific directory
-bundle exec rspec spec/system/calendar/index/grid_spec.rb:45  # Run single test
+bundle exec rspec spec/models                     # one directory
+bundle exec rspec spec/system/home/money_spec.rb  # one file
+bundle exec parallel_rspec spec                    # everything, across cores
 
 # Code Quality
 bundle exec rubocop -A       # Lint with auto-fix
@@ -30,6 +30,7 @@ bin/rails tailwindcss:build  # Rebuild CSS (required when adding new utility cla
 
 All coding standards and patterns are documented in `/docs/`:
 
+- **`docs/decisions.md`** - How the app works and what has been decided: vocabulary, money, rules, savings, claims, adjustments, give-way order, screens. Present tense only, never history. Read it before designing or changing any behaviour; update it when a decision changes, replacing the old sentence rather than keeping it.
 - **`docs/coding-standards.md`** - Architecture, custom patterns (Presenter, Calculator, Searchable), and key principles (Fat Models/Skinny Controllers, DRY, RESTful design)
 - **`docs/design-standards.md`** - S-Tier SaaS design checklist (colors, typography, spacing, components, accessibility)
 - **`docs/searchable-system-reference.md`** - Complete reference for the searchable DSL system
@@ -82,7 +83,7 @@ This agent should be used proactively after completing significant code changes.
 IMMEDIATELY after implementing any front-end change:
 
 1. **Identify what changed** - Review the modified components/pages
-2. **Navigate to affected pages** - Use the `agent-browser` skill to visit each changed view
+2. **Navigate to affected pages** - Use Claude in Chrome (the browser extension; there is no `agent-browser` skill or CLI here) to visit each changed view
 3. **Verify design compliance** - Compare against `/docs/design-standards.md`
 4. **Validate feature implementation** - Ensure the change fulfills the user's specific request
 5. **Check acceptance criteria** - Review any provided context files or requirements
@@ -93,13 +94,13 @@ This verification ensures changes meet design standards and user requirements.
 
 ### Browser Login Credentials
 
-When accessing the website through agent-browser, use these credentials:
+When accessing the website through Claude in Chrome, use these credentials:
 - **Email**: `demo@example.com`
 - **Password**: `password123`
 
 ### Cleanup After Visual Verification
 
-After completing visual verification with agent-browser, clean up any saved screenshots:
+After completing visual verification with Claude in Chrome, clean up any saved screenshots:
 ```bash
 rm -f *.png
 ```
@@ -124,15 +125,36 @@ The design-review agent reads the design standards and performs:
 
 ## Testing Workflow
 
-Use the `system-test-writer` skill to write system tests. This skill handles page-based test organization, DRY patterns, and all project testing conventions automatically.
+Use the `system-test-writer` skill to write system tests. Logic (figures, states, validations,
+formulas) is proven in model, service and presenter specs. A system spec proves a page renders
+its figures once, and every real interaction.
+
+### Drivers
+
+System specs run under Rack::Test. Tag an example `:js` only when it needs JavaScript (the
+calculator pad, TomSelect, the rule preview, drag reorder, charts, a 375px layout). `:js`
+examples share one headless Chrome per process; the browser is never restarted between examples.
 
 ### Running Tests
 
-Always run test files one at a time, never entire directories or the full suite:
+Run a directory, or the whole suite in parallel:
 
 ```bash
-bundle exec rspec spec/system/feature_name/page/section_spec.rb  # Run one file at a time
+bundle exec rspec spec/models                     # one directory
+bundle exec rspec spec/system/home/money_spec.rb  # one file
+bundle exec parallel_rspec spec                    # everything, across cores
 ```
+
+The test databases are `seriously_broke_test`, `seriously_broke_test2`, … (`TEST_ENV_NUMBER`);
+`bundle exec rake parallel:create parallel:prepare` makes them.
+
+### Rules
+
+- No `sleep`. Wait with a Capybara assertion (`have_content`, `have_css`, `have_current_path`).
+- After a `click_*`, assert on the page before asserting on the database.
+- Never read the wall clock inside `travel_to`; a fixture that uses `Date.current` belongs to a user with no timezone, so the app's day and the spec's day agree.
+- A narrow-viewport example uses `Emulation.setDeviceMetricsOverride` (see `spec/system/home/money_spec.rb`).
+
 ---
 
 ## Summary: Implementation Checklist
@@ -146,5 +168,5 @@ When implementing any feature:
 5. **If front-end changes** - Perform Quick Visual Check
 6. **If significant UI** - Run design-review agent
 7. **Write tests** - Use the `system-test-writer` skill
-8. **Run tests** - Run each test file individually with `bundle exec rspec path/to/spec.rb`
+8. **Run tests** - Run the directory you touched with `bundle exec rspec spec/<dir>`, then `bundle exec parallel_rspec spec` before committing
 9. **Commit** - Only after all checks pass

@@ -8,7 +8,6 @@ RSpec.describe "Categories Index - Header", type: :system do
   before do
     create_list(:category, 2, :income, user: user)
     create_list(:category, 2, :expense, user: user)
-    create_list(:category, 1, :savings, user: user)
     sign_in user, scope: :user
   end
 
@@ -29,12 +28,16 @@ RSpec.describe "Categories Index - Header", type: :system do
       expect(page).to have_link("New Expense Category")
     end
 
-    it "shows correct content for savings categories" do
+    # `CategoriesController` checks the type against the enum, so an unknown one opens the default
+    # page rather than heading a list of expenses "Savings Categories".
+    it "sends a stale savings bookmark to the expense page", :aggregate_failures do
       visit categories_path(type: "savings")
 
-      expect(page).to have_content("Savings Categories")
-      expect(page).to have_content("Organize your savings pools and track progress")
-      expect(page).to have_link("New Saving Category")
+      within("main") do
+        expect(page).to have_content("Expense Categories")
+        expect(page).to have_no_content("Savings Categories")
+        expect(page).to have_link("New Expense Category")
+      end
     end
   end
 
@@ -51,10 +54,9 @@ RSpec.describe "Categories Index - Header", type: :system do
     before { visit categories_path(type: "income") }
 
     it "shows search form with correct defaults", :aggregate_failures do
-      expect(page).to have_select("field", selected: "Name")
+      expect(page).to have_select("field", options: ["Name"])
       expect(page).to have_field("q")
-      # Search form submits on Enter, no search button exists
-      expect(page).to have_css("input[name='q']")
+      expect(page).to have_button("Search")
     end
   end
 end

@@ -7,9 +7,8 @@ const MAX_DELAY_MS = 5 * 60 * 1000
 const SPECIAL_CHANCE = 0.15
 const BONUS_CHANCE = 0.3
 
-// Spawns occasional animated capybaras while ming mode is on. The next
-// spawn time lives in sessionStorage so Turbo navigations don't reset
-// the 2-5 minute clock.
+// Spawns occasional animated capybaras while ming mode is on; next spawn time lives in
+// sessionStorage so Turbo navigations don't reset the 2-5 minute clock.
 export default class extends Controller {
   static values = {
     run: String,

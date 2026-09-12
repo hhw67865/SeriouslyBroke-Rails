@@ -1,16 +1,6 @@
 # frozen_string_literal: true
 
-# Presenter for the monthly calendar view.
-# Pre-computes calendar structure and entry data to minimize view complexity.
-#
-# Usage in controller:
-#   @presenter = MonthlyCalendarPresenter.new(user: current_user, month_date: Date.new(2024, 1, 1))
-#
-# Usage in view:
-#   @presenter.weeks.each { |week| week.each { |day| day[:totals][:expense] } }
-#   @presenter.has_data?
-#   @presenter.month_label
-#
+# The month grid: six weeks of days, each with the day's expense and income totals.
 class MonthlyCalendarPresenter
   attr_reader :month_date
 
@@ -21,8 +11,7 @@ class MonthlyCalendarPresenter
     @entries_by_date = group_entries_by_date
   end
 
-  # Returns 6 weeks of days, each day containing:
-  # { date:, in_month:, totals: { expense:, income:, savings: } }
+  # { date:, in_month:, totals: { expense:, income: } } per day.
   def weeks
     @weeks ||= build_weeks
   end
@@ -53,7 +42,7 @@ class MonthlyCalendarPresenter
   end
 
   def group_entries_by_date
-    @entries.group_by { |e| e.date.to_date }
+    @entries.group_by(&:date)
   end
 
   def build_weeks

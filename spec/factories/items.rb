@@ -10,21 +10,14 @@ FactoryBot.define do
       transient do
         user { create(:user) }
       end
-      association :category, factory: [:category, :expense]
+      category { association :category, :expense, user: user }
     end
 
     trait :income do
       transient do
         user { create(:user) }
       end
-      association :category, factory: [:category, :income]
-    end
-
-    trait :savings do
-      transient do
-        user { create(:user) }
-      end
-      association :category, factory: [:category, :savings]
+      category { association :category, :income, user: user }
     end
 
     trait :with_entries do

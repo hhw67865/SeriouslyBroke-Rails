@@ -1,85 +1,77 @@
-<div class="group cursor-pointer" onclick="window.location='<%= category_path(category) %>'">
+<%# The whole card is a link rather than a div that navigates, so it has a tab stop, a focus ring
+    and a middle-click. `block` and `h-full` because an anchor is inline and the grid stretches. %>
+<a href="<%= category_path(category) %>" class="group block h-full rounded">
   <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 hover:shadow-md transition-shadow duration-300 flex flex-col h-full">
     <div class="p-5 flex-grow">
       <div class="flex justify-between items-start mb-4">
         <div class="flex items-center">
-          <div class="w-10 h-10 rounded-md flex items-center justify-center" style="background-color: <%= category.color || "#C9C78B" %>;">
+          <div class="w-10 h-10 rounded flex items-center justify-center" style="background-color: <%= category.display_color %>;">
             <% case category.category_type %>
             <% when "expense" %>
               <%= heroicon "arrow-trending-down", options: { class: "h-5 w-5 text-white" } %>
             <% when "income" %>
               <%= heroicon "arrow-trending-up", options: { class: "h-5 w-5 text-white" } %>
-            <% when "savings" %>
-              <%= heroicon "banknotes", options: { class: "h-5 w-5 text-white" } %>
             <% end %>
           </div>
           <div class="ml-3">
             <h3 class="text-lg font-medium text-gray-900"><%= category.name %></h3>
-            <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ring-gray-200 mt-1">
+            <span class="inline-flex items-center rounded px-2 py-1 text-xs font-medium ring-1 ring-inset ring-gray-200 mt-1">
               <%= category.category_type.capitalize %>
             </span>
             <% unless category.tracked? %>
-              <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium text-gray-400 ring-1 ring-inset ring-gray-200 mt-1 ml-1">
+              <span class="inline-flex items-center rounded px-2 py-1 text-xs font-medium text-gray-400 ring-1 ring-inset ring-gray-200 mt-1 ml-1">
                 Untracked
               </span>
             <% end %>
           </div>
         </div>
       </div>
-    
+
     <div class="mt-2">
-      <% calc = category.calculator(selected_date) %>
-      <% if category.pool_covered? %>
+      <% calc = category.stats(selected_date) %>
+      <% if category.expense? %>
         <div class="mb-4">
           <div class="flex justify-between text-sm mb-1">
             <span class="text-gray-500">Spent <%= period_time_label %></span>
             <span class="font-medium text-gray-900"><%= number_to_currency(calc.total_amount) %></span>
           </div>
-          <p class="text-xs text-gray-500 mt-2">
-            Pool: <%= category.savings_pool.name %>
-          </p>
-        </div>
-      <% elsif category.expense? %>
-        <div class="mb-4">
-          <div class="flex justify-between text-sm mb-1">
-            <span class="text-gray-500">Monthly Budget</span>
-            <span class="font-medium text-gray-900">
-              <%= number_to_currency(calc.total_amount) %> /
-              <%= calc.monthly_budget_rate ? number_to_currency(calc.monthly_budget_rate) : "N/A" %>
-            </span>
-          </div>
-
-          <% if category.budget&.amount %>
-          <% percentage = calc.budget_percentage %>
-          <div class="h-2 bg-gray-200 rounded overflow-hidden">
-            <div class="<%= budget_status_color(percentage) %> h-2 rounded" style="width: <%= [percentage, 100].min %>%;"></div>
-          </div>
-
-          <div class="flex justify-between mt-1">
-            <p class="text-xs text-gray-500"><%= percentage %>% used</p>
-            <p class="text-xs <%= percentage > 90 ? "text-status-danger" : (percentage > 75 ? "text-status-warning" : "text-gray-500") %>">
-              <%= budget_status(percentage) %>
-            </p>
-          </div>
+          <%# `claim_rows` is the index's ONE set of rows off its ONE ledger, so the question and
+              the figure below it cost no query at all — see CategoriesController#claim_ledger. %>
+          <% if claim_rows.lines_for(category).any? %>
+            <% money = CategoryBudgetPresenter.new(category: category, claims: claim_ledger, rows: claim_rows) %>
+            <div class="flex justify-between text-xs mt-2" data-holdings-line>
+              <span class="text-gray-500">Claimed</span>
+              <span class="font-medium text-gray-900">
+                <%= number_to_currency(money.claim) %>
+              </span>
+            </div>
+            <%# The bar needs the goal to be the category's only rule: `Claimed` is Σ every rule's
+                claim and the target is a ceiling on the goal's built-up alone. %>
+            <% if money.bar? %>
+              <% progress = money.progress_percentage %>
+              <div class="mt-2" data-holdings-progress>
+                <div class="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                  <div class="h-1.5 rounded-full <%= progress >= 100 ? "bg-status-success" : "bg-brand" %>"
+                       style="width: <%= progress %>%;"></div>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">
+                  <%= progress %>% of <%= number_to_currency(money.target) %>
+                </p>
+              </div>
+            <% end %>
           <% else %>
-            <div class="h-2 bg-gray-200 rounded overflow-hidden">
-              <div class="bg-gray-300 h-2 rounded w-0"></div>
-            </div>
-
-            <div class="flex justify-between mt-1">
-              <p class="text-xs text-gray-500">No budget set</p>
-              <p class="text-xs text-gray-500">Set budget to track</p>
-            </div>
+            <p class="text-xs text-gray-500 mt-2" data-holdings-line>
+              Nothing claims this — comes out of what's free to spend
+            </p>
           <% end %>
         </div>
-        
       <% elsif category.income? %>
         <div class="mb-4">
           <div class="flex justify-between text-sm mb-1">
             <span class="text-gray-500">Monthly Income</span>
             <span class="font-medium text-gray-900"><%= number_to_currency(calc.total_amount) %></span>
           </div>
-          
+
           <div class="flex justify-between mt-2">
             <span class="text-xs text-gray-500">vs last month</span>
             <span class="text-xs flex items-center gap-1 <%= calc.previous_month_trend == :up ? "text-status-success" : "text-status-danger" %>">
@@ -88,22 +80,8 @@
             </span>
           </div>
         </div>
-        
-      <% elsif category.savings? %>
-        <div class="mb-4">
-          <div class="flex justify-between text-sm mb-1">
-            <span class="text-gray-500">Monthly Contribution</span>
-            <span class="font-medium text-gray-900"><%= number_to_currency(calc.monthly_contribution) %></span>
-          </div>
-          
-          <% if category.savings_pool.present? %>
-            <p class="text-xs text-gray-500 mt-2">
-              Savings Pool: <%= category.savings_pool.name %>
-            </p>
-          <% end %>
-        </div>
       <% end %>
-      
+
       <% if category.items.any? %>
         <div class="mt-4">
           <h4 class="text-sm font-medium text-gray-700 mb-2">Top Items</h4>
@@ -116,8 +94,6 @@
                   <span class="text-status-danger font-medium">-<%= number_to_currency(amount) %></span>
                 <% when "income" %>
                   <span class="text-status-success font-medium">+<%= number_to_currency(amount) %></span>
-                <% when "savings" %>
-                  <span class="text-brand font-medium"><%= number_to_currency(amount) %></span>
                 <% end %>
               </li>
             <% end %>
@@ -128,12 +104,13 @@
       <% end %>
     </div>
   </div>
-  
-    <%# Hover indicator %>
-    <div class="bg-gray-50 px-5 py-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+
+    <%# Permanently visible: `opacity-0 group-hover:opacity-100` was an affordance that never
+        appeared on a touch screen or to a keyboard user. %>
+    <div class="bg-gray-50 px-5 py-3 border-t border-gray-100">
       <div class="text-center">
-        <span class="text-sm text-gray-500">Click to view details</span>
+        <span class="text-sm text-gray-600 group-hover:text-gray-900 transition-colors">View details</span>
       </div>
     </div>
   </div>
-</div> 
+</a>

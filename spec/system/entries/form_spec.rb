@@ -10,26 +10,31 @@ RSpec.describe "Entries Forms", type: :system do
 
   before { sign_in user, scope: :user }
 
-  # Helper methods
+  # The control rather than the input inside it: TomSelect sets that input to `opacity: 0` once its
+  # select has a value, so a second click on it would land nowhere.
+  def open_dropdown(id)
+    find("##{id}-ts-control", visible: :all).find(:xpath, "..").click
+  end
+
+  # Choosing a category refetches the item list and rebuilds that control, so anything that reaches
+  # for it before the fetch lands reaches for an element about to be thrown away. The controller
+  # stamps the wrapper with whose list is on screen.
   def select_category(category_name)
-    find("#category_id-ts-control").click
+    open_dropdown("category_id")
     find("#category_id-ts-dropdown .option", text: category_name).click
-    sleep 0.5
+    expect(page).to have_css("[data-items-loaded='#{user.categories.find_by!(name: category_name).id}']")
   end
 
   def select_item(item_name)
-    find("#entry_item_id-ts-control").click
+    open_dropdown("entry_item_id")
     find("#entry_item_id-ts-dropdown .option", text: item_name).click
   end
 
   def create_new_item(item_name)
-    item_input = find("#entry_item_id-ts-control")
-    item_input.click
-    sleep 0.2
-    item_input.send_keys(item_name)
-    sleep 0.3
-    item_input.send_keys(:enter)
-    sleep 0.3
+    open_dropdown("entry_item_id")
+    find("#entry_item_id-ts-control").send_keys(item_name)
+    find("#entry_item_id-ts-dropdown .create").click
+    expect(page).to have_no_css("#entry_item_id-ts-dropdown .create")
   end
 
   def tap_pad(*labels)
@@ -64,45 +69,43 @@ RSpec.describe "Entries Forms", type: :system do
         expect(page).not_to have_content("Other User Category")
       end
 
-      it "starts with no category selected" do
+      # `:js` because a real browser is what selects a select's first option when none is marked.
+      it "starts with no category selected", :js do
         expect(page).to have_select("category_id", selected: "Select a category")
       end
 
-      it "groups categories by type" do
-        create(:category, user: user, name: "Vacation Fund", category_type: :savings)
-
+      # Two groups, not three — the picker's optgroups are the category types.
+      it "groups categories by type", :aggregate_failures, :js do
         visit new_entry_path
-        find("#category_id-ts-control").click
+        open_dropdown("category_id")
 
         within("#category_id-ts-dropdown") do
           expect(page).to have_css(".optgroup-header", text: /expenses/i)
           expect(page).to have_css(".optgroup-header", text: /incomes/i)
-          expect(page).to have_css(".optgroup-header", text: /savings/i)
+          expect(page).to have_no_css(".optgroup-header", text: /savings/i)
         end
       end
 
-      it "shows categories under correct group headers" do
+      it "shows categories under correct group headers", :js do
         visit new_entry_path
-        find("#category_id-ts-control").click
+        open_dropdown("category_id")
 
         within("#category_id-ts-dropdown") do
-          # Food should be under Expenses group
           expenses_group = find(".optgroup", text: /expenses/i)
           expect(expenses_group).to have_content("Food")
 
-          # Salary should be under Incomes group
           incomes_group = find(".optgroup", text: /incomes/i)
           expect(incomes_group).to have_content("Salary")
         end
       end
     end
 
-    describe "category and item interaction", :aggregate_failures do
+    describe "category and item interaction", :aggregate_failures, :js do
       it "populates items when category is selected" do
         create(:item, category: expense_category, name: "Coffee")
         select_category("Food")
 
-        find("#entry_item_id-ts-control").click
+        open_dropdown("entry_item_id")
         within("#entry_item_id-ts-dropdown") do
           expect(page).to have_content("Groceries")
           expect(page).to have_content("Coffee")
@@ -113,7 +116,7 @@ RSpec.describe "Entries Forms", type: :system do
         create(:item, category: income_category, name: "Paycheck")
         select_category("Food")
 
-        find("#entry_item_id-ts-control").click
+        open_dropdown("entry_item_id")
         within("#entry_item_id-ts-dropdown") do
           expect(page).to have_content("Groceries")
           expect(page).not_to have_content("Paycheck")
@@ -121,7 +124,21 @@ RSpec.describe "Entries Forms", type: :system do
       end
     end
 
-    describe "successful submission with existing item", :aggregate_failures do
+    describe "filling the amount from an item's history", :aggregate_failures, :js do
+      it "fills the amount and hint on pick, and hides the hint once typed over" do
+        create(:entry, item: groceries_item, date: Date.current - 1, amount: 18.99)
+        select_category("Food")
+
+        select_item("Groceries")
+        expect(page).to have_field("Amount", with: "18.99")
+        expect(page).to have_css("[data-amount-hint]", text: "Filled from the last time")
+
+        fill_in "Amount", with: "5"
+        expect(page).to have_no_css("[data-amount-hint]", text: "Filled from the last time")
+      end
+    end
+
+    describe "successful submission with existing item", :aggregate_failures, :js do
       it "creates entry and redirects to entries index" do
         select_category("Food")
         select_item("Groceries")
@@ -132,11 +149,11 @@ RSpec.describe "Entries Forms", type: :system do
         expect(page).to have_current_path(entries_path)
         expect(page).to have_content("Entry was successfully created")
         expect(Entry.count).to eq(1)
-        expect(Entry.last.item).to eq(groceries_item)
+        expect(user.entries.sole.item).to eq(groceries_item)
       end
     end
 
-    describe "successful submission with new item", :aggregate_failures do
+    describe "successful submission with new item", :aggregate_failures, :js do
       it "creates entry with new item and redirects" do
         select_category("Food")
         create_new_item("Brand New Item 123")
@@ -146,13 +163,13 @@ RSpec.describe "Entries Forms", type: :system do
 
         expect(page).to have_current_path(entries_path)
         expect(page).to have_content("Entry was successfully created")
-        expect(Entry.last.item.name).to eq("Brand New Item 123")
-        expect(Entry.last.item.category).to eq(expense_category)
+        expect(user.entries.sole.item.name).to eq("Brand New Item 123")
+        expect(user.entries.sole.item.category).to eq(expense_category)
       end
     end
 
     describe "form validation", :aggregate_failures do
-      it "shows error for missing amount" do
+      it "shows error for missing amount", :js do
         select_category("Food")
         select_item("Groceries")
         click_button "Create Entry"
@@ -168,7 +185,7 @@ RSpec.describe "Entries Forms", type: :system do
         expect(page).to have_content("must be selected")
       end
 
-      it "shows error when item name is not selected" do
+      it "shows error when item name is not selected", :js do
         select_category("Food")
         fill_in "Amount", with: "50.00"
         click_button "Create Entry"
@@ -182,7 +199,7 @@ RSpec.describe "Entries Forms", type: :system do
       end
     end
 
-    describe "formula support", :aggregate_failures do
+    describe "formula support", :aggregate_failures, :js do
       it "evaluates a multiplication formula and saves the result" do
         select_category("Food")
         select_item("Groceries")
@@ -191,7 +208,7 @@ RSpec.describe "Entries Forms", type: :system do
 
         expect(page).to have_current_path(entries_path)
         expect(page).to have_content("Entry was successfully created")
-        expect(Entry.last.amount).to eq(50)
+        expect(user.entries.sole.amount).to eq(50)
       end
 
       it "evaluates a formula with parentheses" do
@@ -202,7 +219,7 @@ RSpec.describe "Entries Forms", type: :system do
 
         expect(page).to have_current_path(entries_path)
         expect(Entry.count).to eq(1)
-        expect(Entry.last.amount).to eq(70)
+        expect(user.entries.sole.amount).to eq(70)
       end
 
       it "evaluates decimal subtraction" do
@@ -213,7 +230,7 @@ RSpec.describe "Entries Forms", type: :system do
 
         expect(page).to have_current_path(entries_path)
         expect(Entry.count).to eq(1)
-        expect(Entry.last.amount).to eq(BigDecimal("107.9"))
+        expect(user.entries.sole.amount).to eq(BigDecimal("107.9"))
       end
 
       it "still accepts a plain number" do
@@ -224,7 +241,7 @@ RSpec.describe "Entries Forms", type: :system do
 
         expect(page).to have_current_path(entries_path)
         expect(Entry.count).to eq(1)
-        expect(Entry.last.amount).to eq(50)
+        expect(user.entries.sole.amount).to eq(50)
       end
 
       it "shows a validation error for an invalid formula" do
@@ -239,7 +256,7 @@ RSpec.describe "Entries Forms", type: :system do
       end
     end
 
-    describe "calculator pad", :aggregate_failures do
+    describe "calculator pad", :aggregate_failures, :js do
       it "is hidden until toggled open with the Calculator button" do
         expect(page).not_to have_button("7")
         expect(page).not_to have_button("×")
@@ -260,7 +277,7 @@ RSpec.describe "Entries Forms", type: :system do
         click_button "Create Entry"
 
         expect(page).to have_current_path(entries_path)
-        expect(Entry.last.amount).to eq(50)
+        expect(user.entries.sole.amount).to eq(50)
       end
 
       it "clears the amount with the C button" do
@@ -304,11 +321,7 @@ RSpec.describe "Entries Forms", type: :system do
       )
     end
 
-    before do
-      visit edit_entry_path(entry)
-      # Wait for TomSelect to initialize by checking for the wrapper
-      page.has_css?(".ts-wrapper", wait: 5)
-    end
+    before { visit edit_entry_path(entry) }
 
     describe "form display", :aggregate_failures do
       it "shows all form elements" do
@@ -353,16 +366,16 @@ RSpec.describe "Entries Forms", type: :system do
         fill_in "Amount", with: ""
         click_button "Update Entry"
 
-        expect(page).to have_current_path(edit_entry_path(entry))
         expect(page).to have_content("can't be blank")
+        expect(page).to have_button("Update Entry")
       end
 
       it "shows error for invalid amount" do
         fill_in "Amount", with: "-10"
         click_button "Update Entry"
 
-        expect(page).to have_current_path(edit_entry_path(entry))
         expect(page).to have_content("must be greater than 0")
+        expect(page).to have_button("Update Entry")
       end
     end
 

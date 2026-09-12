@@ -223,7 +223,7 @@ AllCops:
   NewCops: enable
   SuggestExtensions: false
   Exclude:
-    - 'db/migrate/*'
+    - 'db/migrate/**/*'
     - 'db/schema.rb'
     - 'vendor/**/*'
     - 'node_modules/**/*'

@@ -1,0 +1,33 @@
+<%# What the period and the ticked categories resolve to. Local: `presenter`. Not hidden by
+    default — a browser with no JavaScript still sees the saved state, just never a live one. %>
+<%= turbo_frame_tag "income_measure",
+                    data: {
+                      "app--budget--income-form-target": "preview",
+                      action: "turbo:frame-load->app--budget--income-form#highlight"
+                    } do %>
+  <section class="bg-white border border-gray-200 rounded p-4 sm:px-6 sm:py-5" data-measured data-preview>
+    <h2 class="text-sm font-semibold text-gray-900 mb-4">Typical income</h2>
+
+    <% if presenter.declared? && presenter.valid_period? && presenter.history? %>
+      <p class="text-sm text-gray-700" data-figure="typical-income">
+        You bring in <strong class="text-gray-900"><%= number_to_currency(presenter.typical_income) %></strong> a period
+      </p>
+      <ul class="mt-3 space-y-1 text-sm text-gray-600">
+        <% presenter.periods.each do |period| %>
+          <li data-measured-period>
+            <%= period.range.first.strftime("%b %-d") %> – <%= period.range.last.strftime("%b %-d, %Y") %>
+            · <%= number_to_currency(period.income) %>
+          </li>
+        <% end %>
+      </ul>
+    <% elsif presenter.declared? && presenter.valid_period? %>
+      <p class="text-sm text-gray-500">
+        Not enough history yet — a full period has to pass before there is anything to average.
+      </p>
+    <% elsif presenter.declared? %>
+      <p class="text-sm text-gray-500">Pick the day a period starts to measure it.</p>
+    <% else %>
+      <p class="text-sm text-gray-500">Set a period above and this will say what you bring in.</p>
+    <% end %>
+  </section>
+<% end %>

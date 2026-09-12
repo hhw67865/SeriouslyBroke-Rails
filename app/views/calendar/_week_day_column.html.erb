@@ -1,5 +1,5 @@
 <%# locals: (day:) %>
-<div class="rounded border border-gray-200 bg-white p-3 hover:border-gray-300 hover:shadow-sm transition h-full flex flex-col">
+<div class="rounded border border-gray-200 bg-white p-3 hover:border-gray-300 hover:shadow-sm transition h-full flex flex-col" data-day-column="<%= day[:date].iso8601 %>">
   <div class="text-xs text-gray-500"><%= day[:date].strftime("%a") %></div>
   <div class="text-sm font-medium text-gray-900 border-b border-gray-100 pb-2 mb-2">
     <%= day[:date].strftime("%-m/%-d") %>
@@ -9,9 +9,11 @@
       <% entries = day[:entries_by_type][type] %>
       <% next if entries.empty? %>
       <div class="rounded border border-gray-100">
-        <div class="flex justify-between px-2.5 py-2 bg-gray-50 gap-2">
+        <%# flex-wrap: the label and total share a row when both fit, and drop to their own lines
+            rather than being clipped by the next column when a large total does not. %>
+        <div class="flex flex-wrap justify-between px-2.5 py-2 bg-gray-50 gap-x-2 gap-y-0.5">
           <div class="text-xs font-light text-gray-600"><%= category_type_label(type) %></div>
-          <div class="text-xs font-semibold <%= category_type_color(type) %>">
+          <div class="text-xs font-semibold whitespace-nowrap <%= category_type_color(type) %>" data-type-total="<%= type %>">
             <%= format_amount_with_sign(entries.sum { |e| e[:amount] }, type) %>
           </div>
         </div>

@@ -1,0 +1,16 @@
+<%# NO ACCOUNTS YET — a brand-new user has no checking account, so there is nothing to show on
+    this page but an invitation to open one. The Add an account drawer still renders in show.html.erb;
+    this card only opens it. %>
+<div class="bg-white border border-gray-200 rounded p-4 lg:p-6 text-center" data-savings-empty-state>
+  <p class="text-sm text-gray-700">
+    Open your first account. It becomes your checking account, where income lands and everything is claimed from.
+  </p>
+  <div class="mt-4">
+    <%= link_to(
+          "Add an account",
+          savings_path(open: "add"),
+          class: "btn btn-primary",
+          data: { drawer: "add", action: "click->shared--drawer#open" }
+        ) %>
+  </div>
+</div>

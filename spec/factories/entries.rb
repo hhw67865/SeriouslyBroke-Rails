@@ -11,41 +11,22 @@ FactoryBot.define do
       transient do
         user { create(:user) }
       end
-      association :item, factory: [:item, :expense]
+      item { association :item, :expense, user: user }
     end
 
     trait :income do
       transient do
         user { create(:user) }
       end
-      association :item, factory: [:item, :income]
-    end
-
-    trait :savings do
-      transient do
-        user { create(:user) }
-      end
-      association :item, factory: [:item, :savings]
+      item { association :item, :income, user: user }
     end
 
     trait :last_month do
-      date { 1.month.ago }
-    end
-
-    trait :last_year do
-      date { 1.year.ago }
+      date { Date.current - 1.month }
     end
 
     trait :this_month do
       date { Date.current }
-    end
-
-    trait :this_year do
-      date { Date.current.beginning_of_year + 1.month }
-    end
-
-    trait :next_month do
-      date { 1.month.from_now }
     end
   end
 end

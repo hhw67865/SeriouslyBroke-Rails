@@ -3,8 +3,7 @@
 module EntriesHelper
   TYPE_BADGE_CONFIG = {
     "expense" => { bg: "bg-status-danger-light", text: "text-status-danger", icon: "minus-circle", label: "Expense" },
-    "income" => { bg: "bg-status-success-light", text: "text-status-success", icon: "plus-circle", label: "Income" },
-    "savings" => { bg: "bg-status-info-light", text: "text-status-info", icon: "circle-stack", label: "Savings" }
+    "income" => { bg: "bg-status-success-light", text: "text-status-success", icon: "plus-circle", label: "Income" }
   }.freeze
 
   def entry_type_badge(category_type, with_icon: false)

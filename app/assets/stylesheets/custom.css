@@ -8,6 +8,13 @@
   --color-terracotta: #C4977A;
   --color-dusty-teal: #7BA3A8;
 
+  /* One darker step of each accent, for the rule-type words Home prints as text. */
+  --color-terracotta-dark: #9E6440;
+  --color-dusty-teal-dark: #4B7C82;
+
+  /* The keyboard focus ring: near-black so it reads on white cards, gray strips and the sidebar alike. */
+  --color-focus-ring: #26251F;
+
   /* Background Colors */
   --color-bg-primary: var(--color-primary);
   --color-bg-primary-light: var(--color-primary-light);
@@ -71,12 +78,32 @@
   color: var(--color-terracotta);
 }
 
+.text-dusty-teal-dark {
+  color: var(--color-dusty-teal-dark);
+}
+
+.text-terracotta-dark {
+  color: var(--color-terracotta-dark);
+}
+
 .bg-terracotta {
   background-color: var(--color-terracotta);
 }
 
 .bg-dusty-teal {
   background-color: var(--color-dusty-teal);
+}
+
+.bg-savings {
+  background-color: var(--color-sage-800);
+}
+
+.bg-savings-light {
+  background-color: var(--color-sage-100);
+}
+
+.text-savings {
+  color: var(--color-sage-800);
 }
 
 .border-brand {
@@ -126,6 +153,10 @@
 .hover\:bg-brand-dark:hover { background-color: var(--color-primary-dark); }
 .hover\:opacity-90:hover { opacity: 0.9; }
 .hover\:opacity-80:hover { opacity: 0.8; }
+
+/* Status colours are custom classes, so Tailwind emits no variants for them; the used ones are declared here. */
+.hover\:text-status-danger:hover { color: var(--color-danger); }
+.focus-visible\:text-status-danger:focus-visible { color: var(--color-danger); }
 
 /* Active Utilities */
 .active\:bg-brand:active { background-color: var(--color-primary); }
@@ -299,4 +330,74 @@ select.ts-hidden-accessible {
 
 .ts-dropdown .optgroup .option {
   padding-left: 1.25rem;
+}
+/* One focus ring for every link and button, at zero specificity so a component's own ring wins.
+   The white halo under the ring keeps it visible on any surface; form controls carry their own. */
+:where(a[href], button, summary, [role="button"], [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px #ffffff;
+}
+
+/* The category form's sr-only radios draw their ring on the tile beside them. */
+.sr-only:focus-visible + .category-type-option,
+.color-radio:focus-visible + [data-color] {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px #ffffff;
+}
+
+/* Transfer money / Add an account: a native <dialog> drawer. Below `sm` it is a bottom sheet; from
+   `sm` up, a panel pinned to the right edge. The attribute selector is also the drawer's JS hook. */
+dialog[data-drawer-name] {
+  margin: 0;
+  padding: 0;
+  border: none;
+  max-width: none;
+  max-height: none;
+  position: fixed;
+  inset: auto 0 0 0;
+  width: 100%;
+  max-height: 90vh;
+  border-radius: 12px 12px 0 0;
+  background: #fff;
+  box-shadow: 0 -4px 24px rgba(38, 37, 31, 0.16);
+}
+
+dialog[data-drawer-name][open] {
+  display: flex;
+  flex-direction: column;
+  animation: drawer-sheet-in 0.2s ease-out;
+}
+
+dialog[data-drawer-name]::backdrop {
+  background: rgba(38, 37, 31, 0.45);
+}
+
+@media (min-width: 640px) {
+  dialog[data-drawer-name] {
+    inset: 0 0 0 auto;
+    width: 420px;
+    height: 100%;
+    max-height: 100%;
+    border-radius: 0;
+  }
+
+  dialog[data-drawer-name][open] {
+    animation: drawer-panel-in 0.2s ease-out;
+  }
+}
+
+@keyframes drawer-sheet-in {
+  from { transform: translateY(100%); }
+}
+
+@keyframes drawer-panel-in {
+  from { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  dialog[data-drawer-name][open] {
+    animation: none;
+  }
 }

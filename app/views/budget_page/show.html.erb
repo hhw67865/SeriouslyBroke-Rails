@@ -1,0 +1,35 @@
+<% content_for :title, "Budget" %>
+
+<%# Three tiles and one list: a row per expense category, ruled ones in priority order and
+    rule-less ones after. The period and the income categories live on their own page. %>
+<%= page_header(title: "Budget", subtitle: "The rules that claim your money") %>
+
+<div class="space-y-6">
+  <%= render "budget_page/tiles", presenter: @presenter %>
+
+  <% if @presenter.no_categories? %>
+    <%= render "budget_page/empty" %>
+  <% else %>
+    <%# What `PATCH /budget/reorder` rewrites. Each ▲▼ carries the whole list already swapped, so
+        the order is reachable with scripting off. %>
+    <section class="space-y-2"
+             data-category-list
+             data-controller="app--budget-page--category-list">
+      <div class="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 sm:gap-4 px-1">
+        <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Your categories</h2>
+        <%# What the arrows decide (the tie-break inside a kind), what they cannot decide (the
+            kinds' own order), and where the combined answer is shown. %>
+        <p class="text-xs text-gray-500 sm:max-w-md sm:text-right">
+          Use the arrows to set which gives way first among rules of the same kind — choice always
+          gives way before usage, usage before bills. Home shows them in that give-way order.
+        </p>
+      </div>
+
+      <% rows = @presenter.category_rows %>
+      <% reorderable = @presenter.reorderable_rows %>
+      <% rows.each do |row| %>
+        <%= render "budget_page/category_row", row: row, reorderable: reorderable, presenter: @presenter %>
+      <% end %>
+    </section>
+  <% end %>
+</div>

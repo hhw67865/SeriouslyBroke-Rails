@@ -35,8 +35,10 @@ RSpec.describe "Categories Show - Items This Month", type: :system do
       expect(page).to have_content("-#{ActionController::Base.helpers.number_to_currency(50)}")
     end
 
+    # `first`: the sidebar renders the date selector twice — mobile and desktop — and both submit
+    # the same GET, so under Rack::Test either control is the control.
     it "updates when navigating to next month via navbar" do
-      find("button[title='Next month']").click
+      first("button[title='Next month']").click
 
       expect(page).to have_content("-#{ActionController::Base.helpers.number_to_currency(200)}")
       expect(page).to have_content("-#{ActionController::Base.helpers.number_to_currency(100)}")
@@ -49,32 +51,28 @@ RSpec.describe "Categories Show - Items This Month", type: :system do
       expect(page).to have_current_path(edit_item_path(groceries_item))
     end
 
-    it "View button toggles inline entries and shows correct data" do
-      expect(page).not_to have_css("[data-app--category--expandable-target='content']:not(.hidden)")
+    # `:js`: the row's entries are revealed by app--category--expandable, so the button does
+    # nothing at all without a browser and "Hide" never appears.
+    it "View button toggles inline entries and shows correct data", :js do
+      expect(page).to have_no_css("[data-app--category--expandable-target='content']:not(.hidden)")
 
       within(find("tbody", text: "Groceries")) do
         click_button "View"
 
-        # Verify entry data is displayed
         expect(page).to have_content((base_date + 2.days).strftime("%b %d, %Y"))
         expect(page).to have_content(ActionController::Base.helpers.number_to_currency(100))
 
         click_button "Hide"
       end
 
-      expect(page).not_to have_css("[data-app--category--expandable-target='content']:not(.hidden)")
+      expect(page).to have_no_css("[data-app--category--expandable-target='content']:not(.hidden)")
     end
 
-    it "shows entries scoped to the correct item" do
-      within(find("tbody", text: "Groceries")) { click_button "View" }
-      within(find("tbody", text: "Dining")) { click_button "View" }
-
-      # Groceries entry details
+    it "renders each item's own entries in its own row" do
       groceries_row = find("tbody", text: "Groceries")
       expect(groceries_row).to have_content((base_date + 2.days).strftime("%b %d, %Y"))
       expect(groceries_row).to have_content(ActionController::Base.helpers.number_to_currency(100))
 
-      # Dining entry details
       dining_row = find("tbody", text: "Dining")
       expect(dining_row).to have_content((base_date + 10.days).strftime("%b %d, %Y"))
       expect(dining_row).to have_content(ActionController::Base.helpers.number_to_currency(50))
@@ -92,21 +90,6 @@ RSpec.describe "Categories Show - Items This Month", type: :system do
 
     it "shows positive amounts for income" do
       expect(page).to have_content("+#{ActionController::Base.helpers.number_to_currency(700)}")
-    end
-  end
-
-  describe "savings items list", :aggregate_failures do
-    let!(:pool) { create(:savings_pool, user: user) }
-    let!(:category) { create(:category, category_type: "savings", user: user, savings_pool: pool, name: "Emergency Fund") }
-    let!(:transfer_item) { create(:item, category: category, name: "Transfer") }
-
-    before do
-      create(:entry, item: transfer_item, amount: 300, date: base_date + 7.days)
-      visit category_path(category, month: base_date.month, year: base_date.year)
-    end
-
-    it "shows brand-colored positive amounts for savings" do
-      expect(page).to have_content(ActionController::Base.helpers.number_to_currency(300))
     end
   end
 end

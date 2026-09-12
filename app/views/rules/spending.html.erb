@@ -1,0 +1,8 @@
+<% content_for :title, "#{rule_name(@rule)} · what counts" %>
+
+<%= page_header(title: "#{rule_name(@rule)} · what counts",
+                breadcrumbs: [{ label: "Budget", url: budget_page_path(open: @rule.category_id) }, { label: rule_name(@rule) }]) %>
+
+<div class="max-w-xl">
+  <%= render "rules/spending", spending: @spending %>
+</div>

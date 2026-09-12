@@ -1,9 +1,12 @@
 import { Controller } from "@hotwired/stimulus"
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
 export default class extends Controller {
-  static targets = ["itemSelect", "itemNameField", "categorySelect"]
+  static targets = ["itemSelect", "itemNameField", "categorySelect", "amount", "amountHint"]
 
   connect() {
+    this.itemsById = new Map()
     this.initializeItemSelect()
     this.initializeCategorySelect()
   }
@@ -20,28 +23,53 @@ export default class extends Controller {
         } else {
           this.itemNameFieldTarget.value = ""
         }
+        this.fillAmountFromHistory(value)
       }
     })
+  }
+
+  // An empty field only: a value already on the page is the user's, not the item's history's.
+  fillAmountFromHistory(itemId) {
+    const item = this.itemsById.get(itemId)
+    if (!this.hasAmountTarget || !item || !item.last_amount || this.amountTarget.value !== "") return
+
+    this.amountTarget.value = item.last_amount
+    this.amountHintTarget.textContent = `Filled from the last time: $${item.last_amount} on ${this.formatDate(item.last_date)}. Change it if this one differs.`
+    this.amountHintTarget.hidden = false
+  }
+
+  hideAmountHint() {
+    if (this.hasAmountHintTarget) this.amountHintTarget.hidden = true
+  }
+
+  // Read as plain digits, never through Date parsing, so a viewer's timezone can't shift the day.
+  formatDate(iso) {
+    const [, month, day] = iso.split("-").map(Number)
+    return `${MONTHS[month - 1]} ${day}`
   }
 
   initializeCategorySelect() {
     this.categorySelect = new TomSelect(this.categorySelectTarget, {
       onChange: (value) => {
         if (value === "") {
-          // User created a new category - clear items
-          this.updateItemSelect(null)
+          this.updateItemSelect(null, "")
         } else {
-          // User selected existing category - fetch its items
           this.fetchItemsForCategory(value)
         }
+
+        // The one category-change hook on this form: a second listener on the select itself would
+        // be free to disagree with this one about when the user picked a category.
+        this.dispatch("categoryChanged", { detail: { categoryId: value }, prefix: "entry" })
       }
     })
   }
 
-  updateItemSelect(items) {
+  updateItemSelect(items, categoryId) {
     if (this.itemSelect) {
       this.itemSelect.destroy()
     }
+
+    this.itemsById = new Map((items || []).map(item => [String(item.id), item]))
 
     if (items === null) {
       this.itemSelectTarget.innerHTML = '<option value="">Create an item</option>'
@@ -51,17 +79,22 @@ export default class extends Controller {
     }
 
     this.initializeItemSelect()
+    // Whose list is on screen. The rebuild replaces this control, so anything that reaches for it
+    // between the category change and the fetch landing reaches for an element about to be thrown
+    // away; this says when that is over.
+    const wrapper = this.itemSelectTarget.closest(".ts-wrapper") || this.itemSelectTarget
+    wrapper.dataset.itemsLoaded = categoryId
   }
 
   fetchItemsForCategory(categoryId) {
     fetch(`/categories/${categoryId}/items.json`)
       .then(response => response.json())
       .then(items => {
-        this.updateItemSelect(items)
+        this.updateItemSelect(items, categoryId)
       })
       .catch(error => {
         console.error("Error fetching items:", error)
-        this.updateItemSelect(null)
+        this.updateItemSelect(null, categoryId)
       })
   }
 }

@@ -1,0 +1,17 @@
+<% content_for :title, "Home" %>
+
+<%= page_header(title: @presenter.day_words, subtitle: @presenter.period_words) %>
+
+<%# The full picture: the four tiles, trouble only when there is some, what is coming up, and this
+    period rule by rule. An adjustment is the one thing written here; everything else links out. %>
+<div class="space-y-4 lg:space-y-6">
+  <%= render "home/tiles", presenter: @presenter %>
+
+  <% if @presenter.trouble? %>
+    <%= render "home/trouble", presenter: @presenter %>
+  <% end %>
+
+  <%= render "home/upcoming", presenter: @presenter %>
+
+  <%= render "home/this_period", presenter: @presenter %>
+</div>

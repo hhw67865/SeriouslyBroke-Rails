@@ -6,17 +6,16 @@ RSpec.describe "Entries Index - Search", type: :system do
   let(:user) { create(:user) }
   let(:expense_category) { create(:category, :expense, user: user, name: "Food") }
   let(:income_category) { create(:category, :income, user: user, name: "Salary") }
-  let(:vacation_pool) { create(:savings_pool, user: user, name: "Vacation Fund") }
-  let(:emergency_pool) { create(:savings_pool, user: user, name: "Emergency Fund") }
   let(:expense_item) { create(:item, category: expense_category, name: "Groceries") }
   let(:income_item) { create(:item, category: income_category, name: "Freelance Work") }
 
   before do
     sign_in user, scope: :user
 
-    # Create savings categories and items
-    vacation_category = create(:category, :savings, user: user, name: "Vacation Savings", savings_pool: vacation_pool)
-    emergency_category = create(:category, :savings, user: user, name: "Emergency Savings", savings_pool: emergency_pool)
+    # Two ordinary expense categories: the date, description and category searches below count
+    # their entries.
+    vacation_category = create(:category, :expense, user: user, name: "Vacation Savings")
+    emergency_category = create(:category, :expense, user: user, name: "Emergency Savings")
     vacation_item = create(:item, category: vacation_category, name: "Vacation Contribution")
     emergency_item = create(:item, category: emergency_category, name: "Emergency Contribution")
 
@@ -37,7 +36,6 @@ RSpec.describe "Entries Index - Search", type: :system do
     create(:entry, item: expense_item, amount: 80, description: "February utilities", date: Date.parse("2024-02-28"))
     create(:entry, item: expense_item, amount: 120, description: "March rent", date: Date.parse("2024-03-01"))
 
-    # Savings pool entries
     create(:entry, item: vacation_item, amount: 500, description: "Monthly vacation savings", date: Date.parse("2024-01-15"))
     create(:entry, item: vacation_item, amount: 300, description: "Bonus to vacation", date: Date.parse("2024-02-10"))
     create(:entry, item: emergency_item, amount: 1000, description: "Emergency fund deposit", date: Date.parse("2024-01-20"))
@@ -52,7 +50,8 @@ RSpec.describe "Entries Index - Search", type: :system do
     end
 
     it "shows all search field options" do
-      expect(page).to have_select("field", options: ["Description", "Date", "Item", "Category", "Savings pool"])
+      # Four, and the list is `Entry`'s own `searchable` declarations in order.
+      expect(page).to have_select("field", options: ["Description", "Date", "Item", "Category"])
     end
   end
 
@@ -60,7 +59,7 @@ RSpec.describe "Entries Index - Search", type: :system do
     it "finds entries by description text" do
       select "Description", from: "field"
       fill_in "q", with: "Coffee"
-      find("input[name='q']").send_keys(:return)
+      click_button "Search"
 
       expect(page).to have_content("Coffee and pastries")
       expect(page).not_to have_content("Gas station")
@@ -70,7 +69,7 @@ RSpec.describe "Entries Index - Search", type: :system do
     it "handles partial matches" do
       select "Description", from: "field"
       fill_in "q", with: "development"
-      find("input[name='q']").send_keys(:return)
+      click_button "Search"
 
       expect(page).to have_content("Web development project")
       expect(page).not_to have_content("Coffee and pastries")
@@ -79,7 +78,7 @@ RSpec.describe "Entries Index - Search", type: :system do
     it "shows no results for non-matching description" do
       select "Description", from: "field"
       fill_in "q", with: "NonexistentDescription"
-      find("input[name='q']").send_keys(:return)
+      click_button "Search"
 
       expect(page).to have_content("No entries found")
     end
@@ -89,7 +88,7 @@ RSpec.describe "Entries Index - Search", type: :system do
     it "finds entries by date" do
       select "Date", from: "field"
       fill_in "q", with: "2024-01-15"
-      find("input[name='q']").send_keys(:return)
+      click_button "Search"
 
       expect(page).to have_content("Coffee and pastries")
       expect(page).not_to have_content("Gas station")
@@ -99,7 +98,7 @@ RSpec.describe "Entries Index - Search", type: :system do
     it "handles different date formats" do
       select "Date", from: "field"
       fill_in "q", with: "01/20/2024"
-      find("input[name='q']").send_keys(:return)
+      click_button "Search"
 
       expect(page).to have_content("Web development project")
     end
@@ -107,7 +106,7 @@ RSpec.describe "Entries Index - Search", type: :system do
     it "searches by year" do
       select "Date", from: "field"
       fill_in "q", with: "2024"
-      find("input[name='q']").send_keys(:return)
+      click_button "Search"
 
       # Should find 2024 entries
       expect(page).to have_content("Coffee and pastries")
@@ -121,7 +120,7 @@ RSpec.describe "Entries Index - Search", type: :system do
     it "searches by year-month format (YYYY-MM)" do
       select "Date", from: "field"
       fill_in "q", with: "2024-01"
-      find("input[name='q']").send_keys(:return)
+      click_button "Search"
 
       # Should find only January 2024 entries
       expect(page).to have_content("Coffee and pastries")
@@ -138,7 +137,7 @@ RSpec.describe "Entries Index - Search", type: :system do
     it "searches by different year" do
       select "Date", from: "field"
       fill_in "q", with: "2023"
-      find("input[name='q']").send_keys(:return)
+      click_button "Search"
 
       # Should find all 2023 entries
       expect(page).to have_content("Holiday shopping")
@@ -152,7 +151,7 @@ RSpec.describe "Entries Index - Search", type: :system do
     it "searches by specific month in different year" do
       select "Date", from: "field"
       fill_in "q", with: "2023-12"
-      find("input[name='q']").send_keys(:return)
+      click_button "Search"
 
       # Should find December 2023 entries
       expect(page).to have_content("Holiday shopping")
@@ -165,7 +164,7 @@ RSpec.describe "Entries Index - Search", type: :system do
     it "searches by single digit month (YYYY-M)" do
       select "Date", from: "field"
       fill_in "q", with: "2024-3"
-      find("input[name='q']").send_keys(:return)
+      click_button "Search"
 
       # Should find March 2024 entries
       expect(page).to have_content("March rent")
@@ -180,7 +179,7 @@ RSpec.describe "Entries Index - Search", type: :system do
     it "finds entries by item name" do
       select "Item", from: "field"
       fill_in "q", with: "Groceries"
-      find("input[name='q']").send_keys(:return)
+      click_button "Search"
 
       expect(page).to have_content("Coffee and pastries")
       expect(page).to have_content("Gas station")
@@ -190,7 +189,7 @@ RSpec.describe "Entries Index - Search", type: :system do
     it "finds entries by partial item name" do
       select "Item", from: "field"
       fill_in "q", with: "Freelance"
-      find("input[name='q']").send_keys(:return)
+      click_button "Search"
 
       expect(page).to have_content("Web development project")
       expect(page).not_to have_content("Coffee and pastries")
@@ -201,7 +200,7 @@ RSpec.describe "Entries Index - Search", type: :system do
     it "finds entries by category name" do
       select "Category", from: "field"
       fill_in "q", with: "Food"
-      find("input[name='q']").send_keys(:return)
+      click_button "Search"
 
       expect(page).to have_content("Coffee and pastries")
       expect(page).to have_content("Gas station")
@@ -211,61 +210,10 @@ RSpec.describe "Entries Index - Search", type: :system do
     it "finds entries by partial category name" do
       select "Category", from: "field"
       fill_in "q", with: "Sal"
-      find("input[name='q']").send_keys(:return)
+      click_button "Search"
 
       expect(page).to have_content("Web development project")
       expect(page).not_to have_content("Coffee and pastries")
-    end
-  end
-
-  describe "search by savings pool", :aggregate_failures do
-    it "finds all entries in categories belonging to the savings pool" do
-      select "Savings pool", from: "field"
-      fill_in "q", with: "Vacation Fund"
-      find("input[name='q']").send_keys(:return)
-
-      expect(page).to have_content("Monthly vacation savings")
-      expect(page).to have_content("Bonus to vacation")
-      expect(page).not_to have_content("Emergency fund deposit")
-      expect(page).not_to have_content("Coffee and pastries")
-    end
-
-    it "finds entries by partial savings pool name" do
-      select "Savings pool", from: "field"
-      fill_in "q", with: "Emergency"
-      find("input[name='q']").send_keys(:return)
-
-      expect(page).to have_content("Emergency fund deposit")
-      expect(page).not_to have_content("Monthly vacation savings")
-      expect(page).not_to have_content("Web development project")
-    end
-
-    context "with multiple categories in same pool" do
-      before do
-        another_vacation_category = create(:category, :savings, user: user, name: "Travel Savings", savings_pool: vacation_pool)
-        another_vacation_item = create(:item, category: another_vacation_category, name: "Travel Fund")
-        create(:entry, item: another_vacation_item, amount: 250, description: "Travel contribution", date: Date.parse("2024-03-15"))
-
-        visit entries_path
-        select "Savings pool", from: "field"
-        fill_in "q", with: "Vacation"
-        find("input[name='q']").send_keys(:return)
-      end
-
-      it "finds all entries from all categories in the pool" do
-        expect(page).to have_content("Monthly vacation savings")
-        expect(page).to have_content("Bonus to vacation")
-        expect(page).to have_content("Travel contribution")
-        expect(page).not_to have_content("Emergency fund deposit")
-      end
-    end
-
-    it "shows no results for non-matching savings pool" do
-      select "Savings pool", from: "field"
-      fill_in "q", with: "NonexistentPool"
-      find("input[name='q']").send_keys(:return)
-
-      expect(page).to have_content("No entries found")
     end
   end
 
@@ -273,7 +221,7 @@ RSpec.describe "Entries Index - Search", type: :system do
     it "shows search results information" do
       select "Description", from: "field"
       fill_in "q", with: "Coffee"
-      find("input[name='q']").send_keys(:return)
+      click_button "Search"
 
       expect(page).to have_content("Found 1 result for \"Coffee\" in Description")
     end
@@ -281,7 +229,7 @@ RSpec.describe "Entries Index - Search", type: :system do
     it "provides clear search functionality" do
       select "Description", from: "field"
       fill_in "q", with: "Coffee"
-      find("input[name='q']").send_keys(:return)
+      click_button "Search"
 
       click_link "Clear search"
 
@@ -298,7 +246,7 @@ RSpec.describe "Entries Index - Search", type: :system do
 
       select "Description", from: "field"
       fill_in "q", with: "Coffee"
-      find("input[name='q']").send_keys(:return)
+      click_button "Search"
 
       expect(page).to have_content("Coffee and pastries")
       expect(page).not_to have_content("Web development project") # Income entry excluded
@@ -309,7 +257,7 @@ RSpec.describe "Entries Index - Search", type: :system do
 
       select "Description", from: "field"
       fill_in "q", with: "Coffee"
-      find("input[name='q']").send_keys(:return)
+      click_button "Search"
 
       click_link "Clear search"
 
@@ -329,11 +277,12 @@ RSpec.describe "Entries Index - Search", type: :system do
     it "paginates search results correctly" do
       select "Description", from: "field"
       fill_in "q", with: "Coffee"
-      find("input[name='q']").send_keys(:return)
+      click_button "Search"
 
       expect(page).to have_content("Showing 1 to 20 of 26 entries") # 25 + 1 from before block
 
-      click_link "Next"
+      # Mobile and desktop each render a "Next", and CSS is what hides one of them.
+      within("nav[aria-label='Pagination']") { click_link "Next" }
       expect(page).to have_content("Showing 21 to 26 of 26 entries")
     end
   end

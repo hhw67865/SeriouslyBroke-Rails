@@ -1,0 +1,59 @@
+<%# FREE BELOW ZERO — the signal. Local: `presenter`. No fix button: nothing is money sitting
+    anywhere, so there is nothing to move it from — the door is the Budget page. %>
+<div class="px-6 py-3 border-b border-gray-100 last:border-b-0" data-shortfall>
+  <div class="flex justify-between items-baseline gap-4">
+    <%# With nothing claimed at all the shortfall is a plain overspend, and "your budget and savings
+        claim more" would be false — Σ claims is zero. %>
+    <span class="font-medium text-gray-900" data-shortfall-headline>
+      <% if presenter.anything_claimed? %>
+        Your budget and savings claim <%= number_to_currency(presenter.shortfall) %> more than checking holds
+      <% else %>
+        You have spent past what you had
+      <% end %>
+    </span>
+    <span class="text-sm font-medium text-status-danger tabular-nums" data-shortfall-amount>
+      short <%= number_to_currency(presenter.shortfall) %>
+    </span>
+  </div>
+
+  <%# Not an explanation of the shortfall — it was never money in checking — but the thing that can
+      close it without spending less. No account is named, because the total spans all of them. %>
+  <% if presenter.money_parked_elsewhere? %>
+    <p class="mt-1 text-sm text-gray-700" data-shortfall-elsewhere>
+      <%= number_to_currency(presenter.other_accounts_total) %> of your money is sitting outside
+      checking — move some in from your other accounts.
+    </p>
+  <% end %>
+
+  <%# The figure is what this claim is short by after everything below it in the order has already
+      given way, which is why the last row is usually partial and says so. %>
+  <% if presenter.uncovered_claims.any? %>
+    <ul class="mt-2 space-y-1" data-uncovered>
+      <% presenter.uncovered_claims.each do |uncovered| %>
+        <li class="flex justify-between items-baseline gap-4 text-sm text-gray-600"
+            data-uncovered-claim="<%= uncovered.name %>">
+          <span><%= uncovered.name %> · <%= uncovered.kind == :savings ? "savings" : rule_label(uncovered.claim_row.source) %></span>
+          <span class="tabular-nums">
+            <% if uncovered.whole? %>
+              nothing covers its <%= number_to_currency(uncovered.claim) %>
+            <% else %>
+              short <%= number_to_currency(uncovered.amount) %> of <%= number_to_currency(uncovered.claim) %>
+            <% end %>
+          </span>
+        </li>
+      <% end %>
+    </ul>
+
+    <%# The walk stops when it runs out of claims, so the list plus this line is the headline. %>
+    <% if presenter.uncovered_remainder.positive? %>
+      <p class="mt-1 text-sm text-gray-600" data-uncovered-remainder>
+        …and <%= number_to_currency(presenter.uncovered_remainder) %> past everything that is claimed.
+      </p>
+    <% end %>
+  <% end %>
+
+  <p class="mt-2 text-sm text-gray-600">
+    <%= link_to "Change a rule on the Budget page", budget_page_path, class: "text-status-info hover:underline" %>
+    if this period's plan is the thing that has to give.
+  </p>
+</div>

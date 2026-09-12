@@ -1,0 +1,100 @@
+<%# Local: `presenter` (CategoryBudgetPresenter). Two arms — the category's rules claim its money,
+    or nothing claims it — and the stamp below is read off the same predicate the branch is. %>
+<% ruled = presenter.ruled? %>
+<div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 p-6"
+     data-holdings-card
+     data-holdings-state="<%= ruled ? "ruled" : "unruled" %>">
+  <% if ruled %>
+    <h2 class="text-xl font-semibold mb-4">
+      <%= presenter.fund? ? "Target" : "Rules" %>
+    </h2>
+
+    <p class="text-sm text-gray-500 mb-4">
+      <% if presenter.fund? %>
+        This category is saving toward a figure by a day rather than resetting each period. Nothing
+        was moved here — what it has is what its rules have built up, less what has been spent here.
+      <% else %>
+        Nothing was moved here. What this category claims is worked out from its rules on the Budget
+        page, the calendar, and what has been spent here.
+      <% end %>
+    </p>
+
+    <dl class="divide-y divide-gray-200 mb-4">
+      <%# `Claimed` is the noun the Budget page's group header prints over the same sum. %>
+      <div class="py-3 flex justify-between gap-4">
+        <dt class="text-sm font-medium text-gray-500">Claimed</dt>
+        <dd class="text-sm text-gray-900 font-medium" data-figure="claim">
+          <%= number_to_currency(presenter.claim) %>
+        </dd>
+      </div>
+    </dl>
+
+    <%# The track needs the goal to be the category's only rule: `Claimed` is Σ every rule's claim
+        and the target is a ceiling on the goal's built-up alone. %>
+    <% if presenter.bar? %>
+      <% progress = presenter.progress_percentage %>
+      <div class="mb-4" data-holdings-progress>
+        <div class="h-2.5 bg-gray-200 rounded-full overflow-hidden">
+          <div class="h-2.5 rounded-full <%= progress >= 100 ? "bg-status-success" : "bg-brand" %>"
+               style="width: <%= progress %>%;"></div>
+        </div>
+        <div class="flex justify-between text-xs text-gray-500 mt-1">
+          <span><%= progress %>% complete</span>
+          <span>Target: <%= number_to_currency(presenter.target) %></span>
+        </div>
+      </div>
+    <% end %>
+
+    <div class="mb-4" data-holdings-rules>
+      <h3 class="text-sm font-medium text-gray-500 mb-2">
+        <%= pluralize(presenter.rules.size, "rule") %>
+      </h3>
+      <ul class="divide-y divide-gray-100">
+        <% presenter.lines.each do |line| %>
+          <% label = line.rule.item&.name || line.rule.category.name %>
+          <li class="py-2 text-sm" data-holdings-rule="<%= label %>">
+            <%# Stacks below `sm`: a name, a figure and a schedule are three things, and at 375px
+                the figure wrapped into the name's column. %>
+            <div class="flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-1 sm:gap-4">
+              <span class="text-gray-700 truncate"><%= label %></span>
+              <span class="tabular-nums shrink-0 <%= line.over? ? "text-status-danger font-medium" : "text-gray-900 font-medium" %>"
+                    data-rule-figure>
+                <%= figure_words(line) %>
+              </span>
+            </div>
+
+            <%# What is WRONG takes the line in red; the schedule otherwise. A rate rule in good
+                standing has neither and renders no element at all. %>
+            <% if line.trouble? %>
+              <p class="mt-1 text-status-danger font-medium" data-rule-trouble>
+                <%= claim_trouble_label(line) %>
+              </p>
+            <% elsif schedule = when_words(line) %>
+              <p class="mt-1 text-gray-500" data-rule-schedule><%= schedule %></p>
+            <% end %>
+          </li>
+        <% end %>
+      </ul>
+    </div>
+
+    <%= link_to budget_page_path, class: "w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 shadow-sm transition", data: { budget_link: true } do %>
+      <%= heroicon "adjustments-horizontal", options: { class: "h-4 w-4" } %>
+      <span>Rules on the Budget page</span>
+    <% end %>
+  <% else %>
+    <h2 class="text-xl font-semibold mb-4">Unbudgeted</h2>
+
+    <p class="text-sm font-medium text-gray-900 mb-1" data-figure="headline">
+      Nothing claims this category's money.
+    </p>
+    <p class="text-sm text-gray-500 mb-4">
+      Its spending comes straight out of what's free to spend. No rule reserves anything here, so
+      nothing can run out — and nothing tells you when it has cost more than you meant it to.
+    </p>
+
+    <%= link_to budget_page_path, class: "inline-flex items-center gap-2 text-sm font-medium text-brand hover:text-brand-dark" do %>
+      <span>Give it a rule on the Budget page</span>
+      <%= heroicon "arrow-right", options: { class: "h-4 w-4" } %>
+    <% end %>
+  <% end %>
+</div>

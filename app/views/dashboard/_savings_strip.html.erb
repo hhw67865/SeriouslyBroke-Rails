@@ -1,0 +1,80 @@
+<%# The savings strip: one card per rule saving toward a day. The figure is a claim rather than a
+    balance, so nothing here states a date or promises a month's closing figure. %>
+<% funds = @presenter.savings_summary %>
+<% if funds.any? %>
+  <div class="mb-8" data-savings-strip>
+    <div class="mb-4">
+      <h3 class="text-lg font-medium text-gray-900">Savings</h3>
+      <p class="text-sm text-gray-500">
+        Claimed: <span class="font-semibold text-brand-dark"><%= number_to_currency(@presenter.total_savings_balance) %></span>
+      </p>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <% funds.each do |fund| %>
+        <% target = @presenter.savings_target(fund) %>
+        <% progress = @presenter.savings_progress(fund) %>
+
+        <%# The paid arm comes first: a goal that has been spent has a built-up of $0.00, which
+            every figure-reading arm below would call "barely started". %>
+        <% if fund.paid? %>
+          <% card_class = "border border-gray-100 bg-gray-50" %>
+          <% badge_class = "text-brand-dark bg-brand/20" %>
+          <% badge_text = "achieved" %>
+        <% elsif target.nil? %>
+          <% card_class = "border border-gray-100 bg-gray-50" %>
+          <% badge_class = "text-gray-500 bg-gray-200" %>
+          <% badge_text = "on the way" %>
+        <% elsif progress < 10 && target.positive? %>
+          <% card_class = "border-2 border-status-warning/40 bg-status-warning-light" %>
+          <% bar_class = "bg-status-warning" %>
+          <% badge_class = "text-status-warning bg-status-warning/20" %>
+          <% badge_text = "low" %>
+        <% elsif progress >= 100 %>
+          <% card_class = "border border-gray-100 bg-gray-50" %>
+          <% bar_class = "bg-brand" %>
+          <% badge_class = "text-brand-dark bg-brand/20" %>
+          <% badge_text = "ready" %>
+        <% elsif progress >= 50 %>
+          <% card_class = "border border-gray-100 bg-gray-50" %>
+          <% bar_class = "bg-brand" %>
+          <% badge_class = "text-brand-dark bg-brand/20" %>
+          <% badge_text = "#{progress}%" %>
+        <% else %>
+          <% card_class = "border border-gray-100 bg-gray-50" %>
+          <% bar_class = "bg-brand" %>
+          <% badge_class = "text-gray-500 bg-gray-200" %>
+          <% badge_text = "#{progress}%" %>
+        <% end %>
+
+        <%= link_to category_path(fund.category),
+            class: "block rounded p-4 hover:opacity-90 transition #{card_class}" do %>
+          <div class="flex items-center justify-between mb-2">
+            <p class="text-sm font-medium text-gray-900 truncate"><%= fund.category.name %></p>
+            <span class="text-xs font-medium px-2 py-0.5 rounded shrink-0 <%= badge_class %>"><%= badge_text %></span>
+          </div>
+          <%# No track without a denominator: a fund sharing its category with another rule has no
+              target, and a paid one has nothing left to be a fraction of. %>
+          <% if target.present? && !fund.paid? %>
+            <div class="w-full bg-gray-200 rounded-full h-3 mb-2">
+              <div class="h-3 rounded-full <%= bar_class %>" style="width: <%= progress.clamp(0, 100) %>%"></div>
+            </div>
+          <% end %>
+          <%# A paid goal prints what it was for and the day it was met, not what is left of it. %>
+          <div class="flex items-center justify-between text-xs text-gray-500">
+            <% if fund.paid? %>
+              <span class="font-medium"><%= number_to_currency(fund.target) %></span>
+              <span>reached<%= " #{l(fund.paid_on, format: :short)}" if fund.paid_on %></span>
+            <% else %>
+              <span class="font-medium"><%= number_to_currency(fund.built_up) %></span>
+              <% if target.present? %>
+                <span>of <%= number_to_currency(target) %></span>
+              <% else %>
+                <span>built up</span>
+              <% end %>
+            <% end %>
+          </div>
+        <% end %>
+      <% end %>
+    </div>
+  </div>
+<% end %>

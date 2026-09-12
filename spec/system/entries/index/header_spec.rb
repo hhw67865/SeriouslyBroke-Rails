@@ -21,8 +21,11 @@ RSpec.describe "Entries Index - Header", type: :system do
       visit entries_path(type: "income")
       expect(page).to have_content("Monitor your income sources and earnings")
 
+      # `SearchHelper#entry_type_config` has no savings key, so a stale link falls back to the
+      # "all" header rather than announcing a kind of entry that does not exist.
       visit entries_path(type: "savings")
-      expect(page).to have_content("Record your savings deposits and contributions")
+      expect(page).to have_content("All Entries")
+      expect(page).to have_no_content("Record your savings deposits and contributions")
     end
 
     it "shows create button" do

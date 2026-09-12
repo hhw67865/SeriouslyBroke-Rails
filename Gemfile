@@ -18,7 +18,7 @@ gem "tailwindcss-rails"
 gem "turbo-rails"
 
 # Authentication and Authorization
-gem "devise", "~> 4.9"
+gem "devise", "~> 5.0"
 
 # Pagination
 gem "kaminari", "~> 1.2"
@@ -37,6 +37,7 @@ group :development, :test do
 
   # Development Tools
   gem "byebug"
+  gem "parallel_tests"
   gem "pry-rails", "~> 0.3.11"
 end
 
@@ -61,7 +62,6 @@ group :test do
   gem "selenium-webdriver"
 
   # Testing Support
-  gem "database_cleaner-active_record", "~> 2.2"
   gem "shoulda-matchers", "~> 6.4"
 end
 

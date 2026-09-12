@@ -19,13 +19,17 @@ RSpec.describe "Entries Index - Table", type: :system do
       visit entries_path
     end
 
+    # The markup's own words: the capitals a browser shows are a CSS transform, which the driver
+    # this example runs under does not apply.
     it "shows all required table headers" do
-      expect(page).to have_content("TYPE")
-      expect(page).to have_content("DATE")
-      expect(page).to have_content("ITEM & DESCRIPTION")
-      expect(page).to have_content("CATEGORY")
-      expect(page).to have_content("AMOUNT")
-      expect(page).to have_content("ACTIONS")
+      within("thead") do
+        expect(page).to have_content("Type")
+        expect(page).to have_content("Date")
+        expect(page).to have_content("Item & Description")
+        expect(page).to have_content("Category")
+        expect(page).to have_content("Amount")
+        expect(page).to have_content("Actions")
+      end
     end
 
     it "displays entry information correctly" do
@@ -143,7 +147,7 @@ RSpec.describe "Entries Index - Table", type: :system do
         end
       end
 
-      it "deletes entry when confirmed", skip: "Flaky due to Selenium/Chrome alert timing - delete functionality verified in other tests" do
+      it "deletes entry when confirmed", :js do
         expect(Entry.exists?(entry.id)).to be(true)
 
         accept_confirm do

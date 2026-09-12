@@ -9,6 +9,9 @@ RSpec.describe "Entries Index - Pagination", type: :system do
 
   before { sign_in user, scope: :user }
 
+  # Mobile and desktop each render a "Next", and CSS is what hides one of them.
+  def click_page(label) = within("nav[aria-label='Pagination']") { click_link(label) }
+
   describe "pagination display", :aggregate_failures do
     context "with fewer entries than per_page limit" do
       before do
@@ -38,7 +41,7 @@ RSpec.describe "Entries Index - Pagination", type: :system do
       end
 
       it "navigates to next page correctly" do
-        click_link "Next"
+        click_page "Next"
 
         expect(page).to have_content("Showing 21 to 25 of 25 entries")
         expect(page).to have_link("Previous")
@@ -46,8 +49,8 @@ RSpec.describe "Entries Index - Pagination", type: :system do
       end
 
       it "navigates back to previous page correctly" do
-        click_link "Next"
-        click_link "Previous"
+        click_page "Next"
+        click_page "Previous"
 
         expect(page).to have_content("Showing 1 to 20 of 25 entries")
         expect(page).to have_link("Next")
@@ -92,16 +95,19 @@ RSpec.describe "Entries Index - Pagination", type: :system do
     end
   end
 
-  describe "mobile pagination", :aggregate_failures do
+  # A true 375px layout viewport, and CDP is the only way to get one: Chrome refuses to make a
+  # headless window narrower than 500px, so `resize_to(375, 667)` reports 500.
+  describe "mobile pagination", :aggregate_failures, :js do
     before do
       create_list(:entry, 25, item: item)
+      page.driver.browser.execute_cdp(
+        "Emulation.setDeviceMetricsOverride", width: 375, height: 667, deviceScaleFactor: 1, mobile: false
+      )
       visit entries_path
-      page.driver.browser.manage.window.resize_to(375, 667) # Mobile size
     end
 
-    after do
-      page.driver.browser.manage.window.maximize
-    end
+    # The override outlives this example: one browser serves the whole process.
+    after { page.driver.browser.execute_cdp("Emulation.clearDeviceMetricsOverride") }
 
     it "shows simplified pagination for mobile" do
       # Mobile should show simplified format
@@ -144,7 +150,7 @@ RSpec.describe "Entries Index - Pagination", type: :system do
     it "maintains search when navigating pages" do
       select "Description", from: "field"
       fill_in "q", with: "Coffee"
-      find("input[name='q']").send_keys(:return)
+      click_button "Search"
 
       expect(page).to have_content("15 entries total")
       # All entries should contain "Coffee" in description

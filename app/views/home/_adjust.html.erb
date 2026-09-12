@@ -1,0 +1,87 @@
+<%# One rule's period, changed. Local: `line` (ClaimLine). The direction rides on the button that
+    was pressed; a refusal re-renders Home itself, so there is no `open` to carry. %>
+<details class="mt-2" data-adjust="<%= rule_name(line.rule) %>">
+  <summary class="<%= rule_action_classes("cursor-pointer text-sm sm:text-left") %>">Adjust what's owed now</summary>
+
+  <div class="mt-2 max-w-xl rounded border border-gray-200 bg-gray-50 px-3 py-3 space-y-3">
+    <%# The planned figure, always said before it is changed — and it is also exactly what Skip
+        takes back, so the button below can name its own amount. %>
+    <p class="text-xs text-gray-600" data-adjust-planned>
+      <%= number_to_currency(line.per_period) %>
+      <%= line.rate? ? "planned this period" : "going in this period" %>
+    </p>
+
+    <%= form_with url: adjustments_path, method: :post, class: "space-y-2" do %>
+      <%= hidden_field_tag :source_type, "Rule" %>
+      <%= hidden_field_tag :source_id, line.rule.id %>
+
+      <div class="flex flex-wrap items-end gap-2">
+        <%# Ids are keyed on the rule, because this partial renders once per row and a repeated `id`
+            makes every label on the page point at the first row's input. %>
+        <div>
+          <%= label_tag "adjust-amount-#{line.rule.id}", "How much", class: "block text-xs text-gray-600 mb-1" %>
+          <%= number_field_tag :amount,
+                               nil,
+                               id: "adjust-amount-#{line.rule.id}",
+                               step: 0.01,
+                               min: 0.01,
+                               required: true,
+                               placeholder: "0.00",
+                               class: "form-input w-28" %>
+        </div>
+
+        <%# Left blank on purpose: "today" has one spelling, the controller's. `min`/`max` are the
+            row's own countable span, so the field cannot offer a day the door then rejects. %>
+        <div>
+          <%= label_tag "adjust-date-#{line.rule.id}", "On", class: "block text-xs text-gray-600 mb-1" %>
+          <%= date_field_tag :date,
+                             nil,
+                             id: "adjust-date-#{line.rule.id}",
+                             min: line.countable_span.first,
+                             max: line.countable_span.last,
+                             class: "form-input" %>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap gap-2">
+        <%# On `allowance?` and not `rate?`: a fund arrives and is spent every period, so its
+            deltas are a period topped up or reduced even though it walks like a dated rule. %>
+        <%= button_tag line.allowance? ? "Top up this period" : "Set aside",
+                       type: :submit,
+                       name: "amount_sign",
+                       value: "1",
+                       class: "btn btn-primary flex-1 sm:flex-none" %>
+        <%= button_tag line.allowance? ? "Reduce this period" : "Take back",
+                       type: :submit,
+                       name: "amount_sign",
+                       value: "-1",
+                       class: "btn btn-secondary flex-1 sm:flex-none" %>
+      </div>
+
+      <%# Where this rule counts, in its own shape's words — the same two clauses AdjustmentForm
+          refuses in, said before the refusal rather than after it. %>
+      <p class="text-xs text-gray-500" data-adjust-hint>
+        Today unless you pick a day.
+        <% if line.rate? %>
+          This period only, up to today.
+        <% else %>
+          Counts from <%= line.countable_span.first.strftime("%b %-d") %> to today.
+        <% end %>
+      </p>
+    <% end %>
+
+    <% if line.skippable? %>
+      <%= form_with url: adjustments_path, method: :post do %>
+        <%= hidden_field_tag :source_type, "Rule" %>
+        <%= hidden_field_tag :source_id, line.rule.id %>
+        <%= hidden_field_tag :skip, "1" %>
+        <%# It names what it will write, which is −accrued and not −planned: a period already
+            topped up by $50 has $200 to take back. %>
+        <%= button_tag "Skip this period (−#{number_to_currency(line.accrued)})",
+                       type: :submit,
+                       class: "btn btn-secondary w-full sm:w-auto",
+                       data: { adjust_skip: true } %>
+      <% end %>
+    <% end %>
+  </div>
+</details>

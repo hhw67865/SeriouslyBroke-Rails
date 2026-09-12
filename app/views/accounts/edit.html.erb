@@ -1,0 +1,86 @@
+<%# RENAMING AN ACCOUNT AND CORRECTING WHAT IT HOLDS — the two things about an account that are the
+    user's to say. Everything else is the flow of entries and transfers through it. %>
+<% content_for :title, "Edit #{@account.name}" %>
+
+<%= page_header(
+    title: "Edit #{@account.name}",
+    subtitle: @account.main? ? "Spending account" : "Savings account",
+    breadcrumbs: [
+      { label: "Home", url: root_path },
+      { label: "Savings", url: savings_path },
+      { label: @account.name }
+    ]
+) %>
+
+<div class="container mx-auto px-4 py-6 max-w-2xl">
+  <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100">
+    <div class="p-6">
+      <%= simple_form_for @account, url: account_path(@account) do |f| %>
+        <%# The balance correction writes `opening_balance`, so its refusal arrives on that
+            attribute rather than on the field the user typed into. %>
+        <%= f.error_notification %>
+        <%= f.error_notification message: f.object.errors[:opening_balance].to_sentence if f.object.errors[:opening_balance].present? %>
+        <%= f.error_notification message: f.object.errors[:base].to_sentence if f.object.errors[:base].present? %>
+        <% target_errors = f.object.savings_targets.flat_map { |t| t.errors.full_messages } %>
+        <%= f.error_notification message: target_errors.to_sentence if target_errors.any? %>
+
+        <%= f.input :name,
+            label: "Account name",
+            hint: "What your bank calls it." %>
+
+        <%# It opens on today's balance, because that is the figure the user is being asked to
+            confirm or correct. %>
+        <%= f.input :balance,
+            as: :decimal,
+            label: "Balance today",
+            required: false,
+            input_html: { step: 0.01, value: number_with_precision(@account.balance, precision: 2) },
+            hint: "Correcting the balance moves the opening balance; nothing else changes." %>
+
+        <% unless @account.main? %>
+          <% rows = @account.savings_targets.any? ? @account.savings_targets : [@account.savings_targets.build] %>
+          <fieldset class="mt-6 space-y-3"
+                    data-controller="app--account--targets"
+                    data-app--account--targets-typical-value="<%= @typical_income.to_d %>"
+                    data-app--account--targets-index-value="<%= rows.size %>">
+            <legend class="text-sm font-semibold text-gray-900">What this account is owed</legend>
+            <p class="text-sm text-gray-600">A fixed amount a period, a share of an income item, or both. Each counts from its own start date.</p>
+
+            <template data-app--account--targets-target="template">
+              <%= f.simple_fields_for :savings_targets, SavingsTarget.new, child_index: "NEW_TARGET" do |t| %>
+                <%= render "accounts/target_fields", f: t, items: @income_items, typical_income: @typical_income %>
+              <% end %>
+            </template>
+
+            <div class="space-y-3" data-app--account--targets-target="rows">
+              <%= f.simple_fields_for :savings_targets, rows do |t| %>
+                <%= render "accounts/target_fields", f: t, items: @income_items, typical_income: @typical_income %>
+              <% end %>
+            </div>
+
+            <button type="button" class="btn btn-secondary" data-action="click->app--account--targets#add">Add another</button>
+
+            <div class="mt-4 space-y-2 border-t border-gray-200 pt-4">
+              <p class="form-label">When you transfer more than it is owed</p>
+              <label class="flex items-start gap-2.5">
+                <%= f.radio_button :keeps_extra, true, class: "form-radio mt-0.5" %>
+                <span><span class="block text-sm font-medium text-gray-900">Keep the extra</span>
+                  <span class="block text-xs text-gray-600">Extra counts against later periods. Transfer five periods' worth at once and nothing is owed for five periods.</span></span>
+              </label>
+              <label class="flex items-start gap-2.5">
+                <%= f.radio_button :keeps_extra, false, class: "form-radio mt-0.5" %>
+                <span><span class="block text-sm font-medium text-gray-900">Ask every period</span>
+                  <span class="block text-xs text-gray-600">Every period asks for its own amount. Extra is just extra. A shortfall still carries.</span></span>
+              </label>
+            </div>
+          </fieldset>
+        <% end %>
+
+        <div class="flex flex-col sm:flex-row sm:justify-end gap-3 mt-6">
+          <%= link_to "Cancel", savings_path, class: "btn btn-secondary" %>
+          <%= f.button :submit, "Save account" %>
+        </div>
+      <% end %>
+    </div>
+  </div>
+</div>

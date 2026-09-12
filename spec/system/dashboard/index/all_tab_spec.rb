@@ -2,6 +2,9 @@
 
 require "rails_helper"
 
+# The All tab: income, the two lanes it left through, and what is left over. Both directions are
+# kept throughout — the bar's segments are asserted present with their figures, and the retired
+# savings-entry vocabulary is asserted absent.
 RSpec.describe "Dashboard Index - All Tab", type: :system do
   let!(:user) { create(:user) }
   let(:base_date) { Date.current.beginning_of_month }
@@ -9,7 +12,7 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
   before { sign_in user, scope: :user }
 
   describe "default tab", :aggregate_failures do
-    before { visit root_path }
+    before { visit reports_path }
 
     it "defaults to All tab" do
       all_link = find("nav[aria-label='Tabs'] a", text: "All")
@@ -20,24 +23,29 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
   describe "with financial data", :aggregate_failures do
     before do
       seed_mixed_financial_data
-      visit root_path
+      visit reports_path
     end
 
     it "shows the Money Flow section with income earned" do
-      expect(page).to have_content("Income Allocation")
+      expect(page).to have_content("Money Flow")
       expect(page).to have_content("$3,000.00 earned")
     end
 
-    it "shows health indicators with Net Savings (not Savings Rate)" do
-      expect(page).to have_content("Net Savings")
-      expect(page).not_to have_content("Savings Rate")
+    it "shows the two health indicators and none of the retired ones" do
       expect(page).to have_content("Expense Ratio")
-      expect(page).to have_content("used")
+      expect(page).to have_content("Spent")
+      expect(page).to have_no_content("Net Savings")
+      expect(page).to have_no_content("Savings Rate")
+      expect(page).to have_no_content("% used")
     end
 
-    it "shows savings pools section with pool card" do
-      expect(page).to have_content("Savings Pools")
-      expect(page).to have_content("Emergency Fund")
+    # The band lists rules saving toward a day, and its heading is "Savings": "Savings Goals" named
+    # a kind of category, and the shape is what says a thing is being saved for now.
+    it "shows the savings strip with the fund's card", :aggregate_failures do
+      expect(page).to have_content("Savings")
+      expect(page).to have_no_content("Savings Goals")
+      expect(Rule.saving_toward_a_date.map { |rule| rule.category.name }).to include("Emergency Fund")
+      within("[data-savings-strip]") { expect(page).to have_content("Emergency Fund") }
     end
 
     it "shows top spending categories" do
@@ -46,92 +54,59 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
     end
   end
 
-  # Income $3,000, budgetable expense $400, pool-covered expense $200,
-  # savings contribution $500. Income Allocation segments: Budgeted $400,
-  # Savings Contrib $500, Remaining $2,100 (= $3,000 − $400 − $500).
-  describe "Income Allocation bar — number accuracy", :aggregate_failures do
+  # Income $3,000; $400 spent on a category no rule speaks for (Groceries), $200 on one a rule
+  # claims money for (Emergency Fund). Left over = $3,000 − $600 = $2,400.
+  describe "the money flow bar — number accuracy", :aggregate_failures do
     before do
       seed_mixed_financial_data
-      visit root_path
+      visit reports_path
     end
 
-    it "shows income earned and remaining headers" do
-      within income_allocation_section do
+    it "shows income earned and what is left over" do
+      within money_flow_section do
         expect(page).to have_content("$3,000.00 earned")
-        expect(page).to have_content("$2,100.00 remaining")
+        expect(page).to have_content("$2,400.00 left over")
       end
     end
 
-    it "shows three legend amounts: Budgeted, Savings Contrib, Remaining" do
-      within income_allocation_section do
-        expect(page).to have_content("Budgeted $400.00")
-        expect(page).to have_content("Savings Contrib $500.00")
-        expect(page).to have_content("Remaining $2,100.00")
+    # The casing is load-bearing: these two labels name the same two lanes the Expenses tab heads
+    # its sections with, and `have_content` is a case-sensitive substring match.
+    it "shows three legend amounts: Unruled, Ruled, left over" do
+      within money_flow_section do
+        expect(page).to have_content("Unruled $400.00")
+        expect(page).to have_content("Ruled $200.00")
+        expect(page).to have_content("Left over $2,400.00")
       end
     end
 
-    it "shows expense ratio against income (all expenses)" do
+    # The other direction: the savings-entry vocabulary is gone from the page rather than merely
+    # unreached by the fixture.
+    it "names no savings contribution, source or net anywhere on the tab" do
+      expect(page).to have_no_content("Savings Contrib")
+      expect(page).to have_no_content("Expense Sources")
+      expect(page).to have_no_content("came from savings")
+      expect(page).to have_no_content("From Savings")
+      expect(page).to have_no_content("From Income")
+    end
+
+    it "shows spent and the expense ratio against income (all expenses)" do
+      within_stat_card("Spent") { expect(page).to have_content("$600.00") }
       within_stat_card("Expense Ratio") { expect(page).to have_content("20.0%") }
     end
   end
 
-  describe "Expense Sources bar — number accuracy", :aggregate_failures do
+  describe "the money flow bar — no income", :aggregate_failures do
     before do
-      seed_mixed_financial_data
-      visit root_path
-    end
-
-    it "shows total spent and amount covered by savings" do
-      within expense_sources_section do
-        expect(page).to have_content("$600.00 spent")
-        expect(page).to have_content("$200.00 came from savings")
-      end
-    end
-
-    it "shows two legend amounts: From Income, From Savings" do
-      within expense_sources_section do
-        expect(page).to have_content("From Income $400.00")
-        expect(page).to have_content("From Savings $200.00")
-      end
-    end
-  end
-
-  describe "Expense Sources bar — visibility", :aggregate_failures do
-    before do
-      income_item = create(:item, category: create(:category, :income, user: user, name: "Salary"), name: "Paycheck")
       expense_cat = create(:category, :expense, user: user, name: "Groceries")
-      create(:entry, item: income_item, amount: 1000, date: base_date + 1.day)
       create(:entry, item: create(:item, category: expense_cat, name: "Food"), amount: 200, date: base_date + 2.days)
-      visit root_path
+      visit reports_path
     end
 
-    it "is hidden when there are no pool-covered expenses" do
-      expect(page).not_to have_content("Expense Sources")
-    end
-  end
-
-  describe "Net Savings stat card — number accuracy", :aggregate_failures do
-    before do
-      seed_mixed_financial_data
-      visit root_path
-    end
-
-    it "shows net savings as contributions minus withdrawals" do
-      within_stat_card("Net Savings") { expect(page).to have_content("$300.00") }
-    end
-  end
-
-  describe "Net Savings stat card — negative delta", :aggregate_failures do
-    let!(:pool) { create(:savings_pool, user: user, name: "Buffer", target_amount: 1000, start_date: 1.year.ago) }
-    let!(:savings_item) { create(:item, category: create(:category, :savings, user: user, name: "Buffer In", savings_pool: pool), name: "Deposit") }
-    let!(:withdrawal_item) { create(:item, category: create(:category, :expense, user: user, name: "Buffer Out", savings_pool: pool), name: "Spend") }
-
-    it "renders a negative net change when withdrawals exceed contributions" do
-      create(:entry, item: savings_item, amount: 100.00, date: base_date + 1.day)
-      create(:entry, item: withdrawal_item, amount: 300.00, date: base_date + 2.days)
-      visit root_path
-
-      within_stat_card("Net Savings") { expect(page).to have_content("-$200.00") }
+    it "says so, and prints what was spent instead" do
+      within money_flow_section do
+        expect(page).to have_content("No income recorded this month")
+        expect(page).to have_content("Spent: $200.00")
+      end
     end
   end
 
@@ -144,7 +119,7 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
       create(:entry, item: create(:item, category: small_cat, name: "Latte"), amount: 50, date: base_date + 1.day)
       create(:entry, item: create(:item, category: large_cat, name: "Monthly"), amount: 2000, date: base_date + 1.day)
       create(:entry, item: create(:item, category: medium_cat, name: "Food"), amount: 400, date: base_date + 1.day)
-      visit root_path
+      visit reports_path
     end
 
     it "orders top spending by amount descending" do
@@ -157,15 +132,31 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
 
   private
 
+  # The two lanes are `Category#ruled?`'s: nothing claims Groceries' spending, while Emergency Fund
+  # is a goal — an item-less rule with a date on it — so its $200 comes out of what that rule
+  # claims. The goal's own date is far out so no figure on this tab moves with the day the suite
+  # runs; it is here to make the "no savings vocabulary" negative a real claim and to put a card on
+  # the strip.
   def seed_mixed_financial_data
-    pool = create(:savings_pool, user: user, name: "Emergency Fund", target_amount: 5000, start_date: 1.year.ago)
+    goal = create(:category, :expense, user: user, name: "Emergency Fund")
+    saving_toward_a_date(goal, 5_000)
     expense_cat = create(:category, :expense, user: user, name: "Groceries")
-    create(:budget, category: expense_cat, amount: 500)
 
     create_entry_for(create(:category, :income, user: user, name: "Salary"), "Paycheck", 3000.00, 1)
     create_entry_for(expense_cat, "Weekly Shopping", 400.00, 2)
-    create_entry_for(create(:category, :expense, user: user, name: "Car Repair", savings_pool: pool), "Mechanic", 200.00, 3)
-    create_entry_for(create(:category, :savings, user: user, name: "Emergency Savings", savings_pool: pool), "Transfer", 500.00, 4)
+    create_entry_for(goal, "Mechanic", 200.00, 3)
+  end
+
+  def saving_toward_a_date(category, target)
+    create(
+      :rule,
+      category: category,
+      item: nil,
+      amount: target,
+      starts_on: base_date,
+      anchor_date: Date.current + 10.years,
+      interval_months: nil
+    )
   end
 
   def create_entry_for(category, item_name, amount, day_offset)
@@ -173,12 +164,8 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
     create(:entry, item: item, amount: amount, date: base_date + day_offset.days)
   end
 
-  def income_allocation_section
-    find("h4", text: "Income Allocation").ancestor("div.bg-gray-50")
-  end
-
-  def expense_sources_section
-    find("h4", text: "Expense Sources").ancestor("div.bg-gray-50")
+  def money_flow_section
+    find("h4", text: "Where your income went").ancestor("div.bg-gray-50")
   end
 
   def top_spending_section
@@ -186,7 +173,7 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
   end
 
   def within_stat_card(label, &)
-    card = find("p", text: label).ancestor("div.bg-gray-50")
+    card = find("div.bg-gray-50 p.text-sm", text: label, exact_text: true).ancestor("div.bg-gray-50")
     within(card, &)
   end
 end

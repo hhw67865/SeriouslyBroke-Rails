@@ -19,7 +19,9 @@ RSpec.describe "Authentication", type: :system do
       let(:valid_email) { "test@example.com" }
       let(:valid_password) { "password123" }
 
-      it "allows form submission with valid email" do
+      # `:js`: `:invalid` is the browser's own validity state, which no static parse of the page
+      # can answer.
+      it "allows form submission with valid email", :js do
         fill_sign_up_form
         expect(page).not_to have_css("input:invalid")
       end
@@ -32,7 +34,8 @@ RSpec.describe "Authentication", type: :system do
         expect(page).to have_current_path(authenticated_root_path)
       end
 
-      it "auto-detects the new user's timezone from the browser", :aggregate_failures do
+      # `:js`: the field is filled by the form's own script from the browser's clock.
+      it "auto-detects the new user's timezone from the browser", :aggregate_failures, :js do
         fill_sign_up_form
         within("form") { click_button "Sign up" }
 
@@ -52,11 +55,23 @@ RSpec.describe "Authentication", type: :system do
     end
 
     context "with invalid information" do
-      it "prevents submission with invalid email format" do
+      # `:js`: constraint validation is the browser's own, and it is what stops this form.
+      # The validity is read off the element after its value has landed, rather than racing
+      # Chrome's live `:invalid` pseudo-class through a CSS query.
+      it "prevents submission with invalid email format", :aggregate_failures, :js do
         fill_in "Email", with: "invalid-email"
         fill_in "Password", with: "password123"
         fill_in "Password confirmation", with: "password123"
-        expect(page).to have_css("input[type=email]:invalid")
+
+        expect(page).to have_field("Email", with: "invalid-email")
+        expect(find_field("Email").evaluate_script("this.checkValidity()")).to be(false)
+
+        within("form") { click_button "Sign up" }
+
+        # Blocked before the request: still on the form, and nothing was written.
+        expect(page).to have_current_path(new_user_registration_path)
+        expect(page).to have_field("Email", with: "invalid-email")
+        expect(User.count).to eq(0)
       end
 
       it "shows error for short password" do
@@ -175,17 +190,17 @@ RSpec.describe "Authentication", type: :system do
     context "with invalid credentials" do
       it "shows error for wrong password" do
         attempt_sign_in(user.email, "wrongpassword")
-        expect(page).to have_content("Invalid Email or password")
+        expect(page).to have_content("Invalid email or password")
       end
 
       it "shows error for non-existent email" do
         attempt_sign_in("nonexistent@example.com", "password123")
-        expect(page).to have_content("Invalid Email or password")
+        expect(page).to have_content("Invalid email or password")
       end
 
       it "shows error for empty credentials" do
         within("form") { click_button "Sign in" }
-        expect(page).to have_content("Invalid Email or password")
+        expect(page).to have_content("Invalid email or password")
       end
 
       private

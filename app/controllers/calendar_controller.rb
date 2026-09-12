@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
 class CalendarController < ApplicationController
-  include DateContext
-
   def index
     @presenter = MonthlyCalendarPresenter.new(
       user: current_user,
@@ -16,12 +14,12 @@ class CalendarController < ApplicationController
       date: parse_date_param
     )
   rescue ArgumentError
-    @presenter = WeeklyCalendarPresenter.new(user: current_user, date: Date.current)
+    @presenter = WeeklyCalendarPresenter.new(user: current_user, date: current_user.today)
   end
 
   private
 
   def parse_date_param
-    params[:date].present? ? Date.parse(params[:date]) : Date.current
+    params[:date].present? ? Date.parse(params[:date]) : current_user.today
   end
 end

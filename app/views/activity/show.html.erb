@@ -1,0 +1,30 @@
+<% content_for :title, "Activity" %>
+
+<%= page_header(title: "Activity", subtitle: "Everything that happened, newest first.") %>
+
+<div class="bg-white rounded shadow-sm border border-gray-200" data-activity>
+  <% if @presenter.rows.any? %>
+    <div class="md:hidden divide-y divide-gray-200">
+      <%= render partial: "activity/row", collection: @presenter.rows, as: :row, locals: { card: true } %>
+    </div>
+    <div class="hidden md:block overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">What</th>
+            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          <%= render partial: "activity/row", collection: @presenter.rows, as: :row, locals: { card: false } %>
+        </tbody>
+      </table>
+    </div>
+    <div class="px-6 py-3 border-t border-gray-200"><%= paginate @presenter.rows %></div>
+  <% else %>
+    <p class="px-6 py-8 text-sm text-gray-500" data-activity-empty>Nothing has happened yet. Log an entry and it shows up here.</p>
+  <% end %>
+</div>

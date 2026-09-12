@@ -168,3 +168,20 @@
   30% { opacity: 0.9; }
   100% { opacity: 0; transform: translate(14px, -34px) scale(1.1); }
 }
+
+/* The rule form's preview card flashes a brief ring after each refresh, so a changed figure is noticed;
+   rule_form_controller.js adds the class on turbo:frame-load and removes it after 600ms. */
+.preview-refreshed {
+  animation: preview-refreshed 600ms ease-out;
+}
+
+@keyframes preview-refreshed {
+  0% { box-shadow: 0 0 0 3px rgba(143, 140, 90, 0.6); }
+  100% { box-shadow: 0 0 0 3px rgba(143, 140, 90, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preview-refreshed {
+    animation: none;
+  }
+}

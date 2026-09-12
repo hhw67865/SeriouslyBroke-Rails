@@ -1,0 +1,47 @@
+<%# The one question a cadence change asks. Locals: `change`, `regular_ids`. Only per-period rules
+    are listed; a six-monthly bill means the same on any grid. Nothing is saved until a button. %>
+<section class="bg-white border border-status-info rounded" data-cadence-confirm>
+  <div class="px-6 py-4 border-b border-gray-200 bg-status-info-light">
+    <h2 class="text-sm font-semibold text-status-info">
+      Before this saves: your period is changing to <%= change.cadence.humanize.downcase %>
+    </h2>
+    <p class="mt-1 text-sm text-gray-700">
+      A year holds <%= change.periods_per_year %> of those instead of <%= change.periods_per_year_before %>,
+      so <%= pluralize(change.lines.size, "rule") %> stated per period would mean something different
+      without moving a digit. Scale them to keep what they cost you a year, or keep the numbers you
+      typed. Nothing has been saved yet.
+    </p>
+  </div>
+
+  <ul>
+    <% change.lines.each do |line| %>
+      <li class="px-6 py-3 border-b border-gray-100 flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-1 sm:gap-4"
+          data-cadence-line="<%= rule_name(line.rule) %>">
+        <span class="font-medium text-gray-900"><%= rule_name(line.rule) %></span>
+        <span class="text-sm text-gray-700 flex items-baseline gap-2 shrink-0">
+          <span data-cadence-now><%= number_to_currency(line.amount) %></span>
+          <span class="text-gray-500" aria-hidden="true">→</span>
+          <span class="font-medium text-gray-900" data-cadence-scaled>
+            <%= number_to_currency(line.scaled_amount) %>
+          </span>
+          <span class="text-gray-500">a period</span>
+        </span>
+      </li>
+    <% end %>
+  </ul>
+
+  <%= form_with url: budget_income_path, method: :patch, class: "px-6 py-4 flex flex-wrap gap-2" do %>
+    <%# The pending value takes its own id: the derived one is the select's in the declaration
+        fieldset, and two elements sharing an id make `find_field` a coin toss. %>
+    <% change.declaration.each do |field, value| %>
+      <%= hidden_field_tag "user[#{field}]", value, id: "pending_#{field}" %>
+    <% end %>
+
+    <% Array(regular_ids).each do |id| %>
+      <%= hidden_field_tag "regular_category_ids[]", id %>
+    <% end %>
+
+    <%= button_tag "Scale them", type: :submit, name: "scale", value: "1", class: "btn btn-primary" %>
+    <%= button_tag "Keep amounts", type: :submit, name: "scale", value: "0", class: "btn btn-secondary" %>
+  <% end %>
+</section>

@@ -6,10 +6,12 @@ export default class extends Controller {
     "categoryTypeOption", 
     "categoryTypeIcon", 
     "categoryTypeText", 
-    "colorOption", 
+    "colorOption",
     "colorInput",
     "selectedColorPreview",
-    "selectedColorCode"
+    "selectedColorCode",
+    "expenseOnly",
+    "incomeOnly"
   ]
 
   connect() {
@@ -32,6 +34,8 @@ export default class extends Controller {
     }
 
     if (!selectedValue) return
+
+    this.toggleTypeOnlySections(selectedValue)
 
     // Reset all options to default state
     this.categoryTypeOptionTargets.forEach(option => {
@@ -67,6 +71,20 @@ export default class extends Controller {
         text.classList.add('text-gray-900')
       }
     }
+  }
+
+  // Sections that ask a question only one type can answer. Both render, because the type is
+  // switched here rather than by a round trip; the server hides the wrong one on first paint.
+  // The `hidden` ATTRIBUTE, not a class: it is what the server writes for the non-JS first paint,
+  // and toggling the same thing keeps one spelling of "this section is not for this type".
+  toggleTypeOnlySections(selectedValue) {
+    this.expenseOnlyTargets.forEach(section => {
+      section.hidden = selectedValue !== 'expense'
+    })
+
+    this.incomeOnlyTargets.forEach(section => {
+      section.hidden = selectedValue !== 'income'
+    })
   }
 
   // Color Selection

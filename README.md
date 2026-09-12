@@ -1,6 +1,6 @@
 # SeriouslyBroke
 
-A modern web application for tracking and managing personal finances, helping users stay on top of their spending and savings pools. Visit [SeriouslyBroke.com](https://seriouslybroke.com) to get started.
+A modern web application for tracking and managing personal finances, helping users stay on top of their accounts and spending. Visit [SeriouslyBroke.com](https://seriouslybroke.com) to get started.
 
 ## Features
 
@@ -38,9 +38,10 @@ A modern web application for tracking and managing personal finances, helping us
    yarn install
    ```
 
-4. Set up the database:
+4. Set up the database (config/database.yml reads PGHOST, PGPORT, PGUSER and PGPASSWORD, with local defaults):
    ```bash
    rails db:create db:migrate
+   bundle exec rake parallel:create parallel:prepare  # test databases for parallel_rspec
    ```
 
 5. Install and build Tailwind CSS:
@@ -71,10 +72,10 @@ bundle exec rubocop -A
 
 ### Testing
 
-Run the test suite:
+Run the test suite, in parallel across cores:
 
 ```bash
-bundle exec rspec
+bundle exec parallel_rspec spec
 ```
 
 ## About

@@ -4,33 +4,59 @@ This document defines the architecture, patterns, and coding conventions for the
 
 ## Core Domain Models
 
-- **User** → has_many Categories, SavingsPools
-- **Category** (expense/income/savings types) → has_many Items, has_one Budget
-- **Item** → has_many Entries
-- **Entry** → the actual transaction record
-- **SavingsPool** → goal tracking with target amounts
-- **Budget** → period-based spending limits (expense categories only)
+- **User** → has_many Categories, Accounts, Rules (through Categories); belongs_to a main Account
+- **Account** → where money sits; balance is a ledger read, never a stored column
+- **Category** (expense/income types) → has_many Items, has_many Rules
+- **Item** → has_many Entries, has_one Rule
+- **Entry** → the actual transaction record; income lands in checking, expenses leave it
+- **Rule** → a category or item's claim on main: a period allowance or a dated bill/goal. A fund
+  rule may carry a cap, and asks nothing of checking while its pile sits at the cap.
+- **SavingsTarget** → one promise on a savings Account: a fixed amount a period, or a share of an income Item
+- **Adjustment** → a signed delta on a Rule's or an Account's claim (a top-up, a reduction or a skip)
+- **Transfer** → money moved between two of a user's Accounts
 
 ## Custom Patterns
 
 ### Presenter Pattern (`app/presenters/`)
 
-Uses Ruby `Data.define` for immutable value objects. Controllers instantiate presenters that pre-compute view data.
+Uses Ruby `Data.define` for immutable value objects. Controllers instantiate presenters that pre-compute view data, usually by reading from a ledger or calculator.
 
 ```ruby
 # Controller
-@presenter = WeeklyCalendarPresenter.new(user: current_user, date: params[:date])
+@presenter = HomePresenter.new(user: current_user)
 # View
-@presenter.entries_for_day(date)
+@presenter.troubles
 ```
+
+`HomePresenter#tiles`, `#upcoming` and `#savings_blocks` are the Home page's readers — the four
+tiles, the "Coming up" rows and the per-account savings blocks. `ActivityPresenter#rows` is the
+Activity page's reader — one row per entry, transfer or adjustment, newest first. The Budget page
+prints `ClaimLine#per_period` beside `Rule#ask`: what the rule takes this period, and its steady
+figure once caught up. Adjustments are written from Home and the Savings page only; the Budget
+page is the plan, not a place to adjust it.
 
 ### Calculator Pattern (`app/services/`)
 
-Memoized service objects for computing metrics. Accessed via model method:
+Plain service objects, fed a fixed number of queries up front, that compute a figure without touching the database again per call:
 
 ```ruby
-category.calculator(date).budget_percentage
-category.calculator(date).top_items
+AccountLedger.new(current_user).balance_of(account)
+ClaimCalculator.new(rule).claim
+SavingsCalculator.new(account).claim
+ClaimLedger.new(current_user).claims
+```
+
+`AccountLedger` totals one user's account balances; `ClaimCalculator` computes a single rule's claim on main; `SavingsCalculator` computes a single savings Account's claim on main, the same way for a fixed amount or a share of an item; `ClaimLedger` runs every rule's and every savings account's calculator for a user in a fixed number of queries, plus one per distinct share item for typical income. `ClaimLedger#claims` is the one list every screen reads — Home, the Savings page, the sacrifice page and the Budget tiles never ask what record is behind a claim.
+
+### Form Object Pattern (`app/services/`)
+
+Plain `ActiveModel::Model` (or plain Ruby) objects that turn form params into a valid record, keeping validation and coercion logic out of controllers:
+
+```ruby
+RuleForm.new(current_user, rule_params, rule: @rule).save
+AdjustmentForm.new(source: @rule, params: adjustment_params, name: rule_name(@rule), today: current_user.today).save
+EntryForm.new(current_user, @entry, entry_params)
+CadenceChange.new(user: current_user, declaration: declaration_params)
 ```
 
 ### Searchable System (Custom DSL)

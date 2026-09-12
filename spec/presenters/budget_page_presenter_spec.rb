@@ -1,0 +1,93 @@
+# frozen_string_literal: true
+
+require "rails_helper"
+
+RSpec.describe BudgetPagePresenter do
+  let(:user) { create(:user, :biweekly) }
+  let(:today) { Date.new(2026, 9, 9) }
+  let(:presenter) { described_class.new(user: user, today: today) }
+  let(:salary) { create(:category, :income, user: user, name: "Salary") }
+
+  before { create(:account, user: user, opening_balance: 1_000) }
+
+  def earn(amount, on:) = create(:entry, item: create(:item, category: salary), amount: amount, date: on)
+
+  # Two periods of income, because AccountLedger#typical_income averages COMPLETE periods that
+  # begin on or after the first entry — one entry inside the previous period completes none.
+  def a_period_of_income(amount)
+    earn(amount, on: Date.new(2026, 8, 7))
+    earn(amount, on: Date.new(2026, 8, 25))
+  end
+
+  def rule_on(name, *traits, priority: 0, **attributes)
+    create(
+      :rule,
+      *traits,
+      category: create(:category, user: user, name: name, priority: priority),
+      starts_on: Date.new(2026, 1, 1),
+      **attributes
+    )
+  end
+
+  it "lists ruled categories by priority then the unruled ones by name", :aggregate_failures do
+    rule_on("Rent", priority: 1, amount: 900)
+    rule_on("Fun", priority: 0, amount: 100)
+    create(:category, user: user, name: "Aardvark")
+
+    expect(presenter.category_rows.map(&:name)).to eq(["Fun", "Rent", "Aardvark"])
+    expect(presenter.reorderable_rows.map(&:name)).to eq(["Fun", "Rent"])
+    expect(presenter.category_rows.first).to be_ruled
+    expect(presenter.category_rows.last).not_to be_ruled
+    expect(presenter).not_to be_no_categories
+  end
+
+  it "compares what the rules need with typical income", :aggregate_failures do
+    rule_on("Rent", :bill, amount: 900)
+    a_period_of_income(2_000)
+    create(:savings_target, account: create(:account, user: user, name: "Emergency"), amount: 300, starts_on: Date.new(2026, 9, 4))
+    presenter = described_class.new(user: user, today: today)
+
+    expect(presenter.savings).to eq(300)
+    expect(presenter.leftover).to eq(800)
+    expect(presenter).to be_declared.and be_history
+    expect(presenter.tiles).to have_attributes(budget: 900, savings: 300, where: 1_200, income: 2_000, fits: true, declared: true)
+    expect(presenter.tiles.segments.first).to have_attributes(type: :savings, amount: 300, percent: 25)
+    expect(presenter.type_overview).to eq([[:bill, 900]])
+  end
+
+  it "has no history and no verdict until a period completes", :aggregate_failures do
+    rule_on("Rent", :bill, amount: 900)
+
+    expect(presenter.typical_income).to be_nil
+    expect(presenter).not_to be_history
+    expect(presenter).not_to be_underwater
+    expect(presenter.tiles.fits).to be(false)
+  end
+
+  it "is underwater when the rules need more than comes in" do
+    rule_on("Rent", :bill, amount: 3_000)
+    a_period_of_income(2_000)
+
+    expect(presenter).to be_underwater
+  end
+
+  it "opens the category it is told to" do
+    rent = rule_on("Rent", amount: 900).category
+
+    expect(described_class.new(user: user, today: today, open_category_id: rent.id).open?(rent)).to be(true)
+  end
+
+  # 100.0 is $1,200 over the 12 biweekly periods from Sep 4 to Feb 11 — ClaimCalculator's own
+  # count, read off #planned_this_period rather than assumed.
+  it "says what the rules take this period as of today, beside the steady figure", :aggregate_failures do
+    rule_on("Groceries", amount: 400)
+    fresh = create(:category, user: user, name: "Insurance")
+    create(:rule, :bill, category: fresh, amount: 1_200, anchor_date: Date.new(2027, 2, 11), interval_months: 12, starts_on: today)
+    presenter = described_class.new(user: user, today: today)
+
+    expect(presenter.budget).to eq(400 + 46.15)
+    expect(presenter.budget_now).to eq(400 + 100.0)
+    expect(presenter.tiles.where_now).to eq(presenter.budget_now + presenter.savings)
+    expect(presenter.category_rows.find { |row| row.name == "Insurance" }.takes_now).to eq(100.0)
+  end
+end

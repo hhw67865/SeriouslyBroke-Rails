@@ -1,16 +1,6 @@
 # frozen_string_literal: true
 
-# Presenter for the weekly calendar view.
-# Pre-computes entry groupings and weekly breakdown to minimize view complexity.
-#
-# Usage in controller:
-#   @presenter = WeeklyCalendarPresenter.new(user: current_user, date: Date.current)
-#
-# Usage in view:
-#   @presenter.days.each { |day| day[:entries_by_type][:expense] }
-#   @presenter.weekly_breakdown[:expense][:total]
-#   @presenter.range_label
-#
+# One week of days, each split into its expense and income entries, plus the week's own breakdown.
 class WeeklyCalendarPresenter
   attr_reader :focused_date, :week_start, :week_end
 
@@ -23,14 +13,12 @@ class WeeklyCalendarPresenter
     @entries_by_date = group_entries_by_date
   end
 
-  # Returns array of days, each containing:
-  # { date:, entries_by_type: { expense: [...], income: [...], savings: [...] } }
+  # { date:, entries_by_type: { expense: [...], income: [...] } } per day.
   def days
     @days ||= build_days
   end
 
-  # Returns weekly breakdown:
-  # { expense: { total:, categories: { "Food" => 100 } }, income: {...}, savings: {...} }
+  # { expense: { total:, categories: { "Food" => 100 } }, income: {...} }
   def weekly_breakdown
     @weekly_breakdown ||= calculate_weekly_breakdown
   end
@@ -61,12 +49,12 @@ class WeeklyCalendarPresenter
     Entry.joins(item: :category)
       .includes(item: :category)
       .where(categories: { user_id: @user.id })
-      .where(date: week_start.beginning_of_day..week_end.end_of_day)
+      .where(date: week_start..week_end)
       .order(:date)
   end
 
   def group_entries_by_date
-    @entries.group_by { |e| e.date.to_date }
+    @entries.group_by(&:date)
   end
 
   def build_days
