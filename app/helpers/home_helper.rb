@@ -123,7 +123,7 @@ module HomeHelper
   # steady figure to compare against — it stops after its date — so it names the date instead.
   def steady_words(line)
     return "until #{line.next_due_on.strftime("%b %-d")}" if line.rule.cadence == :one_off
-    return "full at #{number_to_currency(line.target)}" if line.fund? && line.target && line.per_period.zero?
+    return "full at #{number_to_currency(line.target)}" if line.fund? && line.target
     return "same every period" if line.per_period == line.rule.ask
 
     "#{number_to_currency(line.rule.ask)} a period once caught up"
