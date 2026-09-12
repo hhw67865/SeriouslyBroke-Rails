@@ -49,7 +49,7 @@
                            aria-valuenow="<%= line.percent %>"
                            aria-valuemin="0"
                            aria-valuemax="100"
-                           aria-label="<%= row.name %> · <%= line.name %>"
+                           aria-label="<%= lane_words(line, row.lines) %>"
                            data-rule-bar="<%= line.percent %>"
                            data-rule-bar-state="<%= line.bar_state %>">
                         <div class="h-1.5 rounded-full <%= bar_fill(line) %>" style="width: <%= line.percent %>%;"></div>

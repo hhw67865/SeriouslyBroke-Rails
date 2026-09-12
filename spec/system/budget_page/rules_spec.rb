@@ -160,6 +160,7 @@ RSpec.describe "Budget page rules", type: :system do
 
     expect(rule_row("Wine")).to have_content("Wine")
     expect(rule_row("Groceries")).to have_content("Everything else in Groceries")
+    expect(page).to have_no_css("[aria-label*='Whole category']")
   end
 
   # Spending past what the rule had is the news, so the When cell wears the danger colour — and the

@@ -54,5 +54,6 @@ RSpec.describe "Home sections", type: :system do
     expect(find("[data-category-block='Groceries']")).to have_content("All of Groceries")
     expect(find("[data-category-block='Pets']")).to have_content("Everything else in Pets")
     expect(page).to have_no_content("Whole category")
+    expect(page).to have_no_css("[aria-label*='Whole category']")
   end
 end
