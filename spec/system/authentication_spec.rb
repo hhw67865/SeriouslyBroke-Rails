@@ -55,12 +55,23 @@ RSpec.describe "Authentication", type: :system do
     end
 
     context "with invalid information" do
-      # `:js`: the browser is what marks a malformed email invalid.
-      it "prevents submission with invalid email format", :js do
+      # `:js`: constraint validation is the browser's own, and it is what stops this form.
+      # The validity is read off the element after its value has landed, rather than racing
+      # Chrome's live `:invalid` pseudo-class through a CSS query.
+      it "prevents submission with invalid email format", :aggregate_failures, :js do
         fill_in "Email", with: "invalid-email"
         fill_in "Password", with: "password123"
         fill_in "Password confirmation", with: "password123"
-        expect(page).to have_css("input[type=email]:invalid")
+
+        expect(page).to have_field("Email", with: "invalid-email")
+        expect(find_field("Email").evaluate_script("this.checkValidity()")).to be(false)
+
+        within("form") { click_button "Sign up" }
+
+        # Blocked before the request: still on the form, and nothing was written.
+        expect(page).to have_current_path(new_user_registration_path)
+        expect(page).to have_field("Email", with: "invalid-email")
+        expect(User.count).to eq(0)
       end
 
       it "shows error for short password" do
