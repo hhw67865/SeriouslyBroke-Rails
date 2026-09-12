@@ -29,7 +29,8 @@ ClaimLine = Data.define(
   def dated? = shape == :dated
 
   # An allowance that keeps what it doesn't spend: it walks like a dated rule and asks like a rate
-  # one, and it aims at nothing, so #target is nil and there is no bar.
+  # one. An uncapped fund aims at nothing, so #target is nil and there is no bar; a capped fund's
+  # target is its cap.
   def fund? = shape == :fund
 
   def anchored? = next_due_on.present?
@@ -62,8 +63,8 @@ ClaimLine = Data.define(
   # target for a dated one.
   def filled = rate? ? spent : built_up
 
-  # This period's accrual for a rate rule, the target for a dated one, and nothing at all for a
-  # fund, which is aiming at no figure.
+  # This period's accrual for a rate rule, the target for a dated one, nothing at all for an
+  # uncapped fund, and its cap for a capped one.
   def denominator = rate? ? accrued : target
 
   # A bar needs something to be a fraction of. Every caller of #percent and #bar_state is gated here.
@@ -101,6 +102,7 @@ ClaimLine = Data.define(
   def skippable? = !rate? && accrued.positive?
 end
 
-# What an item-less rule is called on a row. Outside the block, because Lint/ConstantDefinitionInBlock
-# will not have it inside one.
+# The `data-rule-row`/`data-rule` selector hook for an item-less rule; never screen words — those
+# come from HomeHelper#lane_words. Outside the block, because Lint/ConstantDefinitionInBlock will
+# not have it inside one.
 ClaimLine::WHOLE_CATEGORY = "Whole category"
