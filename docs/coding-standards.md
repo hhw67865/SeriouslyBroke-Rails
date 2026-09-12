@@ -9,7 +9,8 @@ This document defines the architecture, patterns, and coding conventions for the
 - **Category** (expense/income types) → has_many Items, has_many Rules
 - **Item** → has_many Entries, has_one Rule
 - **Entry** → the actual transaction record; income lands in checking, expenses leave it
-- **Rule** → a category or item's claim on main: a period allowance or a dated bill/goal
+- **Rule** → a category or item's claim on main: a period allowance or a dated bill/goal. A fund
+  rule may carry a cap, and asks nothing of checking while its pile sits at the cap.
 - **SavingsTarget** → one promise on a savings Account: a fixed amount a period, or a share of an income Item
 - **Adjustment** → a signed delta on a Rule's or an Account's claim (a top-up, a reduction or a skip)
 - **Transfer** → money moved between two of a user's Accounts
@@ -28,10 +29,11 @@ Uses Ruby `Data.define` for immutable value objects. Controllers instantiate pre
 ```
 
 `HomePresenter#tiles`, `#upcoming` and `#savings_blocks` are the Home page's readers — the four
-tiles, the "Coming up" rows and the per-account savings blocks. The Budget page prints
-`ClaimLine#per_period` beside `Rule#ask`: what the rule takes this period, and its steady figure
-once caught up. Adjustments are written from Home and the Savings page only; the Budget page is
-the plan, not a place to adjust it.
+tiles, the "Coming up" rows and the per-account savings blocks. `ActivityPresenter#rows` is the
+Activity page's reader — one row per entry, transfer or adjustment, newest first. The Budget page
+prints `ClaimLine#per_period` beside `Rule#ask`: what the rule takes this period, and its steady
+figure once caught up. Adjustments are written from Home and the Savings page only; the Budget
+page is the plan, not a place to adjust it.
 
 ### Calculator Pattern (`app/services/`)
 
