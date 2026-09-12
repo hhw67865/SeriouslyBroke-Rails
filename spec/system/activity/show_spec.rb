@@ -38,7 +38,7 @@ RSpec.describe "Activity", type: :system do
 
     it "shows an entry, a transfer and an adjustment newest first with their words and amounts" do
       expect(all("tbody [data-activity-row]").pluck("data-activity-row")).to eq(["adjustment", "transfer", "entry"])
-      expect(row("entry")).to have_content("Bread · Groceries").and have_content("$5.00")
+      expect(row("entry")).to have_content("Bread · Groceries").and have_content("-$5.00")
       expect(row("transfer")).to have_content("Checking → Emergency").and have_content("$40.00")
       expect(row("adjustment")).to have_content("Groceries · reduced").and have_content("$50.00")
     end
@@ -72,12 +72,18 @@ RSpec.describe "Activity", type: :system do
     expect(page).to have_no_css("[data-activity-row='adjustment']")
   end
 
-  it "sends an entry's Edit link to its edit form, back to Activity when saved" do
+  it "sends an entry's Edit link to its edit form, back to Activity when saved", :aggregate_failures do
     entry = create(:entry, item: create(:item, category: groceries, name: "Bread"), amount: 5, date: today)
     visit activity_path
 
     within(row("entry")) { click_link "Edit" }
 
     expect(page).to have_current_path(edit_entry_path(entry, previous_url: activity_path))
+
+    fill_in "Amount", with: "12.50"
+    click_button "Update Entry"
+
+    expect(page).to have_current_path(activity_path)
+    expect(row("entry")).to have_content("-$12.50")
   end
 end

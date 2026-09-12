@@ -4,7 +4,7 @@
 # each saying what it was, what it moved, and where to edit or undo it.
 class ActivityPresenter
   PER_PAGE = 50
-  Row = Data.define(:kind, :date, :created_at, :words, :amount, :color, :edit_path, :remove_path, :remove_confirm) do
+  Row = Data.define(:kind, :id, :date, :created_at, :words, :amount, :color, :edit_path, :remove_path, :remove_confirm) do
     def entry? = kind == :entry
     def transfer? = kind == :transfer
     def adjustment? = kind == :adjustment
@@ -19,8 +19,11 @@ class ActivityPresenter
     @page = page
   end
 
+  # `id` is the final tiebreak: two rows with equal date and created_at (a same-transaction seed,
+  # a parallel test run) would otherwise order however `sort_by`'s underlying sort happens to leave
+  # them, which is not guaranteed stable across two reads of the same rows.
   def rows
-    @rows ||= Kaminari.paginate_array(all_rows.sort_by { |row| [row.date, row.created_at] }.reverse).page(page).per(PER_PAGE)
+    @rows ||= Kaminari.paginate_array(all_rows.sort_by { |row| [row.date, row.created_at, row.kind.to_s, row.id] }.reverse).page(page).per(PER_PAGE)
   end
 
   private
@@ -34,6 +37,7 @@ class ActivityPresenter
   def entry_row(entry)
     Row.new(
       kind: :entry,
+      id: entry.id,
       date: entry.date,
       created_at: entry.created_at,
       words: "#{entry.item.name} · #{entry.category.name}",
@@ -52,6 +56,7 @@ class ActivityPresenter
     Transfer.where(from_account_id: ids).or(Transfer.where(to_account_id: ids)).includes(:from_account, :to_account).map do |transfer|
       Row.new(
         kind: :transfer,
+        id: transfer.id,
         date: transfer.date,
         created_at: transfer.created_at,
         words: "#{transfer.from_account.name} → #{transfer.to_account.name}",
@@ -77,6 +82,7 @@ class ActivityPresenter
   def adjustment_row(change)
     Row.new(
       kind: :adjustment,
+      id: change.id,
       date: change.date,
       created_at: change.created_at,
       words: "#{adjustment_name(change)} · #{adjustment_verb(change)}",
