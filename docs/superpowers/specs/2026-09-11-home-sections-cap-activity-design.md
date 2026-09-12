@@ -69,7 +69,7 @@ Row = Data.define(:kind, :date, :created_at, :words, :amount, :edit_path, :remov
 Rows come from the user's entries, the transfers touching the user's accounts, and the adjustments on
 the user's rules and accounts, mapped to `Row`s, sorted by `[date desc, created_at desc]`, then
 `Kaminari.paginate_array(rows).page(page).per(50)`. Words: entry → "<item> · <category>";
-transfer → "<from> → <to>"; adjustment → "<source name> · <skipped | topped up | reduced | set aside | took back>".
+transfer → "<from> → <to>"; adjustment → "<source name> · <reduced | topped up | took back | set aside>".
 `edit_path` is `edit_entry_path` for an entry, nil otherwise. `remove_path`: `entry_path`,
 `transfer_path` (new destroy), `adjustment_path`. Every remove carries `return: "activity"` and the
 redirect honours it: `EntriesController#destroy` via `previous_url: activity_path`,
